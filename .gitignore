@@ -1,0 +1,7 @@
+# --- Yearbook Grad Mugshot Automator ---
+
+# Server: runtime/user data (uploads, extracted images, masks, outputs, license store/usage, etc.)
+# Nothing under here should be committed.
+server/app/data/
+
+
