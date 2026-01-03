@@ -82,8 +82,16 @@ async def license_guard(request: Request, call_next):
         return await call_next(request)
 
     if path.startswith(_LICENSE_PROTECTED_PREFIXES):
-        key = get_required_license_key_from_headers(request.headers)
-        device_id = get_device_id_from_headers(request.headers)
+        # NOTE: Some endpoints (e.g. image previews) are fetched via <img src>
+        # which cannot send custom headers. Allow passing license info via query params.
+        qp = request.query_params
+        key = (
+            get_required_license_key_from_headers(request.headers)
+            or qp.get("license_key")
+            or qp.get("license")
+            or qp.get("key")
+        )
+        device_id = get_device_id_from_headers(request.headers) or qp.get("device_id")
         forwarded = request.headers.get("x-forwarded-for")
         ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
 

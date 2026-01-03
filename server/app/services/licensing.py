@@ -379,21 +379,46 @@ def validate_and_record_use(
             if max_uses is not None and uses >= int(max_uses):
                 return False, {"reason": "max_uses"}
 
-            rec["uses"] = uses + 1
+            uses_after = uses + 1
+            rec["uses"] = uses_after
             rec["last_used_at"] = now
 
             if license_type == "personal":
                 monthly_uses = (rec.get("monthly_uses", {}) or {})
-                monthly_uses[month] = int(monthly_uses.get(month, 0) or 0) + 1
+                used_this_month_after = int(monthly_uses.get(month, 0) or 0) + 1
+                monthly_uses[month] = used_this_month_after
                 rec["monthly_uses"] = monthly_uses
 
             _dump_store(store)
 
+            usage_limit: int | None = None
+            usage_remaining: int | None = None
+            usage_period: str | None = None
+
+            if license_type == "personal":
+                # Personal licenses are monthly-limited.
+                monthly_limit_val = rec.get("monthly_limit", personal_monthly_limit_default())
+                monthly_limit_int = int(monthly_limit_val) if monthly_limit_val is not None else None
+                if monthly_limit_int is not None:
+                    usage_limit = monthly_limit_int
+                    usage_remaining = max(0, monthly_limit_int - used_this_month_after)
+                    usage_period = "month"
+            else:
+                # Commercial licenses may have an overall max_uses.
+                if max_uses is not None:
+                    max_uses_int = int(max_uses)
+                    usage_limit = max_uses_int
+                    usage_remaining = max(0, max_uses_int - uses_after)
+                    usage_period = "lifetime"
+
             return True, {
                 "license_type": license_type,
                 "expires_at": int(expires_at) if expires_at is not None else None,
-                "uses": uses + 1,
+                "uses": uses_after,
                 "max_uses": int(max_uses) if max_uses is not None else None,
+                "usage_limit": usage_limit,
+                "usage_remaining": usage_remaining,
+                "usage_period": usage_period,
             }
 
     return False, {"reason": "not_found"}

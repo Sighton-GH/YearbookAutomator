@@ -71,6 +71,10 @@ class GenerationRequest(BaseModel):
     template_id: str
     slots: list[TemplateSlots]
     people: list[PersonRecord]
+    count_usage: bool = Field(
+        default=False,
+        description="If true, this generation counts against license usage limits (used for the Render All action).",
+    )
     output_filename: Optional[str] = Field(
         default=None,
         description="Optional output filename (e.g. preview.png). Defaults to output.png",

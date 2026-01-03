@@ -17,6 +17,9 @@ import {
   babyMaskUrl,
   templateCleanUrl,
   templateAnnotatedUrl,
+  generationDownloadUrl,
+  generationDownloadAllUrl,
+  generationDownloadSpreadsheetUrl,
   generationStatus,
   touchWorkspace,
   deleteWorkspace,
@@ -658,6 +661,7 @@ export default function App({ embedded = false }: AppProps) {
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [outputPaths, setOutputPaths] = useState<string[]>([]);
   const [outputNonce, setOutputNonce] = useState(0);
+  const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -1103,6 +1107,7 @@ export default function App({ embedded = false }: AppProps) {
     spreadIndex?: number; // 1-based
     totalSpreads?: number;
     overallStartMs?: number;
+    countUsage?: boolean;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
     setProgress(0);
@@ -1120,11 +1125,12 @@ export default function App({ embedded = false }: AppProps) {
         quote: skipQuotes ? null : p.quote,
         baby_photo_filename: skipBabyPhotos ? null : p.baby_photo_filename,
       }));
-      const jobId = await generateSpread({
+      const gen = await generateSpread({
         workspace_id: workspaceId,
         template_id: templateId,
         slots,
         people: peopleToSend,
+        count_usage: Boolean(opts.countUsage),
         auto_place: true,
         placement_mode: placementMode,
         force_alphabetical: forceAlphabetical,
@@ -1151,6 +1157,9 @@ export default function App({ embedded = false }: AppProps) {
         quote_align: quoteAlign,
         baby_background_color: skipBabyPhotos ? undefined : (babyBackgroundColor.trim() ? babyBackgroundColor.trim() : undefined),
       });
+
+      const jobId = gen.jobId;
+      if (opts.countUsage && gen.usage) setUsageInfo(gen.usage);
 
       const jobStartMs = performance.now();
 
@@ -1253,6 +1262,8 @@ export default function App({ embedded = false }: AppProps) {
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
 
+    setUsageInfo(null);
+
     const peopleForAll = getPeopleForGeneration(people);
 
     // Render multiple spreads by chunking `people` and generating one PNG per chunk.
@@ -1277,6 +1288,7 @@ export default function App({ embedded = false }: AppProps) {
         spreadIndex: spreadIdx + 1,
         totalSpreads,
         overallStartMs,
+        countUsage: spreadIdx === 0,
       });
       if (!out) return;
       outputs.push(out);
@@ -1612,7 +1624,7 @@ export default function App({ embedded = false }: AppProps) {
                         onClick={() => {
                           const fname = previewPath.split(/[\\/]/).pop() || previewPath;
                           window.open(
-                            `/api/generation/download?workspace_id=${workspaceId}&filename=${encodeURIComponent(fname)}`,
+                            generationDownloadUrl(workspaceId, fname),
                             "_blank"
                           );
                         }}
@@ -1628,9 +1640,9 @@ export default function App({ embedded = false }: AppProps) {
                       <img
                         src={
                           previewPath
-                            ? `/api/generation/download?workspace_id=${workspaceId}&filename=${encodeURIComponent(
-                                previewPath.split(/[\\/]/).pop() || previewPath
-                              )}&cache=${previewNonce}`
+                            ? generationDownloadUrl(workspaceId, previewPath.split(/[\\/]/).pop() || previewPath, {
+                                cache: String(previewNonce)
+                              })
                             : ""
                         }
                         alt="preview"
@@ -1674,6 +1686,7 @@ export default function App({ embedded = false }: AppProps) {
               outputPaths={outputPaths}
               workspaceId={workspaceId}
               outputNonce={outputNonce}
+              usageInfo={usageInfo}
             />
           )}
           {activeStep !== 1 && activeStep !== 6 && activeStep !== 7 && (
@@ -3994,11 +4007,13 @@ function Results({
   outputPaths,
   workspaceId,
   outputNonce,
+  usageInfo,
 }: {
   outputPath: string | null;
   outputPaths: string[];
   workspaceId: string | null;
   outputNonce: number;
+  usageInfo?: { remaining: number; limit: number; period: "month" | "lifetime" } | null;
 }) {
   if (!workspaceId) return <p className="muted">Missing workspace.</p>;
   const rawFiles = (outputPaths && outputPaths.length ? outputPaths : outputPath ? [outputPath] : [])
@@ -4020,6 +4035,17 @@ function Results({
 
   return (
     <div className="stack">
+      {usageInfo && typeof usageInfo.remaining === "number" && typeof usageInfo.limit === "number" ? (
+        <div className="callout">
+          <div className="stack" style={{ gap: 4 }}>
+            <strong>License usage</strong>
+            <div className="muted small">
+              Uses remaining{usageInfo.period === "month" ? " this month" : ""}: <strong>{usageInfo.remaining}</strong> of {usageInfo.limit}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="callout">
         <div className="inline" style={{ justifyContent: "space-between", width: "100%", gap: 12, flexWrap: "wrap" }}>
           <div className="inline" style={{ gap: 10, flexWrap: "wrap" }}>
@@ -4032,14 +4058,14 @@ function Results({
             <button
               className="primary"
               onClick={() => {
-                window.open(`/api/generation/download-all?workspace_id=${workspaceId}`, "_blank");
+                window.open(generationDownloadAllUrl(workspaceId), "_blank");
               }}
             >
               Download all spreads
             </button>
             <button
               onClick={() => {
-                window.open(`/api/generation/download-spreadsheet?workspace_id=${workspaceId}`, "_blank");
+                window.open(generationDownloadSpreadsheetUrl(workspaceId), "_blank");
               }}
             >
               Download spreadsheet
@@ -4059,14 +4085,14 @@ function Results({
               </div>
               <button
                 onClick={() => {
-                  window.open(`/api/generation/download?workspace_id=${workspaceId}&filename=${encodeURIComponent(fname)}`, "_blank");
+                  window.open(generationDownloadUrl(workspaceId, fname), "_blank");
                 }}
               >
                 Download
               </button>
             </div>
             <img
-              src={`/api/generation/download?workspace_id=${workspaceId}&filename=${encodeURIComponent(fname)}&cache=${outputNonce}-${idx}`}
+              src={generationDownloadUrl(workspaceId, fname, { cache: `${outputNonce}-${idx}` })}
               alt={`spread-${spreadNumber}`}
               style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 12 }}
             />

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from threading import Thread
+from typing import Any
 from uuid import uuid4
 import json
 import re
@@ -64,23 +65,38 @@ def _save_generation_request(payload: GenerationRequest) -> None:
 
 
 @router.post("/generate")
-async def generate(payload: GenerationRequest, request: Request) -> dict[str, str]:
-    key = get_required_license_key_from_headers(request.headers)
-    device_id = get_device_id_from_headers(request.headers)
-    forwarded = request.headers.get("x-forwarded-for")
-    ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
+async def generate(payload: GenerationRequest, request: Request) -> dict[str, Any]:
+    usage_payload: dict[str, object] | None = None
+    if payload.count_usage:
+        key = get_required_license_key_from_headers(request.headers)
+        device_id = get_device_id_from_headers(request.headers)
+        forwarded = request.headers.get("x-forwarded-for")
+        ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
 
-    ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
-    if not ok:
-        return JSONResponse(status_code=401, content={"detail": "License key required", "reason": meta.get("reason")})
+        ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
+        if not ok:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "License key required", "reason": meta.get("reason")},
+            )
 
-    append_usage_event(
-        key=(key or "").strip().upper(),
-        license_type=str(meta.get("license_type") or ""),
-        ip=ip,
-        device_id=device_id,
-        route=str(request.url.path),
-    )
+        append_usage_event(
+            key=(key or "").strip().upper(),
+            license_type=str(meta.get("license_type") or ""),
+            ip=ip,
+            device_id=device_id,
+            route=str(request.url.path),
+        )
+
+        usage_limit = meta.get("usage_limit")
+        usage_remaining = meta.get("usage_remaining")
+        usage_period = meta.get("usage_period")
+        if isinstance(usage_limit, int) and isinstance(usage_remaining, int) and isinstance(usage_period, str):
+            usage_payload = {
+                "limit": usage_limit,
+                "remaining": usage_remaining,
+                "period": usage_period,
+            }
 
     job_id = uuid4().hex
     start_job(job_id, payload.workspace_id)
@@ -101,7 +117,10 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, st
             update_job(job_id, status="error", error=str(exc))
 
     Thread(target=run_generation, daemon=True).start()
-    return {"job_id": job_id}
+    resp: dict[str, Any] = {"job_id": job_id}
+    if usage_payload is not None:
+        resp["usage"] = usage_payload
+    return resp
 
 
 @router.get("/download")

@@ -136,6 +136,7 @@ def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
         ],
         "people": [{"index": 1, "first_name": "A", "last_name": "B"}],
         "font_family": "Arial",
+        "count_usage": True,
     }
     g = client.post(
         "/api/generation/generate",
