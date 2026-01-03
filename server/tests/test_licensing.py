@@ -82,3 +82,69 @@ def test_middleware_blocks_protected_paths(tmp_path, monkeypatch):
 
     r2 = client.post("/api/workspaces/touch", headers={"X-License-Key": key, "X-Device-Id": "dev"})
     assert r2.status_code != 401
+
+
+def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    # Import after env is set so main app uses the temp store.
+    from app import main as main_mod
+
+    importlib.reload(main_mod)
+
+    # Prevent the background generation thread from doing real work in this test.
+    from app.routes import generation as generation_mod
+    from app.services.storage import workspace_dir
+
+    def _fake_generate_composite(payload, progress_cb=None):
+        out = workspace_dir(payload.workspace_id) / "output.png"
+        out.write_bytes(b"fake")
+        return out
+
+    monkeypatch.setattr(generation_mod, "generate_composite", _fake_generate_composite)
+
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main_mod.app)
+
+    key = licensing.create_license(license_type="commercial", max_uses=10, note="test")
+
+    # Non-processing calls should NOT count usage.
+    r = client.post(
+        "/api/workspaces/touch",
+        data={"workspace_id": "ws1"},
+        headers={"X-License-Key": key, "X-Device-Id": "dev"},
+    )
+    assert r.status_code == 200
+
+    recs = licensing.list_licenses()
+    rec = next(x for x in recs if x.key == key)
+    assert rec.uses == 0
+
+    # Starting a generation IS a processing action and should increment usage.
+    payload = {
+        "workspace_id": "ws1",
+        "template_id": "ws1",
+        "slots": [
+            {
+                "mugshot": {"x": 0, "y": 0, "width": 1, "height": 1},
+                "baby_photo": {"x": 0, "y": 0, "width": 1, "height": 1},
+                "name": {"x": 0, "y": 0, "width": 1, "height": 1},
+                "quote": {"x": 0, "y": 0, "width": 1, "height": 1},
+            }
+        ],
+        "people": [{"index": 1, "first_name": "A", "last_name": "B"}],
+        "font_family": "Arial",
+    }
+    g = client.post(
+        "/api/generation/generate",
+        json=payload,
+        headers={"X-License-Key": key, "X-Device-Id": "dev"},
+    )
+    assert g.status_code == 200
+    assert "job_id" in g.json()
+
+    recs2 = licensing.list_licenses()
+    rec2 = next(x for x in recs2 if x.key == key)
+    assert rec2.uses == 1

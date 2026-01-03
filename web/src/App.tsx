@@ -4027,14 +4027,23 @@ function Results({
             </div>
             <span className="muted small">(chronological order)</span>
           </div>
-          <button
-            className="primary"
-            onClick={() => {
-              window.open(`/api/generation/download-all?workspace_id=${workspaceId}`, "_blank");
-            }}
-          >
-            Download all spreads
-          </button>
+          <div className="inline" style={{ gap: 10, flexWrap: "wrap" }}>
+            <button
+              className="primary"
+              onClick={() => {
+                window.open(`/api/generation/download-all?workspace_id=${workspaceId}`, "_blank");
+              }}
+            >
+              Download all spreads
+            </button>
+            <button
+              onClick={() => {
+                window.open(`/api/generation/download-spreadsheet?workspace_id=${workspaceId}`, "_blank");
+              }}
+            >
+              Download spreadsheet
+            </button>
+          </div>
         </div>
       </div>
 

@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import io
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 
 from app.models.schemas import TemplateParseResponse
+from app.services.licensing import (
+    get_device_id_from_headers,
+    get_required_license_key_from_headers,
+    validate_and_record_use,
+)
+from app.services.licensing_usage import append_usage_event
 from app.services.storage import save_upload, workspace_dir
 from app.services.template_parser import extract_slots
 
@@ -30,6 +37,7 @@ async def get_annotated_template(workspace_id: str):
 
 @router.post("/parse", response_model=TemplateParseResponse)
 async def parse_template(
+    request: Request,
     annotated_template: UploadFile | None = File(None),
     clean_template: UploadFile | None = File(None),
     workspace_id: str | None = Form(None),
@@ -40,6 +48,23 @@ async def parse_template(
     min_area: int = Form(400),
 ) -> TemplateParseResponse:
     try:
+        key = get_required_license_key_from_headers(request.headers)
+        device_id = get_device_id_from_headers(request.headers)
+        forwarded = request.headers.get("x-forwarded-for")
+        ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
+
+        ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
+        if not ok:
+            return JSONResponse(status_code=401, content={"detail": "License key required", "reason": meta.get("reason")})
+
+        append_usage_event(
+            key=(key or "").strip().upper(),
+            license_type=str(meta.get("license_type") or ""),
+            ip=ip,
+            device_id=device_id,
+            route=str(request.url.path),
+        )
+
         annotated_bytes: bytes | None = None
         clean_bytes: bytes | None = None
 

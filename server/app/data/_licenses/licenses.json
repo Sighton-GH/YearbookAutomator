@@ -1,0 +1,22 @@
+{
+  "licenses": [
+    {
+      "bound_device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "bound_ip": "127.0.0.1",
+      "expires_at": null,
+      "issued_at": 1767417627,
+      "key": "YMGA1-QNYA3-7NJYM-WNPF2-JHDMY-TTG6Y-RPLYF-CO3IC-ZY5UJ-Q25JN-BE52W-5A",
+      "last_used_at": 1767465007,
+      "license_type": "personal",
+      "max_uses": null,
+      "monthly_limit": 5,
+      "monthly_uses": {
+        "2026-01": 5
+      },
+      "note": "free personal",
+      "revoked": false,
+      "uses": 5
+    }
+  ],
+  "version": 2
+}

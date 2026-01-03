@@ -15,9 +15,8 @@ from app.services.storage import InvalidWorkspaceId, clear_all_workspaces
 from app.services.licensing import (
     get_device_id_from_headers,
     get_required_license_key_from_headers,
-    validate_and_record_use,
+    validate_license,
 )
-from app.services.licensing_usage import append_usage_event
 
 
 @asynccontextmanager
@@ -88,17 +87,9 @@ async def license_guard(request: Request, call_next):
         forwarded = request.headers.get("x-forwarded-for")
         ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
 
-        ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
+        ok, meta = validate_license(key or "", ip=ip, device_id=device_id)
         if not ok:
             return JSONResponse(status_code=401, content={"detail": "License key required", "reason": meta.get("reason")})
-
-        append_usage_event(
-            key=(key or "").strip().upper(),
-            license_type=str(meta.get("license_type") or ""),
-            ip=ip,
-            device_id=device_id,
-            route=path,
-        )
 
     return await call_next(request)
 
