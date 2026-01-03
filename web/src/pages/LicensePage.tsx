@@ -1,3 +1,5 @@
+import { withBase } from "../baseUrl";
+
 export function LicensePage() {
   return (
     <main className="ss-page">
@@ -25,7 +27,7 @@ export function LicensePage() {
             </ul>
 
             <p className="muted" style={{ marginTop: 12 }}>
-              Full terms: <a href="/LICENSE">/LICENSE</a>
+              Full terms: <a href={withBase("LICENSE")}>/LICENSE</a>
             </p>
           </div>
         </div>

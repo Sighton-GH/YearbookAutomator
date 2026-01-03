@@ -1,7 +1,9 @@
+import { withBase } from "../baseUrl";
+
 const ASSETS = {
-  cover: "/assets/CoverImage1.webp",
-  templateClean: "/assets/Clean Sample.webp",
-  templateAnnotated: "/assets/Annotated Sample.webp",
+  cover: withBase("assets/CoverImage1.webp"),
+  templateClean: withBase("assets/Clean Sample.webp"),
+  templateAnnotated: withBase("assets/Annotated Sample.webp"),
 };
 
 export function HowToUsePage() {
@@ -16,7 +18,7 @@ export function HowToUsePage() {
               finished composite spread.
             </p>
             <div className="ss-hero-actions">
-              <a className="ss-cta" href="/tool">
+              <a className="ss-cta" href={withBase("tool")}>
                 Open the Tool
               </a>
             </div>

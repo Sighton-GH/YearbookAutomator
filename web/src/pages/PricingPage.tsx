@@ -1,3 +1,5 @@
+import { withBase } from "../baseUrl";
+
 export function PricingPage() {
   return (
     <main className="ss-page">
@@ -26,15 +28,15 @@ export function PricingPage() {
             </p>
 
             <p className="muted" style={{ marginTop: 12 }}>
-              See <a href="/license">License</a> for full terms.
+              See <a href={withBase("license")}>License</a> for full terms.
             </p>
 
             <div className="inline" style={{ marginTop: 12 }}>
-              <a href="/tool">Open the Tool</a>
-              <a href="/how-to-use">Read How To Use</a>
-              <a href="/about">About</a>
-              <a href="/license">License</a>
-              <a href="/privacy">Privacy Policy</a>
+              <a href={withBase("tool")}>Open the Tool</a>
+              <a href={withBase("how-to-use")}>Read How To Use</a>
+              <a href={withBase("about")}>About</a>
+              <a href={withBase("license")}>License</a>
+              <a href={withBase("privacy")}>Privacy Policy</a>
             </div>
           </div>
         </div>

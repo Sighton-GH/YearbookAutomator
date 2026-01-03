@@ -1,3 +1,5 @@
+import { withBase } from "../baseUrl";
+
 export function PrivacyPage() {
   return (
     <main className="ss-page">
@@ -25,7 +27,7 @@ export function PrivacyPage() {
             </ul>
 
             <p className="muted" style={{ marginTop: 12 }}>
-              Full policy: <a href="/PRIVACY.md">/PRIVACY.md</a>
+              Full policy: <a href={withBase("PRIVACY.md")}>/PRIVACY.md</a>
             </p>
           </div>
         </div>

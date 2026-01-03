@@ -1,7 +1,38 @@
-# --- Yearbook Grad Mugshot Automator ---
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Server: runtime/user data (uploads, extracted images, masks, outputs, license store/usage, etc.)
-# Nothing under here should be committed.
-server/app/data/
+# Virtual environments
+.venv/
+venv/
+ENV/
 
+# --- Node / Vite ---
+web/node_modules/
+web/dist/
 
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+
+# --- App: user/workspace data (DO NOT COMMIT) ---
+# All per-workspace data lives under server/app/data/<workspace_id>/
+# This includes uploads, spreadsheets, portraits, extracted images, masks, fonts, and outputs.
+server/app/data/**
+
+# Keep licensing/assets that are intended to be versioned
+!server/app/data/_licenses/
+!server/app/data/_licenses/**
+
+# But don't commit secrets even if they live in _licenses
+server/app/data/_licenses/secret.txt
+
+# --- Optional: logs ---
+*.log

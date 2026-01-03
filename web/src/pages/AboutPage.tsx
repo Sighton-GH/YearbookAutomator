@@ -1,3 +1,5 @@
+import { withBase } from "../baseUrl";
+
 export function AboutPage() {
   return (
     <main className="ss-page">
@@ -49,11 +51,11 @@ export function AboutPage() {
             </p>
 
             <div className="inline" style={{ marginTop: 12 }}>
-              <a href="/tool">Open the Tool</a>
-              <a href="/how-to-use">Read How To Use</a>
-              <a href="/pricing">Pricing</a>
-              <a href="/license">License</a>
-              <a href="/privacy">Privacy Policy</a>
+              <a href={withBase("tool")}>Open the Tool</a>
+              <a href={withBase("how-to-use")}>Read How To Use</a>
+              <a href={withBase("pricing")}>Pricing</a>
+              <a href={withBase("license")}>License</a>
+              <a href={withBase("privacy")}>Privacy Policy</a>
             </div>
           </div>
         </div>

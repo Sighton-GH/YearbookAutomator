@@ -2,6 +2,7 @@ import type React from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import Cropper, { type Area } from "react-easy-crop";
+import { withBase } from "./baseUrl";
 import {
   applyMapping,
   generateSpread,
@@ -684,7 +685,7 @@ export default function App({ embedded = false }: AppProps) {
 
     if (!defaultBabyUploadInFlight.current) {
       defaultBabyUploadInFlight.current = (async () => {
-        const url = "/assets/Default_Baby_Photo_ABC_Blocks.webp";
+        const url = withBase("assets/Default_Baby_Photo_ABC_Blocks.webp");
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Could not load ${url}`);
         const blob = await resp.blob();
@@ -716,7 +717,7 @@ export default function App({ embedded = false }: AppProps) {
         if (!ctx) throw new Error("Could not create canvas context");
 
         // Render the uploaded SVG to a PNG so the backend can treat it like any other portrait image.
-        const svgUrl = "/assets/default_eagle.svg";
+        const svgUrl = withBase("assets/default_eagle.svg");
         const svgResp = await fetch(svgUrl);
         if (!svgResp.ok) throw new Error(`Could not load ${svgUrl}`);
         const svgText = await svgResp.text();
@@ -2564,7 +2565,7 @@ function MugshotMapping({
                 </div>
               ) : (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>
-                  <img src="/assets/default_eagle.svg" alt="default portrait (eagle)" className="thumb" />
+                  <img src={withBase("assets/default_eagle.svg")} alt="default portrait (eagle)" className="thumb" />
                   <span className="muted small">Current default: eagle</span>
                 </div>
               )}
@@ -3089,7 +3090,7 @@ function BabyPhotosStep({
         return;
       }
       try {
-        const resp = await fetch("/assets/Default_Baby_Photo_ABC_Blocks.webp");
+        const resp = await fetch(withBase("assets/Default_Baby_Photo_ABC_Blocks.webp"));
         if (!resp.ok) throw new Error("Could not load default baby asset");
         const blob = await resp.blob();
         const file = new File([blob], "default_baby_abc_blocks.webp", { type: "image/webp" });
@@ -3360,7 +3361,7 @@ function BabyPhotosStep({
               ) : (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>
                   <img
-                    src="/assets/Default_Baby_Photo_ABC_Blocks.webp"
+                    src={withBase("assets/Default_Baby_Photo_ABC_Blocks.webp")}
                     alt="default baby photo (ABC blocks)"
                     className="thumb thumb-baby"
                   />
@@ -3599,7 +3600,7 @@ function BabyPhotosStep({
                             }}
                           >
                             <img
-                              src="/assets/Default_Baby_Photo_ABC_Blocks.webp"
+                              src={withBase("assets/Default_Baby_Photo_ABC_Blocks.webp")}
                               alt=""
                               className="baby-thumb-img"
                               aria-hidden="true"
