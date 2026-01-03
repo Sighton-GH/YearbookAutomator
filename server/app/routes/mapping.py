@@ -1,0 +1,610 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+import io
+import zipfile
+import re
+from difflib import SequenceMatcher
+
+from pydantic import TypeAdapter
+import pandas as pd
+
+import mimetypes
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+
+from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
+from app.services.spreadsheet import ingest_spreadsheet
+from app.services.storage import save_upload, workspace_dir
+from app.services.background_removal import (
+    BackgroundMode,
+    background_removed_filename,
+    remove_background as remove_background_bytes,
+)
+from fastapi.responses import FileResponse
+
+router = APIRouter()
+
+
+@router.get("/baby-mask")
+async def get_baby_mask(
+    workspace_id: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+):
+    """Return the exact baby-slot alpha mask saved during template parsing.
+
+    The mask file is keyed by the baby slot's box coordinates, matching the
+    lookup used during generation.
+    """
+    if width <= 0 or height <= 0:
+        raise HTTPException(status_code=400, detail="Invalid mask dimensions")
+
+    path = workspace_dir(workspace_id) / "masks" / "baby" / f"{int(x)}_{int(y)}_{int(width)}_{int(height)}.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Mask not found")
+    return FileResponse(path, media_type="image/png")
+
+
+def _normalize_name(text: str) -> str:
+    lowered = (text or "").lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+
+def _tokens(text: str) -> list[str]:
+    norm = _normalize_name(text)
+    return norm.split() if norm else []
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", "", _normalize_name(text))
+
+
+_FILENAME_STOPWORDS = {
+    "blob",
+    "img",
+    "image",
+    "photo",
+    "picture",
+    "pic",
+    "scan",
+    "upload",
+    "download",
+    "file",
+    "baby",
+    "mugshot",
+}
+
+
+def _compact_filename_name(stem_raw: str) -> str:
+    """Extract a compacted name-like string from a filename stem.
+
+    This intentionally drops common junk tokens (timestamps, 'blob', etc.) so
+    partial matching compares the actual name portion.
+    """
+
+    norm = _normalize_name(stem_raw)
+    if not norm:
+        return ""
+    tokens = norm.split()
+
+    def split_alnum(token: str) -> list[str]:
+        # Break things like '1739241452474blob' into ['1739241452474','blob']
+        return re.findall(r"[a-z]+|\d+", token)
+
+    kept: list[str] = []
+    for t in tokens:
+        if not t:
+            continue
+        for part in split_alnum(t):
+            if not part:
+                continue
+            if part.isdigit():
+                # timestamps / IDs
+                continue
+            if part in _FILENAME_STOPWORDS:
+                continue
+            if not any(ch.isalpha() for ch in part):
+                continue
+            kept.append(part)
+
+    if not kept:
+        return ""
+
+    return "".join(kept)
+
+
+def _matches_name(stem_tokens: set[str], stem_compact: str, first_parts: list[str], last_parts: list[str]) -> bool:
+    if not first_parts or not last_parts:
+        return False
+    first_present = any(t in stem_tokens for t in first_parts)
+    last_present = any(t in stem_tokens for t in last_parts)
+    if first_present and last_present:
+        return True
+    first_compact = "".join(first_parts)
+    last_compact = "".join(last_parts)
+    return (first_compact in stem_compact and last_compact in stem_compact) or (
+        last_compact in stem_compact and first_compact in stem_compact
+    )
+
+
+def _char_similarity(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    # SequenceMatcher is stdlib and works well for "most characters match" heuristics.
+    return float(SequenceMatcher(None, a, b).ratio())
+
+
+def _best_partial_name_match(stem_compact: str, people: list[PersonRecord]) -> tuple[int | None, float, float]:
+    """Return (best_person_index, best_score, second_best_score).
+
+    Uses a conservative character-similarity ratio on compacted names.
+    """
+
+    if not stem_compact:
+        return (None, 0.0, 0.0)
+
+    scored: list[tuple[int, float]] = []
+    for p in people:
+        full_a = _compact(f"{p.first_name} {p.last_name}")
+        full_b = _compact(f"{p.last_name} {p.first_name}")
+        score = max(_char_similarity(stem_compact, full_a), _char_similarity(stem_compact, full_b))
+        scored.append((p.index, score))
+
+    scored.sort(key=lambda t: t[1], reverse=True)
+    if not scored:
+        return (None, 0.0, 0.0)
+
+    best_idx, best = scored[0]
+    second = scored[1][1] if len(scored) > 1 else 0.0
+    return (best_idx, best, second)
+
+
+def _looks_like_email(text: str) -> bool:
+    return bool(re.search(r"\b\S+@\S+\.\S+\b", text))
+
+
+def _looks_like_url(text: str) -> bool:
+    return bool(re.search(r"\bhttps?://\S+\b", text, flags=re.IGNORECASE))
+
+
+def _looks_like_quote(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    if _looks_like_email(s) or _looks_like_url(s):
+        return False
+    # Reject strings that are basically numeric/IDs.
+    alnum = re.sub(r"[^A-Za-z0-9]+", "", s)
+    if not alnum:
+        return False
+    letters = sum(ch.isalpha() for ch in alnum)
+    digits = sum(ch.isdigit() for ch in alnum)
+    if letters < 3:
+        return False
+    if digits > letters * 2:
+        return False
+    # Should look like a phrase (at least two words)
+    words = re.findall(r"[A-Za-z]{2,}", s)
+    if len(words) < 2:
+        return False
+    return True
+
+
+@router.post("/ingest", response_model=SpreadsheetPreview)
+async def ingest(
+    spreadsheet: UploadFile | None = File(None),
+    workspace_id: str = Form(...),
+    mugshots_zip: UploadFile | None = File(None),
+    naming_pattern: str = Form(r"\d{3,4}"),
+    advanced_name_match: bool = Form(False),
+) -> SpreadsheetPreview:
+    # If caller didn't re-upload inputs (e.g., after refresh), fall back to saved uploads.
+    spreadsheet_file = spreadsheet.file if spreadsheet else None
+    spreadsheet_name = spreadsheet.filename if spreadsheet else None
+    mugshots_file = mugshots_zip.file if mugshots_zip else None
+
+    root = workspace_dir(workspace_id)
+    if spreadsheet_file is None or spreadsheet_name is None:
+        uploads = root / "uploads"
+        candidates = sorted(
+            list(uploads.glob("spreadsheet.*")),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if candidates:
+            spreadsheet_path = candidates[0]
+            spreadsheet_file = io.BytesIO(spreadsheet_path.read_bytes())
+            spreadsheet_name = spreadsheet_path.name
+
+    if mugshots_file is None:
+        mugshots_path = root / "uploads" / "mugshots.zip"
+        if mugshots_path.exists():
+            mugshots_file = io.BytesIO(mugshots_path.read_bytes())
+
+    if spreadsheet_file is None or spreadsheet_name is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing spreadsheet upload. Upload a spreadsheet, or reuse a workspace that already has uploads/spreadsheet.* saved.",
+        )
+
+    # Save current uploads so they can be reused later.
+    if spreadsheet is not None:
+        ext = Path(spreadsheet.filename).suffix.lower() or ".xlsx"
+        save_upload(workspace_id, f"uploads/spreadsheet{ext}", io.BytesIO(await spreadsheet.read()))
+        # Reset spreadsheet_file/name to match what we just saved (avoid consumed stream issues).
+        spreadsheet_file = io.BytesIO((root / f"uploads/spreadsheet{ext}").read_bytes())
+        spreadsheet_name = f"spreadsheet{ext}"
+
+    if mugshots_zip is not None:
+        # ingest_spreadsheet also saves mugshots.zip, but we save here as well so it's available even if ingest fails.
+        save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(await mugshots_zip.read()))
+        mugshots_file = io.BytesIO((root / "uploads" / "mugshots.zip").read_bytes())
+
+    return ingest_spreadsheet(
+        workspace_id,
+        spreadsheet_file,
+        spreadsheet_name,
+        mugshots_file,
+        naming_pattern,
+        advanced_name_match=advanced_name_match,
+    )
+
+
+@router.post("/review", response_model=SpreadsheetPreview)
+async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
+    people = list(payload.people)
+
+    def index_of(person_index: int) -> int:
+        for i, person in enumerate(people):
+            if person.index == person_index:
+                return i
+        return -1
+
+    def shift_from(pos: int):
+        # Insert blank mugshot from pos downward (pos uses list index)
+        for i in range(len(people) - 1, pos, -1):
+            people[i].mugshot_filename = people[i - 1].mugshot_filename
+        people[pos].mugshot_filename = None
+
+    for decision in payload.decisions:
+        pos = index_of(decision.person_index)
+        if pos < 0:
+            continue
+        if decision.action == "replace" and decision.replacement_mugshot:
+            people[pos].mugshot_filename = decision.replacement_mugshot
+        elif decision.action == "remove":
+            people[pos].mugshot_filename = None
+        elif decision.action in {"shift", "skip"}:
+            shift_from(pos)
+        # keep does nothing
+
+    return SpreadsheetPreview(workspace_id=payload.workspace_id, people=people)
+
+
+@router.post("/upload-image")
+async def upload_image(
+    workspace_id: str = Form(...),
+    kind: Literal["baby", "mugshot"] = Form(...),
+    file: UploadFile = File(...),
+    remove_background: bool = Form(False),
+    background_mode: BackgroundMode = Form("simple"),
+) -> dict[str, str]:
+    filename = Path(file.filename).name
+    allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+    if Path(filename).suffix.lower() not in allowed_exts:
+        raise HTTPException(status_code=400, detail="Only image files are supported (.png, .jpg, .jpeg, .webp, .bmp, .tif, .tiff)")
+    # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
+    subdir = "mugshots" if kind == "mugshot" else kind
+
+    if kind == "baby" and remove_background:
+        raw = file.file.read()
+        try:
+            out_png = remove_background_bytes(raw, mode=background_mode)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not remove background: {exc}")
+        out_name = background_removed_filename(filename)
+        save_upload(workspace_id, f"{subdir}/{out_name}", io.BytesIO(out_png))
+        return {"filename": out_name}
+
+    save_upload(workspace_id, f"{subdir}/{filename}", file.file)
+    return {"filename": filename}
+
+
+@router.post("/upload-baby-zip", response_model=SpreadsheetPreview)
+async def upload_baby_zip(
+    workspace_id: str = Form(...),
+    people_json: str = Form(...),
+    baby_zip: UploadFile | None = File(None),
+    advanced_name_match: bool = Form(True),
+    partial_name_match: bool = Form(False),
+    remove_background: bool = Form(False),
+    background_mode: BackgroundMode = Form("simple"),
+) -> SpreadsheetPreview:
+    # Parse people passed from frontend (source of truth for indices/names).
+    people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
+
+    zip_bytes: bytes | None = None
+    if baby_zip is not None:
+        zip_bytes = baby_zip.file.read()
+        save_upload(workspace_id, "uploads/baby.zip", io.BytesIO(zip_bytes))
+    else:
+        saved = workspace_dir(workspace_id) / "uploads" / "baby.zip"
+        if saved.exists():
+            zip_bytes = saved.read_bytes()
+
+    if not zip_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing baby ZIP upload. Upload a ZIP, or reuse a workspace that already has uploads/baby.zip saved.",
+        )
+
+    target_dir = workspace_dir(workspace_id) / "baby"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    warnings: list[str] = []
+
+    # Precompute name tokens.
+    name_tokens: dict[int, tuple[list[str], list[str]]] = {}
+    if advanced_name_match:
+        for p in people:
+            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            if not first_parts or not last_parts:
+                continue
+            first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
+            name_tokens[p.index] = (first_candidates, last_parts)
+
+    assigned: set[int] = set()
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        for member in zf.namelist():
+            if member.endswith("/"):
+                continue
+            filename_only = Path(member).name
+            if Path(filename_only).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+                warnings.append(
+                    f"Skipped baby file '{filename_only}' (unsupported type; images only)."
+                )
+                continue
+            stem_raw = Path(filename_only).stem
+            stem_norm = _normalize_name(stem_raw)
+            stem_tokens = set(stem_norm.split()) if stem_norm else set()
+            stem_compact = _compact(stem_raw)
+            stem_compact_name = _compact_filename_name(stem_raw)
+
+            match_indices: list[int] = []
+            if advanced_name_match and name_tokens:
+                for person_index, (first_parts, last_parts) in name_tokens.items():
+                    if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
+                        match_indices.append(person_index)
+
+            # Last resort: partial character similarity only when there was no name match.
+            # This is intentionally conservative to avoid wrong assignments.
+            if not match_indices and partial_name_match and advanced_name_match:
+                # Require a minimum length so short filenames don't match incorrectly.
+                if len(stem_compact_name) >= 8:
+                    best_idx, best_score, second_score = _best_partial_name_match(stem_compact_name, people)
+                    # "Most characters match" threshold + uniqueness guard.
+                    if best_idx is not None and best_score >= 0.86 and (best_score - second_score) >= 0.03:
+                        match_indices = [best_idx]
+                        warnings.append(
+                            f"Assigned baby photo '{filename_only}' to person {best_idx} (partial name match; score={best_score:.2f})."
+                        )
+                    elif best_idx is not None and best_score >= 0.86:
+                        warnings.append(
+                            f"Skipped baby photo '{filename_only}' (partial name match ambiguous; best score={best_score:.2f}, second={second_score:.2f})."
+                        )
+
+            if len(match_indices) == 1:
+                person_index = match_indices[0]
+                if person_index in assigned:
+                    warnings.append(
+                        f"Skipped baby photo '{filename_only}' (multiple files match person {person_index} by name)."
+                    )
+                    continue
+                with zf.open(member) as src:
+                    content = src.read()
+                out_name = filename_only
+                if remove_background:
+                    try:
+                        content = remove_background_bytes(content, mode=background_mode)
+                        out_name = background_removed_filename(filename_only, person_index=person_index)
+                    except Exception as exc:
+                        warnings.append(
+                            f"Skipped baby photo '{filename_only}' for person {person_index} (background removal failed: {exc})."
+                        )
+                        continue
+
+                out_path = target_dir / out_name
+                out_path.write_bytes(content)
+                for i, p in enumerate(people):
+                    if p.index == person_index:
+                        people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
+                        break
+                assigned.add(person_index)
+            elif len(match_indices) > 1:
+                warnings.append(
+                    f"Skipped baby photo '{filename_only}' (matches multiple people by name)."
+                )
+            else:
+                warnings.append(
+                    f"Skipped baby photo '{filename_only}' (no name match)."
+                )
+
+    return SpreadsheetPreview(workspace_id=workspace_id, people=people, warnings=warnings)
+
+
+@router.post("/upload-quotes-spreadsheet", response_model=SpreadsheetPreview)
+async def upload_quotes_spreadsheet(
+    workspace_id: str = Form(...),
+    people_json: str = Form(...),
+    quotes_spreadsheet: UploadFile | None = File(None),
+    advanced_name_match: bool = Form(True),
+) -> SpreadsheetPreview:
+    people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
+
+    data: bytes | None = None
+    filename: str | None = None
+    if quotes_spreadsheet is not None:
+        filename = quotes_spreadsheet.filename
+        data = quotes_spreadsheet.file.read()
+        # Persist for later re-processing even if parsing fails.
+        ext = Path(filename).suffix.lower() if filename else ".xlsx"
+        save_upload(workspace_id, f"uploads/quotes{ext}", io.BytesIO(data))
+    else:
+        root = workspace_dir(workspace_id) / "uploads"
+        candidates = sorted(list(root.glob("quotes.*")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            filename = candidates[0].name
+            data = candidates[0].read_bytes()
+
+    if not data or not filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing quotes spreadsheet. Upload one, or reuse a workspace that already has uploads/quotes.* saved.",
+        )
+
+    buf = io.BytesIO(data)
+    try:
+        if filename.lower().endswith(".csv"):
+            df = pd.read_csv(buf)
+        else:
+            df = pd.read_excel(buf)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read quotes spreadsheet: {exc}")
+
+    warnings: list[str] = []
+
+    # Build person token index for matching
+    person_tokens: dict[int, tuple[list[str], list[str]]] = {}
+    if advanced_name_match:
+        for p in people:
+            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            if not first_parts or not last_parts:
+                continue
+            first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
+            person_tokens[p.index] = (first_candidates, last_parts)
+
+    # Identify name columns if present
+    lower_cols = {str(c).lower(): c for c in df.columns}
+    first_col = None
+    last_col = None
+    name_col = None
+    quote_col = None
+    for low, orig in lower_cols.items():
+        if first_col is None and "first" in low and "name" in low:
+            first_col = orig
+        if last_col is None and "last" in low and "name" in low:
+            last_col = orig
+        if name_col is None and low.strip() in {"name", "student name", "full name"}:
+            name_col = orig
+        if quote_col is None and "quote" in low:
+            quote_col = orig
+
+    def row_name_tokens(row) -> tuple[set[str], str]:
+        raw_name = ""
+        if first_col is not None and last_col is not None:
+            raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
+        elif name_col is not None:
+            raw_name = str(row.get(name_col, ""))
+        else:
+            # Fallback: try to find any column containing 'name'
+            for col in df.columns:
+                if "name" in str(col).lower():
+                    raw_name = str(row.get(col, ""))
+                    break
+        stem_norm = _normalize_name(raw_name)
+        return (set(stem_norm.split()) if stem_norm else set(), _compact(raw_name))
+
+    updated = {p.index: p for p in people}
+
+    for row_idx, row in df.iterrows():
+        stem_tokens, stem_compact = row_name_tokens(row)
+        if not stem_tokens and not stem_compact:
+            continue
+
+        matches: list[int] = []
+        if advanced_name_match and person_tokens:
+            for person_index, (first_parts, last_parts) in person_tokens.items():
+                if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
+                    matches.append(person_index)
+        if len(matches) != 1:
+            if len(matches) > 1:
+                warnings.append(f"Row {row_idx + 2}: matches multiple people by name")
+            else:
+                warnings.append(f"Row {row_idx + 2}: no name match")
+            continue
+
+        person_index = matches[0]
+
+        # 1) Prefer an explicit "quote" column if present.
+        preferred = None
+        if quote_col is not None:
+            val = row.get(quote_col)
+            if val is not None and not (isinstance(val, float) and pd.isna(val)):
+                s = str(val).strip()
+                if s and _looks_like_quote(s):
+                    preferred = s
+
+        # 2) Fall back to scanning the row for the best quote-like cell.
+        if preferred is None:
+            candidates: list[str] = []
+            for col in df.columns:
+                if col in {first_col, last_col, name_col, quote_col}:
+                    continue
+                val = row.get(col)
+                if val is None or (isinstance(val, float) and pd.isna(val)):
+                    continue
+                s = str(val).strip()
+                if not s:
+                    continue
+                candidates.append(s)
+
+            quote_candidates = [c for c in candidates if _looks_like_quote(c)]
+            if not quote_candidates:
+                # If quote column exists but didn't pass heuristics, include that detail.
+                if quote_col is not None:
+                    raw = row.get(quote_col)
+                    raw_s = "" if raw is None or (isinstance(raw, float) and pd.isna(raw)) else str(raw).strip()
+                    if raw_s:
+                        warnings.append(
+                            f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' did not look like a quote"
+                        )
+                    else:
+                        warnings.append(f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' was empty")
+                else:
+                    warnings.append(f"Row {row_idx + 2}: matched person {person_index} but no quote-like text found")
+                continue
+            preferred = max(quote_candidates, key=lambda s: len(s))
+
+        quote = preferred
+        updated[person_index] = updated[person_index].model_copy(update={"quote": quote})
+
+    # preserve original order
+    out_people = [updated[p.index] for p in people]
+    return SpreadsheetPreview(workspace_id=workspace_id, people=out_people, warnings=warnings)
+
+
+@router.get("/asset")
+async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filename: str):
+    root = workspace_dir(workspace_id)
+    if kind == "mugshot":
+        # Canonical folder is `mugshots/`; fall back to legacy `mugshot/`.
+        candidate_dirs = ["mugshots", "mugshot"]
+    else:
+        candidate_dirs = [kind]
+
+    for dir_name in candidate_dirs:
+        path = root / dir_name / filename
+        if path.exists():
+            media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            return FileResponse(path, media_type=media_type)
+
+    raise HTTPException(status_code=404, detail="not found")
