@@ -45,6 +45,21 @@ def test_personal_license_bound_and_monthly_limited(tmp_path, monkeypatch):
     assert meta6["reason"] == "monthly_limit"
 
 
+def test_personal_license_loopback_ip_equivalence(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    device_id = "device-loopback"
+    key = licensing.get_or_create_personal_license(ip="127.0.0.1", device_id=device_id)
+
+    ok_v4, _ = licensing.validate_license(key, ip="127.0.0.1", device_id=device_id)
+    assert ok_v4 is True
+
+    # Should still validate if localhost resolves to IPv6 loopback.
+    ok_v6, _ = licensing.validate_license(key, ip="::1", device_id=device_id)
+    assert ok_v6 is True
+
+
 def test_max_uses_enforced(tmp_path, monkeypatch):
     monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
     monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")

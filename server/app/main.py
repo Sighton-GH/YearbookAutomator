@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 from threading import Event, Thread
 
@@ -19,10 +20,42 @@ from app.services.licensing import (
 )
 
 
+logger = logging.getLogger("ymga.licensing")
+
+
+def _license_hint(reason: str | None) -> str | None:
+    if not reason:
+        return None
+    # Keep this short and user-actionable.
+    if reason == "missing":
+        return "No license key was provided. Enter/request a key in the UI."
+    if reason in {"format", "not_found"}:
+        return "The license key is invalid. Re-enter the key or request a new one."
+    if reason == "revoked":
+        return "This license key was revoked. Use a different key."
+    if reason == "expired":
+        return "This license key expired. Use a different key."
+    if reason == "device_required":
+        return "This license requires a device id. Make sure X-Device-Id is being sent."
+    if reason == "device_mismatch":
+        return "Device id changed since the key was issued. Request a new key on this device/browser."
+    if reason == "ip_required":
+        return "This license requires an IP binding."
+    if reason == "ip_mismatch":
+        return "IP changed since the key was issued. Request a new key or use the same network."
+    if reason == "monthly_limit":
+        return "Monthly usage limit reached for this key."
+    if reason == "max_uses":
+        return "Usage limit reached for this key."
+    return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Local/dev convenience: wipe uploaded data on server start.
     # Set YMGA_CLEAR_WORKSPACES_ON_STARTUP=false to preserve workspaces.
+    # Note: internal underscore-prefixed folders under `server/app/data/` (e.g. `_licenses`)
+    # are preserved so license records/secrets persist across restarts.
     clear_on_startup = os.getenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "true").strip().lower() not in {
         "0",
         "false",
@@ -97,7 +130,25 @@ async def license_guard(request: Request, call_next):
 
         ok, meta = validate_license(key or "", ip=ip, device_id=device_id)
         if not ok:
-            return JSONResponse(status_code=401, content={"detail": "License key required", "reason": meta.get("reason")})
+            reason = str(meta.get("reason") or "") or None
+            # Log why the request was rejected (access logs only show status code).
+            logger.warning(
+                "License rejected: %s %s reason=%s has_key=%s has_device_id=%s ip=%s",
+                request.method,
+                path,
+                reason,
+                bool(key),
+                bool(device_id),
+                ip,
+            )
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": "License key required",
+                    "reason": reason,
+                    "hint": _license_hint(reason),
+                },
+            )
 
     return await call_next(request)
 

@@ -100,6 +100,10 @@ def list_workspace_ids() -> list[str]:
         if not child.is_dir():
             continue
         name = child.name
+        # Reserve underscore-prefixed folders for internal app data.
+        # Example: `_licenses` stores licensing secrets/records and should not be wiped.
+        if name.startswith("_"):
+            continue
         if _WORKSPACE_ID_RE.fullmatch(name):
             ids.append(name)
     return ids

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
@@ -37,6 +38,45 @@ class LicenseRecord:
 
 
 _STORE_LOCK = Lock()
+
+
+def _is_loopback_ip(ip: str | None) -> bool:
+    if not ip:
+        return False
+    try:
+        return ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+
+def _loopback_equivalent(a: str | None, b: str | None) -> bool:
+    # Treat 127.0.0.1 and ::1 as equivalent for local/dev.
+    return _is_loopback_ip(a) and _is_loopback_ip(b)
+
+
+def _ip_binding_allows(bound_ip: str | None, current_ip: str | None) -> bool:
+    """Return True if current_ip satisfies the stored binding.
+
+    - If no binding exists, allow.
+    - If binding exists, require a current ip and match it.
+    - Special-case: any loopback ip matches any other loopback ip.
+    """
+
+    if not bound_ip:
+        return True
+    if not current_ip:
+        return False
+    return bound_ip == current_ip or _loopback_equivalent(bound_ip, current_ip)
+
+
+def _ip_binding_same(bound_ip: str | None, current_ip: str | None) -> bool:
+    """Stricter equality for matching an existing bound personal license record."""
+
+    if bound_ip is None and current_ip is None:
+        return True
+    if bound_ip is None or current_ip is None:
+        return False
+    return bound_ip == current_ip or _loopback_equivalent(bound_ip, current_ip)
 
 
 def personal_monthly_limit_default() -> int:
@@ -198,7 +238,7 @@ def get_or_create_personal_license(*, ip: str | None, device_id: str | None, not
                 continue
             if rec.get("key") is None:
                 continue
-            if rec.get("bound_ip", None) != ip:
+            if not _ip_binding_same(rec.get("bound_ip", None), ip):
                 continue
             if rec.get("bound_device_id", None) != device_id:
                 continue
@@ -300,7 +340,7 @@ def validate_license(
                 bound_device_id = rec.get("bound_device_id", None)
                 if bound_ip and not ip:
                     return False, {"reason": "ip_required"}
-                if bound_ip and ip and bound_ip != ip:
+                if bound_ip and ip and not _ip_binding_allows(bound_ip, ip):
                     return False, {"reason": "ip_mismatch"}
                 if bound_device_id and not device_id:
                     return False, {"reason": "device_required"}
@@ -361,7 +401,7 @@ def validate_and_record_use(
                 bound_device_id = rec.get("bound_device_id", None)
                 if bound_ip and not ip:
                     return False, {"reason": "ip_required"}
-                if bound_ip and ip and bound_ip != ip:
+                if bound_ip and ip and not _ip_binding_allows(bound_ip, ip):
                     return False, {"reason": "ip_mismatch"}
                 if bound_device_id and not device_id:
                     return False, {"reason": "device_required"}
