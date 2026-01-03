@@ -684,11 +684,11 @@ export default function App({ embedded = false }: AppProps) {
 
     if (!defaultBabyUploadInFlight.current) {
       defaultBabyUploadInFlight.current = (async () => {
-        const url = "/assets/Default_Baby_Photo_ABC_Blocks.png";
+        const url = "/assets/Default_Baby_Photo_ABC_Blocks.webp";
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Could not load ${url}`);
         const blob = await resp.blob();
-        const file = new File([blob], "default_baby_abc_blocks.png", { type: "image/png" });
+        const file = new File([blob], "default_baby_abc_blocks.webp", { type: "image/webp" });
         const filename = await uploadImage(workspaceId, "baby", file);
         setDefaultBabyFilename(filename);
         return filename;
@@ -3089,10 +3089,10 @@ function BabyPhotosStep({
         return;
       }
       try {
-        const resp = await fetch("/assets/Default_Baby_Photo_ABC_Blocks.png");
+        const resp = await fetch("/assets/Default_Baby_Photo_ABC_Blocks.webp");
         if (!resp.ok) throw new Error("Could not load default baby asset");
         const blob = await resp.blob();
-        const file = new File([blob], "default_baby_abc_blocks.png", { type: "image/png" });
+        const file = new File([blob], "default_baby_abc_blocks.webp", { type: "image/webp" });
         const filename = await uploadImage(workspaceId, "baby", file);
         onDefaultBabyFilename(filename);
         setStatus("Default baby photo set to ABC blocks");
@@ -3360,7 +3360,7 @@ function BabyPhotosStep({
               ) : (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>
                   <img
-                    src="/assets/Default_Baby_Photo_ABC_Blocks.png"
+                    src="/assets/Default_Baby_Photo_ABC_Blocks.webp"
                     alt="default baby photo (ABC blocks)"
                     className="thumb thumb-baby"
                   />
@@ -3599,7 +3599,7 @@ function BabyPhotosStep({
                             }}
                           >
                             <img
-                              src="/assets/Default_Baby_Photo_ABC_Blocks.png"
+                              src="/assets/Default_Baby_Photo_ABC_Blocks.webp"
                               alt=""
                               className="baby-thumb-img"
                               aria-hidden="true"

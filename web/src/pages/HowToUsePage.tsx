@@ -1,7 +1,7 @@
 const ASSETS = {
-  cover: "/assets/CoverImage1.jpg",
-  templateClean: "/assets/Clean Sample.png",
-  templateAnnotated: "/assets/Annotated Sample.png",
+  cover: "/assets/CoverImage1.webp",
+  templateClean: "/assets/Clean Sample.webp",
+  templateAnnotated: "/assets/Annotated Sample.webp",
 };
 
 export function HowToUsePage() {
