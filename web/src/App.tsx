@@ -2054,6 +2054,14 @@ function TemplateParsing({
     return null;
   };
 
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) {
+      return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    }
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
+  };
+
   useEffect(() => {
     if (onPreviewChange) {
       onPreviewChange({ annotated: annotatedPreview, clean: cleanPreview });
@@ -3293,6 +3301,7 @@ function BabyPhotosStep({
   const [babyBgPickActive, setBabyBgPickActive] = useState(false);
   const [babyBgPickUrl, setBabyBgPickUrl] = useState<string | null>(null);
   const [babyBgPickBusy, setBabyBgPickBusy] = useState(false);
+  const babyBgHexInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -3324,6 +3333,12 @@ function BabyPhotosStep({
       return `#${hex.toLowerCase()}`;
     }
     return null;
+  };
+
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
   };
 
   const rgbToHex = (r: number, g: number, b: number) => {
@@ -3388,6 +3403,11 @@ function BabyPhotosStep({
   const outSize = babyMaskBox
     ? { width: Math.max(1, Math.round(babyMaskBox.width)), height: Math.max(1, Math.round(babyMaskBox.height)) }
     : { width: 512, height: 512 };
+
+  // Keep thumbnails framed exactly like the editor's default view.
+  const babyThumbDims = thumbSizeForAspect(96, cropAspect);
+  // If the user selected a background fill colour, show it behind transparent baby PNGs.
+  const babyFillColor = normalizeHexColor(babyBackgroundColor);
 
   useEffect(() => {
     // Ensure the crop viewport spans the full mask area (fills the container).
@@ -3503,18 +3523,55 @@ function BabyPhotosStep({
     setEditingBusy(true);
     setEditingAction("apply");
     try {
-      const blob = await cropToPngBlob(editingSrc, croppedAreaPixels, outSize);
-      const file = new File([blob], `baby_edit_${people[editingIdx].index}.png`, { type: "image/png" });
+      const personIndex = people[editingIdx]?.index;
+      if (!personIndex) {
+        setStatus("Could not apply changes (missing person)");
+        return;
+      }
+
+      // Avoid quality loss across edits:
+      // - Prefer cropping from the original session source (`editingBaseSrc`) rather than
+      //   whatever is currently displayed.
+      // - If a background-removal preview is active, crop from that preview.
+      const hasPreview = Boolean(previewUrlRef.current) && previewUrlRef.current === editingSrc;
+      const srcForCrop = hasPreview ? editingSrc : (editingBaseSrc || editingSrc);
+
+      // Export at higher resolution than the template slot (up to a cap) so repeated edits
+      // don't progressively lose detail. Generation will downscale as needed.
+      const MAX_EXPORT_DIM = 2048;
+      const cropW = Math.max(1, Math.round(croppedAreaPixels.width));
+      const cropH = Math.max(1, Math.round(croppedAreaPixels.height));
+      const minW = Math.max(1, Math.round(outSize.width));
+      const minH = Math.max(1, Math.round(outSize.height));
+      const desiredW = Math.max(minW, cropW);
+      const desiredH = Math.max(minH, cropH);
+      const scale = Math.min(1, MAX_EXPORT_DIM / Math.max(desiredW, desiredH));
+      const exportSize = {
+        width: Math.max(minW, Math.round(desiredW * scale)),
+        height: Math.max(minH, Math.round(desiredH * scale)),
+      };
+
+      const blob = await cropToPngBlob(srcForCrop, croppedAreaPixels, exportSize);
+      const file = new File([blob], `baby_edit_${personIndex}_${Date.now()}.png`, { type: "image/png" });
 
       const uploadedFilename = await uploadImage(workspaceId, "baby", file);
       updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename }));
-      setBabyThumbError((prev) => ({ ...prev, [people[editingIdx].index]: false }));
+      setBabyThumbError((prev) => ({ ...prev, [personIndex]: false }));
 
-      // Once applied, the editor now reflects the saved image.
+      // Refresh editor to the saved image *without* a zoom jump:
+      // the newly uploaded file is already cropped to the current framing, so reset cropper
+      // state to defaults and swap the image source.
       const nextBase = `${assetUrl(workspaceId, "baby", uploadedFilename)}&nonce=${Date.now()}`;
       setEditingFilename(uploadedFilename);
       setEditingBaseSrc(nextBase);
       setEditingSrc(nextBase);
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCroppedAreaPixels(null);
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
       setDirtyEdits(false);
       setStatus("Baby photo updated");
     } catch (err) {
@@ -3820,8 +3877,8 @@ function BabyPhotosStep({
               disabled={!advancedNameMatch}
               checked={advancedNameMatch && partialNameMatch}
               onChange={setPartialNameMatch}
-              label="Partial name matching (last resort)"
-              description="Only used when there is no name match; helps with minor typos/missing characters."
+              label="Partial name matching"
+              description="Helps with minor typos/missing characters."
             />
 
             <div className="stack" style={{ gap: 6 }}>
@@ -3902,6 +3959,7 @@ function BabyPhotosStep({
                       type="text"
                       placeholder="#ffffff"
                       value={babyBackgroundColor}
+                      ref={babyBgHexInputRef}
                       onChange={(e) => onBabyBackgroundColor(e.target.value)}
                       onBlur={(e) => {
                         const normalized = normalizeHexColor(e.target.value);
@@ -3912,44 +3970,49 @@ function BabyPhotosStep({
                 </div>
               )}
 
-              <div className="inline" style={{ gap: 10, alignItems: "center" }}>
-                <button
-                  type="button"
-                  disabled={!workspaceId || babyBgPickBusy}
-                  onClick={async () => {
-                    if (!workspaceId) {
-                      setStatus("Parse the template first");
-                      return;
-                    }
-                    if (babyBgPickActive) {
-                      setBabyBgPickActive(false);
-                      if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
-                      setBabyBgPickUrl(null);
-                      return;
-                    }
+              {Boolean(babyBackgroundColor.trim()) && (
+                <div className="inline" style={{ gap: 10, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    disabled={!workspaceId || babyBgPickBusy}
+                    onClick={async () => {
+                      // Bring attention to the colour input.
+                      babyBgHexInputRef.current?.focus();
 
-                    try {
-                      setBabyBgPickBusy(true);
-                      setStatus("Loading clean template…");
-                      const resp = await fetch(`${templateCleanUrl(workspaceId)}&t=${Date.now()}`);
-                      if (!resp.ok) throw new Error("Could not load clean template");
-                      const blob = await resp.blob();
-                      const url = URL.createObjectURL(blob);
-                      setBabyBgPickUrl(url);
-                      setBabyBgPickActive(true);
-                      setStatus("Click the template preview to pick a colour");
-                    } catch (err) {
-                      console.error(err);
-                      setStatus("Could not load clean template");
-                    } finally {
-                      setBabyBgPickBusy(false);
-                    }
-                  }}
-                >
-                  {babyBgPickActive ? "Close picker" : "Pick from clean template"}
-                </button>
-                <span className="muted small">Samples a pixel from the clean template and sets the fill colour.</span>
-              </div>
+                      if (!workspaceId) {
+                        setStatus("Parse the template first");
+                        return;
+                      }
+                      if (babyBgPickActive) {
+                        setBabyBgPickActive(false);
+                        if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
+                        setBabyBgPickUrl(null);
+                        return;
+                      }
+
+                      try {
+                        setBabyBgPickBusy(true);
+                        setStatus("Loading clean template…");
+                        const resp = await fetch(`${templateCleanUrl(workspaceId)}&t=${Date.now()}`);
+                        if (!resp.ok) throw new Error("Could not load clean template");
+                        const blob = await resp.blob();
+                        const url = URL.createObjectURL(blob);
+                        setBabyBgPickUrl(url);
+                        setBabyBgPickActive(true);
+                        setStatus("Click the template preview to pick a colour");
+                      } catch (err) {
+                        console.error(err);
+                        setStatus("Could not load clean template");
+                      } finally {
+                        setBabyBgPickBusy(false);
+                      }
+                    }}
+                  >
+                    {babyBgPickActive ? "Close picker" : "Pick from template"}
+                  </button>
+                  <span className="muted small">Samples a pixel from the clean template and sets the fill colour.</span>
+                </div>
+              )}
 
               {babyBgPickActive && babyBgPickUrl && (
                 <div className="stack" style={{ gap: 8 }}>
@@ -4065,9 +4128,12 @@ function BabyPhotosStep({
               const babyFilename = p.baby_photo_filename || defaultBabyFilename;
               const quote = (p.quote ?? defaultQuote ?? "").trim();
               const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
-              const babyThumbStyle: React.CSSProperties | undefined = maskUrl
-                ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties)
-                : undefined;
+              const babyThumbStyle: React.CSSProperties = {
+                ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
+                width: babyThumbDims.width,
+                height: babyThumbDims.height,
+                backgroundColor: babyFillColor ?? undefined,
+              };
 
               return (
                 <div className="people-card" key={p.index}>
@@ -4226,7 +4292,7 @@ function BabyPhotosStep({
               <div
                 className="baby-editor-crop"
                 ref={editorCropRef}
-                style={{ aspectRatio: `${outSize.width} / ${outSize.height}` }}
+                style={{ aspectRatio: `${outSize.width} / ${outSize.height}`, backgroundColor: babyFillColor ?? undefined }}
               >
                 <Cropper
                   image={editingSrc}

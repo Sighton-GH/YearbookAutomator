@@ -125,7 +125,22 @@ export async function uploadImage(
   const form = new FormData();
   form.append("workspace_id", workspaceId);
   form.append("kind", kind);
-  form.append("file", file);
+  // Ensure every upload gets a unique filename to avoid overwriting server-side
+  // and to defeat browser caching for <img src> previews.
+  const uniqueFileName = (() => {
+    const original = (file.name || `${kind}.png`).split(/[\\/]/).pop() || `${kind}.png`;
+    const dot = original.lastIndexOf(".");
+    const baseRaw = dot > 0 ? original.slice(0, dot) : original;
+    const ext = dot > 0 ? original.slice(dot) : ".png";
+    const safeBase = (baseRaw || kind).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40) || kind;
+    const rand = Math.random().toString(16).slice(2, 10);
+    return `${safeBase}_${Date.now()}_${rand}${ext}`;
+  })();
+  const uploadFile = new File([file], uniqueFileName, {
+    type: file.type || "application/octet-stream",
+    lastModified: file.lastModified,
+  });
+  form.append("file", uploadFile);
   if (opts?.removeBackground) form.append("remove_background", "true");
   if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
   const { data } = await axios.post<{ filename: string }>("/api/mapping/upload-image", form, {
