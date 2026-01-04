@@ -2,40 +2,40 @@
 
 ## Big picture
 
-- **Backend**: FastAPI app in [server/app/main.py](server/app/main.py) mounts routers in [server/app/routes/](server/app/routes/) (templates/mapping/generation/fonts/workspaces). Core logic lives in [server/app/services/](server/app/services/).
-- **Frontend**: React/Vite stepper UI in [web/src/App.tsx](web/src/App.tsx) calls the backend through typed helpers in [web/src/api.ts](web/src/api.ts).
-- **Contracts**: Pydantic models in [server/app/models/schemas.py](server/app/models/schemas.py) are mirrored by TS types in [web/src/api.ts](web/src/api.ts). Keep field names compatible (API uses snake_case).
+- FastAPI backend entrypoint: [server/app/main.py](server/app/main.py) (routers in [server/app/routes/](server/app/routes/), core logic in [server/app/services/](server/app/services/)).
+- React/Vite frontend: stepper UI in [web/src/App.tsx](web/src/App.tsx) calling typed API helpers in [web/src/api.ts](web/src/api.ts).
+- API contracts: Pydantic models in [server/app/models/schemas.py](server/app/models/schemas.py) mirrored as TS types in [web/src/api.ts](web/src/api.ts) (backend uses `snake_case`).
 
-## Workspace + storage (local disk)
+## Licensing guard (important)
 
-- Each request is scoped by `workspace_id`. Workspace data lives under `server/app/data/<workspace_id>/` (uploads, extracted images, masks, fonts, outputs).
-- Use [server/app/services/storage.py](server/app/services/storage.py) helpers (`workspace_dir`, `save_upload`, `touch_workspace`, `request_end_session`) and validate IDs with `validate_workspace_id`.
-- Frontend keeps workspaces alive via `POST /api/workspaces/touch` while a tab is open; `POST /api/workspaces/end-session` requests cleanup.
-- **Startup behavior**: on server start, workspaces are wiped by default; disable with `YMGA_CLEAR_WORKSPACES_ON_STARTUP=false` (see [server/app/main.py](server/app/main.py)).
-- **Cleanup behavior**: a background janitor thread removes workspaces after an end-session grace period and/or idle TTL (env overrides in [server/app/services/workspace_cleanup.py](server/app/services/workspace_cleanup.py): `YMGA_WORKSPACE_GRACE_SECONDS`, `YMGA_WORKSPACE_TTL_SECONDS`, etc.). It skips workspaces with active generation jobs.
+- Nearly all tool APIs are protected in [server/app/main.py](server/app/main.py): `/api/templates`, `/api/mapping`, `/api/generation`, `/api/fonts`, `/api/workspaces`.
+- Frontend sends `X-License-Key` + `X-Device-Id` via an axios interceptor in [web/src/api.ts](web/src/api.ts).
+- For endpoints fetched via `<img src>` (cannot send headers), backend accepts query params: `license_key|license|key` and `device_id`. Use the URL helpers: `assetUrl`, `babyMaskUrl`, `templateCleanUrl`, `generationDownloadUrl` in [web/src/api.ts](web/src/api.ts).
 
-## End-to-end flow (API conventions)
+## Workspaces + on-disk layout
 
-- **Template parsing**: `POST /api/templates/parse` → `extract_slots` in [server/app/services/template_parser.py](server/app/services/template_parser.py).
-	- Default colours: mugshot `#00bf63`, baby `#004aad`, name `#ff751f`, quote `#ff3131`.
-	- **Required**: at least one name and quote box; min-area has a hard floor at 400; custom colours sweep HSV tolerance then fall back to defaults.
-	- Saves `template_clean.png` + per-slot baby masks keyed by baby box coords; UI reads masks via `GET /api/mapping/baby-mask`.
-- **Spreadsheet + mugshot ingest**: `POST /api/mapping/ingest` (multipart).
-	- Spreadsheet requires “first name” + “last name” headers.
-	- Mugshot ZIP: filenames are numeric by default (pattern `\d{3,4}`) and map to **1-based** row indices; optional advanced name matching tokenizes names and can shift numeric assignments.
-- **Review**: `POST /api/mapping/review` applies `keep|replace|shift|skip` (shift cascades downward).
-- **Optional overrides**: `POST /api/mapping/upload-image` (mugshot/baby), `POST /api/mapping/upload-baby-zip`, `POST /api/mapping/upload-quotes-spreadsheet`; preview files via `GET /api/mapping/asset`.
-- **Generation**: `POST /api/generation/generate` runs in a background thread.
-	- Progress lives in-memory in [server/app/services/progress.py](server/app/services/progress.py) and is polled via `GET /api/generation/status`.
-	- Download: `GET /api/generation/download` (single) or `GET /api/generation/download-all` (zip of `output_*.png` if present).
+- All work is scoped by `workspace_id` and stored under `server/app/data/<workspace_id>/` (uploads, extracted images, masks, fonts, outputs).
+- Use helpers in [server/app/services/storage.py](server/app/services/storage.py) (e.g. `validate_workspace_id`, `workspace_dir`, `save_upload`, `touch_workspace`, `request_end_session`).
+- Default behavior wipes workspaces on server start; disable with `YMGA_CLEAR_WORKSPACES_ON_STARTUP=false` (underscore folders like `server/app/data/_licenses` are preserved).
+- Cleanup runs in a background thread (`cleanup_loop`) with TTL/grace env vars in [server/app/services/workspace_cleanup.py](server/app/services/workspace_cleanup.py).
 
-## Fonts + assets
+## End-to-end API flow (what calls what)
 
-- System fonts enumerated in [server/app/services/fonts.py](server/app/services/fonts.py); uploaded fonts are per-workspace under `fonts/` and are preferred over system fallbacks.
-- Frontend builds asset/mask/template URLs with helpers in [web/src/api.ts](web/src/api.ts) (`assetUrl`, `babyMaskUrl`, `templateCleanUrl`).
+- Templates: `POST /api/templates/parse` → `extract_slots` in [server/app/services/template_parser.py](server/app/services/template_parser.py).
+  - Default guide colors: mugshot `#00bf63`, baby `#004aad`, name `#ff751f`, quote `#ff3131`.
+  - Requires at least one name + quote box; `min_area` has a hard floor at 400; custom colors sweep HSV tolerance then fall back.
+- Roster + mugshots: `POST /api/mapping/ingest` (multipart). Spreadsheet must have “first name” + “last name”.
+  - Mugshot ZIP defaults to numeric filenames matching **1-based** row indices (pattern `\d{3,4}`), with optional advanced name matching.
+- Review: `POST /api/mapping/review` with `keep|replace|shift|skip|remove` (shift cascades downward).
+- Optional: `POST /api/mapping/upload-image`, `upload-baby-zip`, `upload-quotes-spreadsheet`; preview via `GET /api/mapping/asset`.
+- Generation: `POST /api/generation/generate` runs in a background thread; progress is in-memory in [server/app/services/progress.py](server/app/services/progress.py) and polled via `GET /api/generation/status`.
 
-## Dev workflow (Windows-friendly)
+## Fonts
+
+- System fonts are enumerated in [server/app/services/fonts.py](server/app/services/fonts.py); per-workspace uploaded fonts under `fonts/` take priority.
+
+## Dev workflow (Windows)
 
 - Backend: `cd server` → `python -m venv .venv` → `.venv\Scripts\activate` → `pip install -r requirements.txt` → `uvicorn app.main:app --reload --port 8000`
-- Frontend: `cd web` → `npm install` → `npm run dev` (Vite proxies `/api` → `127.0.0.1:8000`)
-- Tests: `cd server` → `pytest` (see [server/tests/](server/tests/) for patterns around template parsing, generation, progress, background removal)
+- Frontend: `cd web` → `npm install` → `npm run dev` (Vite proxies `/api` to `http://127.0.0.1:8000`; see [web/vite.config.ts](web/vite.config.ts))
+- Tests: `cd server` → `pytest` (examples in [server/tests/](server/tests/))

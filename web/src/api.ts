@@ -99,7 +99,12 @@ export async function uploadImage(
   workspaceId: string,
   kind: "baby" | "mugshot",
   file: File,
-  opts?: { removeBackground?: boolean; backgroundMode?: "simple" | "complex"; signal?: AbortSignal }
+  opts?: {
+    removeBackground?: boolean;
+    backgroundMode?: "simple" | "complex";
+    signal?: AbortSignal;
+    onProgress?: (progressPct: number) => void;
+  }
 ): Promise<string> {
   const form = new FormData();
   form.append("workspace_id", workspaceId);
@@ -109,7 +114,15 @@ export async function uploadImage(
   if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
   const { data } = await axios.post<{ filename: string }>("/api/mapping/upload-image", form, {
     headers: { "Content-Type": "multipart/form-data" },
-    signal: opts?.signal
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
   });
   return data.filename;
 }
@@ -237,6 +250,71 @@ export async function uploadFont(workspaceId: string, file: File): Promise<strin
     headers: { "Content-Type": "multipart/form-data" }
   });
   return data.filename;
+}
+
+export async function startRemoveBackgroundJob(params: {
+  workspaceId: string;
+  kind: "baby" | "mugshot";
+  filename: string;
+  backgroundMode: "simple" | "complex";
+}) {
+  const form = new FormData();
+  form.append("workspace_id", params.workspaceId);
+  form.append("kind", params.kind);
+  form.append("filename", params.filename);
+  form.append("background_mode", params.backgroundMode);
+  const { data } = await axios.post<{ job_id: string; output_filename: string }>("/api/mapping/remove-background", form, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return data;
+}
+
+export async function removeBackgroundStatus(jobId: string) {
+  const { data } = await axios.get<{
+    job_id: string;
+    workspace_id: string;
+    kind: string;
+    mode: string;
+    source_filename: string;
+    output_filename: string;
+    progress: number;
+    status: string;
+    message?: string | null;
+    error?: string | null;
+    eta_seconds?: number | null;
+    updated_at?: number;
+  }>("/api/mapping/remove-background-status", { params: { job_id: jobId } });
+  return data;
+}
+
+export async function startRemoveBackgroundPreviewJob(params: {
+  workspaceId: string;
+  kind: "baby" | "mugshot";
+  filename: string;
+  backgroundMode: "simple" | "complex";
+}) {
+  const form = new FormData();
+  form.append("workspace_id", params.workspaceId);
+  form.append("kind", params.kind);
+  form.append("filename", params.filename);
+  form.append("background_mode", params.backgroundMode);
+  const { data } = await axios.post<{ job_id: string }>("/api/mapping/remove-background-preview", form, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return data;
+}
+
+export async function removeBackgroundPreviewStatus(jobId: string) {
+  // Same payload shape as removeBackgroundStatus.
+  return removeBackgroundStatus(jobId);
+}
+
+export async function fetchRemoveBackgroundPreviewResult(jobId: string): Promise<Blob> {
+  const resp = await axios.get("/api/mapping/remove-background-preview-result", {
+    params: { job_id: jobId },
+    responseType: "blob"
+  });
+  return resp.data as Blob;
 }
 
 export async function touchWorkspace(workspaceId: string): Promise<void> {

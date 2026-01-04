@@ -24,6 +24,9 @@ import {
   generationStatus,
   touchWorkspace,
   deleteWorkspace,
+  startRemoveBackgroundPreviewJob,
+  removeBackgroundPreviewStatus,
+  fetchRemoveBackgroundPreviewResult,
   type Box,
   type PersonRecord,
   type TemplateSlots,
@@ -66,17 +69,33 @@ async function cropToPngBlob(
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(
-    image,
-    cropPixels.x,
-    cropPixels.y,
-    cropPixels.width,
-    cropPixels.height,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Support crops that extend outside the image bounds (e.g. when zoomed out < 1
+  // and the user drags freely). Out-of-bounds areas remain transparent.
+  const imgW = image.naturalWidth || image.width;
+  const imgH = image.naturalHeight || image.height;
+  const sx = cropPixels.x;
+  const sy = cropPixels.y;
+  const sw = cropPixels.width;
+  const sh = cropPixels.height;
+  if (sw > 0 && sh > 0 && imgW > 0 && imgH > 0) {
+    const ix0 = Math.max(0, sx);
+    const iy0 = Math.max(0, sy);
+    const ix1 = Math.min(imgW, sx + sw);
+    const iy1 = Math.min(imgH, sy + sh);
+
+    const iW = Math.max(0, ix1 - ix0);
+    const iH = Math.max(0, iy1 - iy0);
+
+    if (iW > 0 && iH > 0) {
+      const dx = ((ix0 - sx) / sw) * canvas.width;
+      const dy = ((iy0 - sy) / sh) * canvas.height;
+      const dW = (iW / sw) * canvas.width;
+      const dH = (iH / sh) * canvas.height;
+      ctx.drawImage(image, ix0, iy0, iW, iH, dx, dy, dW, dH);
+    }
+  }
 
   const blob: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not create image blob"))), "image/png");
@@ -646,6 +665,8 @@ export default function App({ embedded = false }: AppProps) {
 
   const [activeStep, setActiveStep] = useState(0);
   const [didRestoreSession, setDidRestoreSession] = useState(false);
+  const activeStepRef = useRef(0);
+  activeStepRef.current = activeStep;
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [skipQuotes, setSkipQuotes] = useState(false);
@@ -986,9 +1007,9 @@ export default function App({ embedded = false }: AppProps) {
 
     const urlStep = parseStepFromSearch(location.search);
     if (urlStep == null) return;
-    if (urlStep === activeStep) return;
+    if (urlStep === activeStepRef.current) return;
     goToStep(urlStep);
-  }, [didRestoreSession, location.pathname, location.search, activeStep]);
+  }, [didRestoreSession, location.pathname, location.search]);
 
   // State -> URL: keep ?step= in sync (without spamming history).
   useEffect(() => {
@@ -3105,11 +3126,24 @@ function BabyPhotosStep({
   const [babyThumbError, setBabyThumbError] = useState<Record<number, boolean>>({});
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editingSrc, setEditingSrc] = useState<string | null>(null);
+  const [editingBaseSrc, setEditingBaseSrc] = useState<string | null>(null);
+  const [editingFilename, setEditingFilename] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
   const [editingBusy, setEditingBusy] = useState(false);
+  const [editingAction, setEditingAction] = useState<"apply" | "remove_background" | null>(null);
+  const [removeBgPopoverOpen, setRemoveBgPopoverOpen] = useState(false);
+  const [removeBgMode, setRemoveBgMode] = useState<"simple" | "complex">("simple");
+  const [removeBgProgress, setRemoveBgProgress] = useState(0);
+  const [removeBgEtaSeconds, setRemoveBgEtaSeconds] = useState<number | null>(null);
+  const [removeBgMessage, setRemoveBgMessage] = useState<string>("");
+  const [dirtyEdits, setDirtyEdits] = useState(false);
+  const [showDiscardWarning, setShowDiscardWarning] = useState(false);
+  const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const editorCropRef = useRef<HTMLDivElement | null>(null);
+  const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
   const didInitDefaultBaby = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const processingSnapshotRef = useRef<{
@@ -3188,6 +3222,24 @@ function BabyPhotosStep({
     ? { width: Math.max(1, Math.round(babyMaskBox.width)), height: Math.max(1, Math.round(babyMaskBox.height)) }
     : { width: 512, height: 512 };
 
+  useEffect(() => {
+    // Ensure the crop viewport spans the full mask area (fills the container).
+    const el = editorCropRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      const w = Math.max(1, Math.floor(rect.width));
+      const h = Math.max(1, Math.floor(rect.height));
+      setEditorCropSize({ width: w, height: h });
+    };
+
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editingIdx, editingSrc, outSize.width, outSize.height]);
+
   const openEditor = (idx: number) => {
     if (!workspaceId) return;
     const p = people[idx];
@@ -3198,23 +3250,80 @@ function BabyPhotosStep({
     }
     setEditingIdx(idx);
     setEditingName(`${p.first_name} ${p.last_name}`);
-    setEditingSrc(`${assetUrl(workspaceId, "baby", babyFilename)}&nonce=${Date.now()}`);
+    const base = `${assetUrl(workspaceId, "baby", babyFilename)}&nonce=${Date.now()}`;
+    setEditingFilename(babyFilename);
+    setEditingBaseSrc(base);
+    setEditingSrc(base);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setEditingAction(null);
+    setRemoveBgPopoverOpen(false);
+    setRemoveBgMode(babyBackgroundMode);
+    setRemoveBgProgress(0);
+    setRemoveBgEtaSeconds(null);
+    setRemoveBgMessage("");
+    setDirtyEdits(false);
+    setShowDiscardWarning(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
   };
 
   const closeEditor = () => {
     if (editingBusy) return;
+    if (dirtyEdits) {
+      setShowDiscardWarning(true);
+      return;
+    }
     setEditingIdx(null);
     setEditingSrc(null);
+    setEditingBaseSrc(null);
+    setEditingFilename(null);
     setEditingName("");
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setEditingAction(null);
+    setRemoveBgPopoverOpen(false);
+    setRemoveBgProgress(0);
+    setRemoveBgEtaSeconds(null);
+    setRemoveBgMessage("");
+    setDirtyEdits(false);
+    setShowDiscardWarning(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
   };
 
-  const applyEdits = async (opts?: { removeBackground?: boolean }) => {
+  const discardAndCloseEditor = () => {
+    if (editingBusy) return;
+    // Revert any preview URLs.
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setEditingIdx(null);
+    setEditingSrc(null);
+    setEditingBaseSrc(null);
+    setEditingFilename(null);
+    setEditingName("");
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setEditingAction(null);
+    setRemoveBgPopoverOpen(false);
+    setRemoveBgProgress(0);
+    setRemoveBgEtaSeconds(null);
+    setRemoveBgMessage("");
+    setDirtyEdits(false);
+    setShowDiscardWarning(false);
+    setStatus("Edits discarded");
+  };
+
+  const applyEdits = async () => {
     if (!workspaceId) return;
     if (editingIdx === null || !editingSrc || !croppedAreaPixels) {
       setStatus("Adjust the crop first");
@@ -3225,22 +3334,84 @@ function BabyPhotosStep({
       return;
     }
     setEditingBusy(true);
+    setEditingAction("apply");
     try {
       const blob = await cropToPngBlob(editingSrc, croppedAreaPixels, outSize);
       const file = new File([blob], `baby_edit_${people[editingIdx].index}.png`, { type: "image/png" });
-      const filename = await uploadImage(workspaceId, "baby", file, {
-        removeBackground: opts?.removeBackground,
-        backgroundMode: babyBackgroundMode,
-      });
-      updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: filename }));
+
+      const uploadedFilename = await uploadImage(workspaceId, "baby", file);
+      updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename }));
       setBabyThumbError((prev) => ({ ...prev, [people[editingIdx].index]: false }));
-      setEditingSrc(`${assetUrl(workspaceId, "baby", filename)}&nonce=${Date.now()}`);
-      setStatus(opts?.removeBackground ? "Background removed" : "Baby photo updated");
+
+      // Once applied, the editor now reflects the saved image.
+      const nextBase = `${assetUrl(workspaceId, "baby", uploadedFilename)}&nonce=${Date.now()}`;
+      setEditingFilename(uploadedFilename);
+      setEditingBaseSrc(nextBase);
+      setEditingSrc(nextBase);
+      setDirtyEdits(false);
+      setStatus("Baby photo updated");
     } catch (err) {
       console.error(err);
       setStatus("Could not apply changes");
     } finally {
       setEditingBusy(false);
+      setEditingAction(null);
+    }
+  };
+
+  const runBackgroundRemovalPreview = async () => {
+    if (!workspaceId || !editingFilename) return;
+    if (editingBusy) return;
+    setEditingBusy(true);
+    setEditingAction("remove_background");
+    setRemoveBgProgress(1);
+    setRemoveBgEtaSeconds(null);
+    setRemoveBgMessage("Starting…");
+    try {
+      const { job_id } = await startRemoveBackgroundPreviewJob({
+        workspaceId,
+        kind: "baby",
+        filename: editingFilename,
+        backgroundMode: removeBgMode,
+      });
+
+      const start = Date.now();
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 250));
+        // eslint-disable-next-line no-await-in-loop
+        const s = await removeBackgroundPreviewStatus(job_id);
+        setRemoveBgProgress(Math.max(1, Math.min(100, Math.round(s.progress ?? 0))));
+        setRemoveBgEtaSeconds(typeof s.eta_seconds === "number" ? s.eta_seconds : null);
+        setRemoveBgMessage((s.message || "Working…").toString());
+
+        if (s.status === "done") {
+          // eslint-disable-next-line no-await-in-loop
+          const blob = await fetchRemoveBackgroundPreviewResult(job_id);
+          if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+          const url = URL.createObjectURL(blob);
+          previewUrlRef.current = url;
+          setEditingSrc(url);
+          setDirtyEdits(true);
+          setRemoveBgMessage("Preview ready");
+          setRemoveBgProgress(100);
+          break;
+        }
+        if (s.status === "error") {
+          setStatus(s.error ? `Background removal failed: ${s.error}` : "Background removal failed");
+          break;
+        }
+        if (Date.now() - start > 120_000) {
+          setStatus("Background removal is taking unusually long. Please try again.");
+          break;
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("Background removal failed");
+    } finally {
+      setEditingBusy(false);
+      setEditingAction(null);
     }
   };
 
@@ -3730,16 +3901,27 @@ function BabyPhotosStep({
             </div>
 
             <div className="modal-body">
-              <div className="baby-editor-crop" style={{ aspectRatio: `${outSize.width} / ${outSize.height}` }}>
+              <div
+                className="baby-editor-crop"
+                ref={editorCropRef}
+                style={{ aspectRatio: `${outSize.width} / ${outSize.height}` }}
+              >
                 <Cropper
                   image={editingSrc}
                   crop={crop}
                   zoom={zoom}
                   aspect={cropAspect}
+                  cropSize={editorCropSize ?? undefined}
                   onCropChange={setCrop}
-                  onZoomChange={setZoom}
+                  onZoomChange={(z) => {
+                    setZoom(Math.max(0.5, Math.min(3, z)));
+                    setDirtyEdits(true);
+                  }}
                   onCropComplete={(_, areaPixels) => setCroppedAreaPixels(areaPixels)}
-                  objectFit="horizontal-cover"
+                  objectFit="contain"
+                  minZoom={0.5}
+                  maxZoom={3}
+                  restrictPosition={false}
                 />
                 {maskUrl && <img src={maskUrl} className="baby-editor-mask" alt="" aria-hidden="true" />}
               </div>
@@ -3749,22 +3931,133 @@ function BabyPhotosStep({
                   <span>Zoom</span>
                   <input
                     type="range"
-                    min={1}
+                    min={0.5}
                     max={3}
-                    step={0.01}
+                    step={0.001}
                     value={zoom}
-                    onChange={(e) => setZoom(Number(e.target.value))}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setZoom(Math.max(0.5, Math.min(3, v)));
+                      setDirtyEdits(true);
+                    }}
                     disabled={editingBusy}
                   />
                 </label>
                 <div className="actions" style={{ justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCrop({ x: 0, y: 0 });
+                      setDirtyEdits(true);
+                    }}
+                    disabled={editingBusy}
+                  >
+                    Center
+                  </button>
                   <button type="button" onClick={() => applyEdits()} disabled={editingBusy}>
                     Apply changes
                   </button>
-                  <button type="button" onClick={() => applyEdits({ removeBackground: true })} disabled={editingBusy}>
-                    Remove background
-                  </button>
+                  <div className="popover-anchor">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingBusy) return;
+                        setRemoveBgMode(babyBackgroundMode);
+                        setRemoveBgProgress(0);
+                        setRemoveBgPopoverOpen((v) => !v);
+                      }}
+                      disabled={editingBusy}
+                    >
+                      Remove background
+                    </button>
+
+                    {removeBgPopoverOpen && (
+                      <div className="popover" role="dialog" aria-label="Background removal options">
+                        <div className="stack" style={{ gap: 10 }}>
+                          <div className="stack" style={{ gap: 2 }}>
+                            <strong>Background removal</strong>
+                            <div className="muted small">Choose a mode, then remove.</div>
+                          </div>
+
+                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                            <input
+                              type="radio"
+                              name="baby-bg-mode"
+                              checked={removeBgMode === "simple"}
+                              onChange={() => setRemoveBgMode("simple")}
+                              disabled={editingBusy}
+                            />
+                            <span>Simple</span>
+                            <span className="muted small">(solid backgrounds)</span>
+                          </label>
+
+                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                            <input
+                              type="radio"
+                              name="baby-bg-mode"
+                              checked={removeBgMode === "complex"}
+                              onChange={() => setRemoveBgMode("complex")}
+                              disabled={editingBusy}
+                            />
+                            <span>Complex</span>
+                            <span className="muted small">(real-life backgrounds)</span>
+                          </label>
+
+                          <div className="actions" style={{ justifyContent: "flex-end" }}>
+                            <button
+                              type="button"
+                              className="primary"
+                              onClick={() => void runBackgroundRemovalPreview()}
+                              disabled={editingBusy}
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          {editingAction === "remove_background" && (
+                            <div className="stack" style={{ gap: 6 }}>
+                              <div className="inline" style={{ justifyContent: "space-between", gap: 10 }}>
+                                <span className="muted small">{removeBgMessage || "Working…"}</span>
+                                <span className="muted small">
+                                  {removeBgEtaSeconds != null ? `ETA ${formatEtaSeconds(removeBgEtaSeconds)}` : ""}
+                                </span>
+                              </div>
+                              <div className="progress determinate" aria-label="Background removal progress">
+                                <div className="progress-bar determinate" style={{ width: `${removeBgProgress}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDiscardWarning && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Discard baby photo edits">
+          <div className="modal" style={{ width: "min(560px, 100%)" }}>
+            <div className="modal-header">
+              <div className="stack" style={{ gap: 2 }}>
+                <strong>Discard changes?</strong>
+                <div className="muted small">Closing now will discard all un-applied changes (including background removal).</div>
+              </div>
+              <button type="button" onClick={() => setShowDiscardWarning(false)} disabled={editingBusy}>
+                Back
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="actions" style={{ justifyContent: "flex-end" }}>
+                <button type="button" onClick={() => setShowDiscardWarning(false)} disabled={editingBusy}>
+                  Keep editing
+                </button>
+                <button type="button" className="danger" onClick={discardAndCloseEditor} disabled={editingBusy}>
+                  Discard and close
+                </button>
               </div>
             </div>
           </div>

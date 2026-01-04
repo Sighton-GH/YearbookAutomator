@@ -873,6 +873,33 @@ button:disabled {
   animation: slide 1.2s linear infinite;
 }
 
+.progress.determinate {
+  margin-top: 0;
+}
+
+.progress-bar.determinate {
+  animation: none;
+  transform: none;
+}
+
+.popover-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 280px;
+  max-width: calc(100vw - 48px);
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  z-index: 60;
+}
+
 @keyframes slide {
   0% { transform: translateX(-100%); }
   50% { transform: translateX(20%); }
@@ -1015,7 +1042,7 @@ button:disabled {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: contain;
   opacity: 0.35;
   mix-blend-mode: multiply;
   pointer-events: none;

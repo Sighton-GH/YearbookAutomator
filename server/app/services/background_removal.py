@@ -120,6 +120,54 @@ def _grabcut_foreground_mask(bgr: np.ndarray) -> np.ndarray:
     return fg
 
 
+def _grabcut_foreground_mask_seeded(bgr: np.ndarray) -> np.ndarray:
+    """GrabCut initialized from a heuristic foreground mask.
+
+    This tends to be more stable than rectangle-only initialization, especially
+    for off-center subjects and busy backgrounds.
+    """
+
+    h, w = bgr.shape[:2]
+    if h < 8 or w < 8:
+        return np.ones((h, w), dtype=np.uint8)
+
+    # Start from the simple heuristic as a "probable foreground" seed.
+    seed_fg = _simple_background_mask(bgr).astype(np.uint8)  # 1=fg,0=bg
+
+    # Build a GrabCut mask.
+    gc = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
+
+    # Mark borders as sure background.
+    border = max(2, int(round(min(h, w) * 0.03)))
+    gc[:border, :] = cv2.GC_BGD
+    gc[-border:, :] = cv2.GC_BGD
+    gc[:, :border] = cv2.GC_BGD
+    gc[:, -border:] = cv2.GC_BGD
+
+    # Probable foreground where seed says foreground.
+    gc[seed_fg == 1] = cv2.GC_PR_FGD
+
+    # Sure foreground = eroded seed (avoid including background near edges).
+    k = max(3, int(round(min(h, w) * 0.01)) | 1)  # odd kernel size
+    sure_fg = cv2.erode(seed_fg, np.ones((k, k), np.uint8), iterations=1)
+    gc[sure_fg == 1] = cv2.GC_FGD
+
+    # Sure background = dilated background.
+    seed_bg = (1 - seed_fg).astype(np.uint8)
+    sure_bg = cv2.dilate(seed_bg, np.ones((k, k), np.uint8), iterations=1)
+    gc[sure_bg == 1] = cv2.GC_BGD
+
+    bgd_model = np.zeros((1, 65), np.float64)
+    fgd_model = np.zeros((1, 65), np.float64)
+    cv2.grabCut(bgr, gc, None, bgd_model, fgd_model, 6, cv2.GC_INIT_WITH_MASK)
+
+    fg = np.where((gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
+    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = _keep_largest_component(fg)
+    return fg
+
+
 def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> bytes:
     """Return PNG bytes with alpha, keeping only the subject.
 
@@ -139,7 +187,8 @@ def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> by
     if mode == "complex":
         # GrabCut can be slow on large inputs; downscale for segmentation, then upscale the mask.
         bgr_small, scale = _resize_to_max(bgr, max_dim=900)
-        fg_small = _grabcut_foreground_mask(bgr_small)
+        # Seeded initialization improves quality vs rectangle-only.
+        fg_small = _grabcut_foreground_mask_seeded(bgr_small)
         if scale != 1.0:
             h, w = bgr.shape[:2]
             fg01 = cv2.resize(fg_small, (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)

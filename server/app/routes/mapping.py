@@ -22,7 +22,18 @@ from app.services.background_removal import (
     background_removed_filename,
     remove_background as remove_background_bytes,
 )
+from app.services.background_jobs import (
+    start_job as start_bg_job,
+    update_job as update_bg_job,
+    get_job as get_bg_job,
+    pop_result_bytes as pop_bg_result_bytes,
+    to_status_payload,
+)
 from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from uuid import uuid4
+from threading import Thread
+import time
 
 router = APIRouter()
 
@@ -314,6 +325,113 @@ async def upload_image(
 
     save_upload(workspace_id, f"{subdir}/{filename}", file.file)
     return {"filename": filename}
+
+
+@router.post("/remove-background")
+async def remove_background_job(
+    workspace_id: str = Form(...),
+    kind: Literal["baby", "mugshot"] = Form(...),
+    filename: str = Form(...),
+    background_mode: BackgroundMode = Form("simple"),
+) -> dict[str, str]:
+    """Start a background-removal job for an already-uploaded image.
+
+    This exists so the UI can show progress/ETA while the server runs segmentation.
+    """
+
+    # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
+    subdir = "mugshots" if kind == "mugshot" else kind
+    safe_name = Path(filename).name
+    src_path = workspace_dir(workspace_id) / subdir / safe_name
+    if not src_path.exists():
+        raise HTTPException(status_code=404, detail="Source image not found")
+
+    out_name = background_removed_filename(safe_name)
+    out_path = workspace_dir(workspace_id) / subdir / out_name
+
+    job_id = uuid4().hex
+    start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+
+    def run():
+        try:
+            update_bg_job(job_id, progress=5, message="Reading image…")
+            raw = src_path.read_bytes()
+
+            # Rough but real stage progress. (GrabCut is the long pole.)
+            update_bg_job(job_id, progress=15, message="Removing background…")
+            out_png = remove_background_bytes(raw, mode=background_mode)
+
+            update_bg_job(job_id, progress=90, message="Saving…")
+            save_upload(workspace_id, f"{subdir}/{out_name}", io.BytesIO(out_png))
+            update_bg_job(job_id, progress=100, status="done", message="Done")
+        except Exception as exc:
+            update_bg_job(job_id, error=str(exc), message="Failed")
+
+    Thread(target=run, daemon=True).start()
+    return {"job_id": job_id, "output_filename": out_name}
+
+
+@router.get("/remove-background-status")
+async def remove_background_status(job_id: str):
+    job = get_bg_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return to_status_payload(job)
+
+
+@router.post("/remove-background-preview")
+async def remove_background_preview_job(
+    workspace_id: str = Form(...),
+    kind: Literal["baby", "mugshot"] = Form(...),
+    filename: str = Form(...),
+    background_mode: BackgroundMode = Form("simple"),
+) -> dict[str, str]:
+    """Start a non-destructive background-removal job.
+
+    Produces a PNG (with alpha) in-memory for preview in the editor.
+    Nothing is written to disk unless the user later clicks Apply in the UI.
+    """
+
+    subdir = "mugshots" if kind == "mugshot" else kind
+    safe_name = Path(filename).name
+    src_path = workspace_dir(workspace_id) / subdir / safe_name
+    if not src_path.exists():
+        raise HTTPException(status_code=404, detail="Source image not found")
+
+    job_id = uuid4().hex
+    # output_filename is informational here.
+    out_name = background_removed_filename(safe_name)
+    start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+
+    def run():
+        try:
+            update_bg_job(job_id, progress=5, message="Reading image…")
+            raw = src_path.read_bytes()
+
+            update_bg_job(job_id, progress=15, message="Removing background…")
+            out_png = remove_background_bytes(raw, mode=background_mode)
+
+            update_bg_job(job_id, progress=95, message="Finalizing…")
+            update_bg_job(job_id, result_bytes=out_png)
+            update_bg_job(job_id, progress=100, status="done", message="Done")
+        except Exception as exc:
+            update_bg_job(job_id, error=str(exc), message="Failed")
+
+    Thread(target=run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@router.get("/remove-background-preview-result")
+async def remove_background_preview_result(job_id: str):
+    job = get_bg_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") != "done":
+        raise HTTPException(status_code=409, detail="Job not completed")
+    b = pop_bg_result_bytes(job_id)
+    if not b:
+        raise HTTPException(status_code=410, detail="Preview already fetched")
+    return Response(content=b, media_type="image/png")
 
 
 @router.post("/upload-baby-zip", response_model=SpreadsheetPreview)
