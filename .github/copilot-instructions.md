@@ -24,7 +24,10 @@
 
 **Template parsing:**
 - `POST /api/templates/parse` → `extract_slots()` in [server/app/services/template_parser.py](server/app/services/template_parser.py).
-- Detects mugshot/baby/name/quote regions by colour, groups into per-student slots, saves baby-mask cutouts.
+- Detects mugshot/baby/name/quote regions by colour via OpenCV HSV thresholding: green (`#00bf63`), blue (`#004aad`), orange (`#ff751f`), red (`#ff3131`).
+- Tolerance sweeps: starts at `tol=20`, retries with increasing tolerance (32, 40, 48) until boxes found or gives up.
+- Groups boxes by proximity (top-to-bottom, left-to-right) into per-student slots; requires ≥1 name + ≥1 quote box.
+- Saves baby-mask cutouts as PNGs; auto-scales coordinates if clean template dimensions differ from annotated.
 - Reuse: if `workspace_id` provided and files omitted, [server/app/routes/templates.py](server/app/routes/templates.py) loads saved templates.
 
 **Spreadsheet + mapping:**
@@ -76,8 +79,30 @@ pytest
 
 - Use pytest fixtures; workspace tests mock `BASE_DATA` via `monkeypatch`.
 - Background removal, generator, font tests in `server/tests/test_*.py`.
-- No integration tests; unit tests focus on: slot grouping, matching algorithms, font fallback chains.
+- No integration tests; unit tests focus on: slot grouping, matching algorithms, font fallback chains, color detection with synthetic images.
 - Color detection tests use OpenCV to create synthetic annotated templates with precise BGR values.
+- Test color tolerance sweeps: verify parser retries with increasing tolerance when boxes not found initially.
+- Font tests verify fallback chain: uploaded → system → Pillow defaults (DejaVuSans).
+
+## Key dependencies & algorithms
+
+**Backend:**
+- OpenCV (`opencv-python`): HSV color detection, contour finding for template parsing.
+- Pillow (`pillow`): image composition, font rendering, format conversion.
+- rembg (`rembg`): ML-based background removal (U2-Net model).
+- pandas/openpyxl: spreadsheet ingestion (.xlsx/.csv).
+- fonttools: font file validation and metadata extraction.
+
+**Frontend:**
+- react-easy-crop: mugshot cropping UI with zoom/pan.
+- axios: HTTP client with interceptors for license headers.
+- zustand: lightweight state management (not heavily used; mostly component state).
+- clsx: conditional class name utility.
+
+**Color detection specifics:**
+- HSV ranges: Hue ±`tol`, Saturation/Value ±`tol*2`.
+- Min area threshold: 400px² (prevents false positives from noise).
+- Deduplication: merges overlapping boxes within 10px tolerance.
 
 ## Error handling patterns
 
@@ -85,3 +110,43 @@ pytest
 - License errors return 401 with structured JSON: `{"detail": "...", "reason": "...", "hint": "..."}`.
 - Image/file validation: raise `HTTPException(400)` with actionable messages for users.
 - Background removal wraps exceptions from rembg/PIL with user-friendly error details.
+
+## Environment variables reference
+
+**Licensing:**
+- `YMGA_LICENSE_SECRET`: Secret for key generation (persisted to `secret.txt` if unset).
+- `YMGA_LICENSE_STORE_DIR`: Override license storage location (default: `server/app/data/_licenses`).
+- `YMGA_LICENSE_ADMIN_PASSWORD`: Password for `/admin/licenses` panel (open access if unset).
+- `YMGA_PERSONAL_MONTHLY_LIMIT`: Monthly usage limit for personal keys (default: `5`).
+
+**Workspace cleanup:**
+- `YMGA_CLEAR_WORKSPACES_ON_STARTUP`: Wipe workspaces on server start (default: `true`).
+- `YMGA_WORKSPACE_GRACE_SECONDS`: Buffer before cleanup eligibility (default: `20`).
+- `YMGA_WORKSPACE_TTL_SECONDS`: Max idle time before deletion (default: `86400` = 24h).
+- `YMGA_WORKSPACE_CLEANUP_INTERVAL_SECONDS`: Janitor check frequency (default: `60`).
+- `YMGA_WORKSPACE_ACTIVE_JOB_WINDOW_SECONDS`: Active job grace period (default: `300` = 5m).
+
+## Config file import/export
+
+- Users can export entire workspace state as JSON via [web/src/configFile.ts](web/src/configFile.ts) → `ConfigFileV1`.
+- Import flow: upload config JSON → detect missing assets (templates/images) → upload them → auto-restore session.
+- Enables: session resumption, sharing setups, debugging by exporting exact state.
+- Backend doesn't know about configs; frontend orchestrates via normal API calls.
+
+## Frontend state management
+
+- React component state drives UI; minimal use of zustand.
+- Workspace session state (`workspace_id`, uploaded files, parsed slots) stored in-memory + via API calls.
+- License key + device ID persisted to `localStorage` ([web/src/licensing.ts](web/src/licensing.ts)).
+- No Redux/complex store; stepper flow is mostly unidirectional with API-backed state.
+
+## Additional services
+
+**Face detection:**
+- `POST /api/mapping/detect-face-center`: finds face center for crop previews (optional feature).
+- Uses OpenCV Haar cascades; returns `{found, center_x, center_y}`.
+
+**Font handling:**
+- Upload custom fonts or rely on system fonts + Pillow defaults (DejaVuSans).
+- Fallback chain: uploaded → system → DejaVuSans (see [server/app/services/fonts.py](server/app/services/fonts.py)).
+- Font metadata validated via `fonttools`.

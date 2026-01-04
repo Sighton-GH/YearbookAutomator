@@ -1,0 +1,319 @@
+import { useEffect } from "react";
+import { UploadDropLabel } from "../components/UploadDropLabel";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { parseTemplate, type RawParseDebug, type TemplateSlots } from "../api";
+
+export function TemplateParsing({
+  workspaceId,
+  onParsed,
+  skipQuotes,
+  onSkipQuotes,
+  skipBabyPhotos,
+  onSkipBabyPhotos,
+  setStatus,
+  setLoading,
+  loading,
+  onPreviewChange,
+  annotated,
+  clean,
+  annotatedPreview,
+  cleanPreview,
+  onAnnotatedChange,
+  onCleanChange,
+  peoplePerSpread,
+  setPeoplePerSpread,
+  mugshotColor,
+  setMugshotColor,
+  babyColor,
+  setBabyColor,
+  nameColor,
+  setNameColor,
+  quoteColor,
+  setQuoteColor,
+  minArea,
+  setMinArea,
+  onRawDebug,
+}: {
+  workspaceId: string | null;
+  onParsed: (resp: { template_id: string; width: number; height: number; slots: TemplateSlots[] }) => void;
+  skipQuotes: boolean;
+  onSkipQuotes: (v: boolean) => void;
+  skipBabyPhotos: boolean;
+  onSkipBabyPhotos: (v: boolean) => void;
+  setStatus: (v: string) => void;
+  setLoading: (v: boolean) => void;
+  loading: boolean;
+  onPreviewChange?: (urls: { annotated?: string | null; clean?: string | null }) => void;
+  annotated: File | null;
+  clean: File | null;
+  annotatedPreview: string | null;
+  cleanPreview: string | null;
+  onAnnotatedChange: (file: File | null) => void;
+  onCleanChange: (file: File | null) => void;
+  peoplePerSpread: number;
+  setPeoplePerSpread: (n: number) => void;
+  mugshotColor: string;
+  setMugshotColor: (v: string) => void;
+  babyColor: string;
+  setBabyColor: (v: string) => void;
+  nameColor: string;
+  setNameColor: (v: string) => void;
+  quoteColor: string;
+  setQuoteColor: (v: string) => void;
+  minArea: number;
+  setMinArea: (n: number) => void;
+  onRawDebug?: (debug: RawParseDebug | null) => void;
+}) {
+  const normalizeHexColor = (raw: string): string | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+    const hex = withHash.slice(1);
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      const expanded = hex
+        .split("")
+        .map((ch) => ch + ch)
+        .join("");
+      return `#${expanded.toLowerCase()}`;
+    }
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      return `#${hex.toLowerCase()}`;
+    }
+    return null;
+  };
+
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) {
+      return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    }
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
+  };
+
+  useEffect(() => {
+    if (onPreviewChange) {
+      onPreviewChange({ annotated: annotatedPreview, clean: cleanPreview });
+    }
+  }, [cleanPreview, annotatedPreview, onPreviewChange]);
+
+  const handleParse = async () => {
+    if ((!annotated || !clean) && !workspaceId) {
+      setStatus("Select both annotated and clean templates");
+      return;
+    }
+    setLoading(true);
+    setStatus("Parsing template...");
+    try {
+      const resp = await parseTemplate(annotated, clean, {
+        workspaceId: workspaceId || undefined,
+        mugshotColor: mugshotColor || undefined,
+        babyColor: babyColor || undefined,
+        nameColor: nameColor || undefined,
+        quoteColor: quoteColor || undefined,
+        minArea,
+      });
+      onParsed(resp);
+      if (onRawDebug) onRawDebug(resp.raw_debug ?? null);
+      setStatus("Template parsed successfully");
+    } catch (err: any) {
+      console.error(err);
+      const detail = err?.response?.data?.detail || err?.message || "Template parsing failed";
+      setStatus(`Template parsing failed: ${detail}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="stack">
+      <p className="muted">
+        Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.
+      </p>
+      <UploadDropLabel accept="image/png" disabled={loading} onFile={(file) => onAnnotatedChange(file)}>
+        <span>Annotated template (.png)</span>
+        <input
+          type="file"
+          accept="image/png"
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            onAnnotatedChange(file);
+          }}
+        />
+        {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
+      </UploadDropLabel>
+      <UploadDropLabel accept="image/png" disabled={loading} onFile={(file) => onCleanChange(file)}>
+        <span>Clean template (.png)</span>
+        <input
+          type="file"
+          accept="image/png"
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            onCleanChange(file);
+          }}
+        />
+        {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
+      </UploadDropLabel>
+      <label className="field">
+        <span>People per spread (max slots to keep)</span>
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={peoplePerSpread}
+          onChange={(e) => setPeoplePerSpread(Math.max(1, Number(e.target.value) || 1))}
+        />
+        <span className="muted small">Slots beyond this count will be dropped during grouping.</span>
+      </label>
+
+      <details>
+        <summary>
+          <strong>Custom options</strong>
+        </summary>
+        <div className="stack" style={{ gap: 12, marginTop: 8 }}>
+          <p className="muted small">
+            Optional tweaks for templates that don’t parse cleanly with defaults. Use these to hide steps you don’t need,
+            adjust detection sensitivity, or override the slot colours. Leave colour overrides blank to use the automatic
+            defaults.
+          </p>
+          <ToggleSwitch
+            checked={skipQuotes}
+            onChange={onSkipQuotes}
+            label="Skip quotes"
+            description="Hides the Quotes step. Quotes are ignored during rendering (no defaults)."
+          />
+          <ToggleSwitch
+            checked={skipBabyPhotos}
+            onChange={onSkipBabyPhotos}
+            label="Skip baby photos"
+            description="Hides the Baby Photos step. Baby photos are ignored during rendering (no defaults)."
+          />
+
+          <div className="color-overrides">
+            <div className="field color-override">
+              <label htmlFor="mugshotColorText">Portrait colour override</label>
+              <div className="inline">
+                <input
+                  type="color"
+                  className="color-swatch"
+                  aria-label="Portrait colour override"
+                  value={mugshotColor || "#22c55e"}
+                  onChange={(e) => setMugshotColor(normalizeHexColor(e.target.value) ?? e.target.value)}
+                />
+                <input
+                  id="mugshotColorText"
+                  type="text"
+                  placeholder="#22c55e"
+                  value={mugshotColor}
+                  onChange={(e) => setMugshotColor(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeHexColor(e.target.value);
+                    if (normalized) setMugshotColor(normalized);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="field color-override">
+              <label htmlFor="babyColorText">Baby colour override</label>
+              <div className="inline">
+                <input
+                  type="color"
+                  className="color-swatch"
+                  aria-label="Baby colour override"
+                  value={babyColor || "#3b82f6"}
+                  onChange={(e) => setBabyColor(normalizeHexColor(e.target.value) ?? e.target.value)}
+                />
+                <input
+                  id="babyColorText"
+                  type="text"
+                  placeholder="#3b82f6"
+                  value={babyColor}
+                  onChange={(e) => setBabyColor(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeHexColor(e.target.value);
+                    if (normalized) setBabyColor(normalized);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="field color-override">
+              <label htmlFor="nameColorText">Name colour override</label>
+              <div className="inline">
+                <input
+                  type="color"
+                  className="color-swatch"
+                  aria-label="Name colour override"
+                  value={nameColor || "#ff751f"}
+                  onChange={(e) => setNameColor(normalizeHexColor(e.target.value) ?? e.target.value)}
+                />
+                <input
+                  id="nameColorText"
+                  type="text"
+                  placeholder="#ff751f"
+                  value={nameColor}
+                  onChange={(e) => setNameColor(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeHexColor(e.target.value);
+                    if (normalized) setNameColor(normalized);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="field color-override">
+              <label htmlFor="quoteColorText">Quote colour override</label>
+              <div className="inline">
+                <input
+                  type="color"
+                  className="color-swatch"
+                  aria-label="Quote colour override"
+                  value={quoteColor || "#ff3131"}
+                  onChange={(e) => setQuoteColor(normalizeHexColor(e.target.value) ?? e.target.value)}
+                />
+                <input
+                  id="quoteColorText"
+                  type="text"
+                  placeholder="#ff3131"
+                  value={quoteColor}
+                  onChange={(e) => setQuoteColor(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeHexColor(e.target.value);
+                    if (normalized) setQuoteColor(normalized);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="inline">
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setMugshotColor("");
+                setBabyColor("");
+                setNameColor("");
+                setQuoteColor("");
+              }}
+            >
+              Reset colors to default
+            </button>
+          </div>
+          <label className="field">
+            <span title="Ignores boxes smaller than this; try 800-1500 for high-res templates">Minimum detected area (pixels²)</span>
+            <input
+              type="number"
+              min={400}
+              value={minArea}
+              onChange={(e) => setMinArea(Math.max(400, Number(e.target.value) || 400))}
+            />
+            <span className="muted small">Higher numbers ignore tiny false positives; defaults to 800.</span>
+          </label>
+        </div>
+      </details>
+      <button className="primary" onClick={handleParse}>
+        Parse template
+      </button>
+    </div>
+  );
+}

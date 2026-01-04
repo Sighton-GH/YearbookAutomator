@@ -35,5 +35,8 @@ server/app/data/**
 # But don't commit secrets even if they live in _licenses
 server/app/data/_licenses/secret.txt
 
+# Runtime usage log (do not commit)
+server/app/data/_licenses/usage.json
+
 # --- Optional: logs ---
 *.log
