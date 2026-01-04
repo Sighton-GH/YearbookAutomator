@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -8,7 +9,45 @@ import cv2
 import numpy as np
 from PIL import Image
 
-BackgroundMode = Literal["simple", "complex"]
+BackgroundMode = Literal["simple", "complex", "ultra_complex"]
+
+
+_rembg_lock = threading.Lock()
+_rembg_session = None
+
+
+def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
+    """High-quality ML background removal via rembg.
+
+    This is intentionally heavier/slower than the OpenCV options.
+    """
+
+    try:
+        from rembg import new_session, remove  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ValueError(
+            "Ultra complex background removal requires 'rembg'. "
+            "Install server requirements to enable this mode."
+        ) from exc
+
+    global _rembg_session
+    with _rembg_lock:
+        if _rembg_session is None:
+            # Good general-purpose model for photos.
+            _rembg_session = new_session("isnet-general-use")
+
+    # alpha_matting improves edges (hair, soft boundaries) but is slower.
+    out = remove(
+        image_bytes,
+        session=_rembg_session,
+        alpha_matting=True,
+        alpha_matting_foreground_threshold=240,
+        alpha_matting_background_threshold=10,
+        alpha_matting_erode_size=10,
+    )
+    if not isinstance(out, (bytes, bytearray)):
+        raise ValueError("Ultra complex background removal failed")
+    return bytes(out)
 
 
 def _decode_bgra(image_bytes: bytes) -> np.ndarray:
@@ -173,6 +212,7 @@ def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> by
 
     - simple: fast heuristic for solid/simple backgrounds.
     - complex: GrabCut-based segmentation for complex backgrounds.
+    - ultra_complex: ML segmentation (highest quality; heavy).
     """
 
     bgra = _decode_bgra(image_bytes)
@@ -183,6 +223,10 @@ def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> by
         return _encode_png_rgba(rgba)
 
     bgr = bgra[:, :, :3]
+
+    if mode == "ultra_complex":
+        # rembg handles decoding/encoding; return PNG bytes with alpha.
+        return _remove_background_ultra_complex(image_bytes)
 
     if mode == "complex":
         # GrabCut can be slow on large inputs; downscale for segmentation, then upscale the mask.

@@ -3120,7 +3120,7 @@ function BabyPhotosStep({
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [partialNameMatch, setPartialNameMatch] = useState(false);
   const [removeBabyBackground, setRemoveBabyBackground] = useState(false);
-  const [babyBackgroundMode, setBabyBackgroundMode] = useState<"simple" | "complex">("simple");
+  const [babyBackgroundMode, setBabyBackgroundMode] = useState<"simple" | "complex" | "ultra_complex">("simple");
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
   const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
   const [babyThumbError, setBabyThumbError] = useState<Record<number, boolean>>({});
@@ -3132,7 +3132,7 @@ function BabyPhotosStep({
   const [editingBusy, setEditingBusy] = useState(false);
   const [editingAction, setEditingAction] = useState<"apply" | "remove_background" | null>(null);
   const [removeBgPopoverOpen, setRemoveBgPopoverOpen] = useState(false);
-  const [removeBgMode, setRemoveBgMode] = useState<"simple" | "complex">("simple");
+  const [removeBgMode, setRemoveBgMode] = useState<"simple" | "complex" | "ultra_complex">("simple");
   const [removeBgProgress, setRemoveBgProgress] = useState(0);
   const [removeBgEtaSeconds, setRemoveBgEtaSeconds] = useState<number | null>(null);
   const [removeBgMessage, setRemoveBgMessage] = useState<string>("");
@@ -3690,6 +3690,15 @@ function BabyPhotosStep({
                   label="Complex backgrounds"
                   description="Best for real-life backgrounds (more intensive)."
                 />
+
+                <ToggleSwitch
+                  checked={babyBackgroundMode === "ultra_complex"}
+                  onChange={(checked) => {
+                    if (checked) setBabyBackgroundMode("ultra_complex");
+                  }}
+                  label="Ultra complex backgrounds"
+                  description="Highest quality (ML-based). First run may be slower."
+                />
               </div>
             )}
 
@@ -4001,6 +4010,18 @@ function BabyPhotosStep({
                             />
                             <span>Complex</span>
                             <span className="muted small">(real-life backgrounds)</span>
+                          </label>
+
+                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                            <input
+                              type="radio"
+                              name="baby-bg-mode"
+                              checked={removeBgMode === "ultra_complex"}
+                              onChange={() => setRemoveBgMode("ultra_complex")}
+                              disabled={editingBusy}
+                            />
+                            <span>Ultra complex</span>
+                            <span className="muted small">(highest quality; heavier)</span>
                           </label>
 
                           <div className="actions" style={{ justifyContent: "flex-end" }}>

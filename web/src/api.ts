@@ -44,6 +44,8 @@ export type PersonRecord = {
   baby_photo_filename?: string | null;
 };
 
+export type BackgroundMode = "simple" | "complex" | "ultra_complex";
+
 export type SpreadsheetPreview = {
   workspace_id: string;
   people: PersonRecord[];
@@ -101,7 +103,7 @@ export async function uploadImage(
   file: File,
   opts?: {
     removeBackground?: boolean;
-    backgroundMode?: "simple" | "complex";
+    backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
   }
@@ -135,7 +137,7 @@ export async function uploadBabyZip(
     advancedNameMatch?: boolean;
     partialNameMatch?: boolean;
     removeBackground?: boolean;
-    backgroundMode?: "simple" | "complex";
+    backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
   }
 ) {
@@ -256,7 +258,7 @@ export async function startRemoveBackgroundJob(params: {
   workspaceId: string;
   kind: "baby" | "mugshot";
   filename: string;
-  backgroundMode: "simple" | "complex";
+  backgroundMode: BackgroundMode;
 }) {
   const form = new FormData();
   form.append("workspace_id", params.workspaceId);
@@ -291,7 +293,7 @@ export async function startRemoveBackgroundPreviewJob(params: {
   workspaceId: string;
   kind: "baby" | "mugshot";
   filename: string;
-  backgroundMode: "simple" | "complex";
+  backgroundMode: BackgroundMode;
 }) {
   const form = new FormData();
   form.append("workspace_id", params.workspaceId);
