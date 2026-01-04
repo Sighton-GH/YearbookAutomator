@@ -12,6 +12,10 @@ from PIL import Image
 BackgroundMode = Literal["simple", "complex", "ultra_complex"]
 
 
+class BackgroundAlreadyRemovedError(RuntimeError):
+    """Raised when background removal is skipped due to existing alpha."""
+
+
 _rembg_lock = threading.Lock()
 _rembg_session = None
 
@@ -207,7 +211,13 @@ def _grabcut_foreground_mask_seeded(bgr: np.ndarray) -> np.ndarray:
     return fg
 
 
-def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> bytes:
+def remove_background(
+    image_bytes: bytes,
+    mode: BackgroundMode = "simple",
+    *,
+    force: bool = False,
+    report_already_removed: bool = False,
+) -> bytes:
     """Return PNG bytes with alpha, keeping only the subject.
 
     - simple: fast heuristic for solid/simple backgrounds.
@@ -217,10 +227,20 @@ def remove_background(image_bytes: bytes, mode: BackgroundMode = "simple") -> by
 
     bgra = _decode_bgra(image_bytes)
 
-    # If the image already has transparency, keep it (still normalize output to PNG).
-    if bgra.shape[2] == 4 and np.any(bgra[:, :, 3] < 255):
-        rgba = cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)
-        return _encode_png_rgba(rgba)
+    # If the image already has transparency, it may already be background-removed.
+    # However, some PNGs carry tiny accidental alpha (e.g. a few pixels) and users
+    # still expect background removal to run. Only short-circuit when transparency
+    # is substantial (unless forced).
+    if bgra.shape[2] == 4 and not force:
+        alpha = bgra[:, :, 3]
+        if np.any(alpha < 255):
+            # Treat pixels with alpha < 250 as "meaningfully transparent" (allows soft edges).
+            transparent_fraction = float(np.mean(alpha < 250))
+            if transparent_fraction >= 0.01:
+                if report_already_removed:
+                    raise BackgroundAlreadyRemovedError("background already removed")
+                rgba = cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)
+                return _encode_png_rgba(rgba)
 
     bgr = bgra[:, :, :3]
 

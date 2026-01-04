@@ -26,6 +26,7 @@ def start_job(job_id: str, workspace_id: str, *, kind: str, source_filename: str
             "started_at": now,
             "updated_at": now,
             "completed_at": None,
+            "already_removed": False,
             # Optional in-memory preview payload (used for non-destructive previews).
             "result_bytes": None,
         }
@@ -39,6 +40,7 @@ def update_job(
     message: Optional[str] = None,
     error: Optional[str] = None,
     result_bytes: Optional[bytes] = None,
+    already_removed: Optional[bool] = None,
 ) -> None:
     now = time.time()
     with _lock:
@@ -59,6 +61,8 @@ def update_job(
             job["completed_at"] = now
         if result_bytes is not None:
             job["result_bytes"] = result_bytes
+        if already_removed is not None:
+            job["already_removed"] = bool(already_removed)
         job["updated_at"] = now
 
 
@@ -103,6 +107,7 @@ def to_status_payload(job: dict) -> dict:
         "status": job.get("status"),
         "message": job.get("message"),
         "error": job.get("error"),
+        "already_removed": bool(job.get("already_removed") or False),
         "eta_seconds": _eta_seconds_from_progress(started_at, progress),
         "updated_at": job.get("updated_at"),
     }

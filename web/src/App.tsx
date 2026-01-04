@@ -3278,11 +3278,13 @@ function BabyPhotosStep({
   const [babyFile, setBabyFile] = useState<File | null>(null);
   const [babyZip, setBabyZip] = useState<File | null>(null);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
-  const [partialNameMatch, setPartialNameMatch] = useState(false);
+  const [partialNameMatch, setPartialNameMatch] = useState(true);
   const [removeBabyBackground, setRemoveBabyBackground] = useState(false);
   const [babyBackgroundMode, setBabyBackgroundMode] = useState<"simple" | "complex" | "ultra_complex">("simple");
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
   const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
+  const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
+  const [originalDefaultBabyFilename, setOriginalDefaultBabyFilename] = useState<string | null>(null);
   const [babyThumbError, setBabyThumbError] = useState<Record<number, boolean>>({});
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editingSrc, setEditingSrc] = useState<string | null>(null);
@@ -3296,8 +3298,12 @@ function BabyPhotosStep({
   const [removeBgProgress, setRemoveBgProgress] = useState(0);
   const [removeBgEtaSeconds, setRemoveBgEtaSeconds] = useState<number | null>(null);
   const [removeBgMessage, setRemoveBgMessage] = useState<string>("");
+  const [removeBgAlreadyRemoved, setRemoveBgAlreadyRemoved] = useState(false);
   const [dirtyEdits, setDirtyEdits] = useState(false);
   const [showDiscardWarning, setShowDiscardWarning] = useState(false);
+  const [showApplyWarning, setShowApplyWarning] = useState(false);
+  const [showChangesSaved, setShowChangesSaved] = useState(false);
+  const changesSavedTimerRef = useRef<number | null>(null);
   const [babyBgPickActive, setBabyBgPickActive] = useState(false);
   const [babyBgPickUrl, setBabyBgPickUrl] = useState<string | null>(null);
   const [babyBgPickBusy, setBabyBgPickBusy] = useState(false);
@@ -3349,6 +3355,10 @@ function BabyPhotosStep({
   useEffect(() => {
     return () => {
       if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
+      if (changesSavedTimerRef.current !== null) {
+        window.clearTimeout(changesSavedTimerRef.current);
+        changesSavedTimerRef.current = null;
+      }
     };
   }, [babyBgPickUrl]);
 
@@ -3450,8 +3460,15 @@ function BabyPhotosStep({
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
+    setRemoveBgAlreadyRemoved(false);
     setDirtyEdits(false);
     setShowDiscardWarning(false);
+    setShowApplyWarning(false);
+    setShowChangesSaved(false);
+    if (changesSavedTimerRef.current !== null) {
+      window.clearTimeout(changesSavedTimerRef.current);
+      changesSavedTimerRef.current = null;
+    }
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
@@ -3477,8 +3494,15 @@ function BabyPhotosStep({
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
+    setRemoveBgAlreadyRemoved(false);
     setDirtyEdits(false);
     setShowDiscardWarning(false);
+    setShowApplyWarning(false);
+    setShowChangesSaved(false);
+    if (changesSavedTimerRef.current !== null) {
+      window.clearTimeout(changesSavedTimerRef.current);
+      changesSavedTimerRef.current = null;
+    }
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
@@ -3505,15 +3529,26 @@ function BabyPhotosStep({
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
+    setRemoveBgAlreadyRemoved(false);
     setDirtyEdits(false);
     setShowDiscardWarning(false);
+    setShowApplyWarning(false);
+    setShowChangesSaved(false);
+    if (changesSavedTimerRef.current !== null) {
+      window.clearTimeout(changesSavedTimerRef.current);
+      changesSavedTimerRef.current = null;
+    }
     setStatus("Edits discarded");
   };
 
   const applyEdits = async () => {
     if (!workspaceId) return;
-    if (editingIdx === null || !editingSrc || !croppedAreaPixels) {
-      setStatus("Adjust the crop first");
+    if (editingIdx === null || !editingSrc) {
+      setStatus("Could not apply changes");
+      return;
+    }
+    if (!croppedAreaPixels) {
+      setStatus("Initializing crop… please try again");
       return;
     }
     if (insecureHttp && !allowInsecureUploads) {
@@ -3524,7 +3559,7 @@ function BabyPhotosStep({
     setEditingAction("apply");
     try {
       const personIndex = people[editingIdx]?.index;
-      if (!personIndex) {
+      if (personIndex == null) {
         setStatus("Could not apply changes (missing person)");
         return;
       }
@@ -3573,6 +3608,14 @@ function BabyPhotosStep({
         previewUrlRef.current = null;
       }
       setDirtyEdits(false);
+      setShowChangesSaved(true);
+      if (changesSavedTimerRef.current !== null) {
+        window.clearTimeout(changesSavedTimerRef.current);
+      }
+      changesSavedTimerRef.current = window.setTimeout(() => {
+        setShowChangesSaved(false);
+        changesSavedTimerRef.current = null;
+      }, 1400);
       setStatus("Baby photo updated");
     } catch (err) {
       console.error(err);
@@ -3583,7 +3626,7 @@ function BabyPhotosStep({
     }
   };
 
-  const runBackgroundRemovalPreview = async () => {
+  const runBackgroundRemovalPreview = async ({ force }: { force: boolean }) => {
     if (!workspaceId || !editingFilename) return;
     if (editingBusy) return;
     setEditingBusy(true);
@@ -3591,12 +3634,14 @@ function BabyPhotosStep({
     setRemoveBgProgress(1);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("Starting…");
+    setRemoveBgAlreadyRemoved(false);
     try {
       const { job_id } = await startRemoveBackgroundPreviewJob({
         workspaceId,
         kind: "baby",
         filename: editingFilename,
         backgroundMode: removeBgMode,
+        force,
       });
 
       const start = Date.now();
@@ -3610,6 +3655,13 @@ function BabyPhotosStep({
         setRemoveBgMessage((s.message || "Working…").toString());
 
         if (s.status === "done") {
+          if (s.already_removed) {
+            setRemoveBgAlreadyRemoved(true);
+            setRemoveBgMessage("Background already removed");
+            setRemoveBgProgress(100);
+            setStatus("Background already removed. If this is not true, force background removal.");
+            break;
+          }
           // eslint-disable-next-line no-await-in-loop
           const blob = await fetchRemoveBackgroundPreviewResult(job_id);
           if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -3637,6 +3689,63 @@ function BabyPhotosStep({
       setEditingBusy(false);
       setEditingAction(null);
     }
+  };
+
+  const resetToOriginalPhotos = () => {
+    if (typeof window !== "undefined") {
+      const ok = window.confirm("Reset all baby photos back to the original result?");
+      if (!ok) return;
+    }
+    if (!originalBabyPeople) {
+      setStatus("No original baby photos to reset to");
+      return;
+    }
+    setPeople(originalBabyPeople.map((p) => ({ ...p })));
+    onDefaultBabyFilename(originalDefaultBabyFilename);
+    setBabyThumbError({});
+    setStatus("Reset to original baby photos");
+  };
+
+  const resetEditingToOriginal = () => {
+    if (!workspaceId) return;
+    if (editingIdx === null) return;
+    const person = people[editingIdx];
+    if (!person) return;
+    if (!originalBabyPeople) {
+      setStatus("No original baby photos to reset to");
+      return;
+    }
+    const original = originalBabyPeople.find((p) => p.index === person.index);
+    const originalFilename = original?.baby_photo_filename ?? null;
+    updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: originalFilename }));
+
+    const filenameForEditor = originalFilename ?? defaultBabyFilename;
+    if (!filenameForEditor) {
+      setStatus("No original baby photo available to reset to");
+      return;
+    }
+
+    const base = `${assetUrl(workspaceId, "baby", filenameForEditor)}&nonce=${Date.now()}`;
+    setEditingFilename(filenameForEditor);
+    setEditingBaseSrc(base);
+    setEditingSrc(base);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setRemoveBgPopoverOpen(false);
+    setRemoveBgProgress(0);
+    setRemoveBgEtaSeconds(null);
+    setRemoveBgMessage("");
+    setRemoveBgAlreadyRemoved(false);
+    setDirtyEdits(false);
+    setShowDiscardWarning(false);
+    setShowApplyWarning(false);
+    setShowChangesSaved(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setStatus("Reset to original");
   };
 
   const handlePerPersonBaby = async (idx: number, file: File | null) => {
@@ -3699,6 +3808,10 @@ function BabyPhotosStep({
     try {
       setStatus("Processing baby photos...");
 
+      let nextDefaultBabyFilename = defaultBabyFilename;
+      let nextPeople = people;
+      let nextWarnings = babyZipWarnings;
+
       if (babyFile) {
         const stageBase = 0;
         const stageWeight = babyZip ? 20 : 100;
@@ -3722,6 +3835,7 @@ function BabyPhotosStep({
           },
         });
         onDefaultBabyFilename(filename);
+        nextDefaultBabyFilename = filename;
         setProgress((prev) => Math.max(prev, babyZip ? 20 : 100));
       }
 
@@ -3783,8 +3897,10 @@ function BabyPhotosStep({
         });
 
         clearProcessingInterval();
-        setPeople(resp.people);
-        setBabyZipWarnings(resp.warnings ?? []);
+        nextPeople = resp.people;
+        nextWarnings = resp.warnings ?? [];
+        setPeople(nextPeople);
+        setBabyZipWarnings(nextWarnings);
 
         if (uploadFinishedMs !== null) {
           const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
@@ -3794,6 +3910,10 @@ function BabyPhotosStep({
           }
         }
       }
+
+      // Snapshot the "original" results so the user can reset later.
+      setOriginalBabyPeople(nextPeople.map((p) => ({ ...p })));
+      setOriginalDefaultBabyFilename(nextDefaultBabyFilename);
 
       setStatus("Processing complete");
       setProgress(100);
@@ -3927,126 +4047,8 @@ function BabyPhotosStep({
               description="When enabled, uploads are saved with a transparent background."
             />
 
-            <div className="stack" style={{ gap: 8 }}>
-              <ToggleSwitch
-                checked={Boolean(babyBackgroundColor.trim())}
-                onChange={(checked) => {
-                  if (checked) {
-                    const normalized = normalizeHexColor(babyBackgroundColor);
-                    const trimmed = babyBackgroundColor.trim();
-                    onBabyBackgroundColor(normalized ?? (trimmed ? trimmed : "#ffffff"));
-                  } else {
-                    onBabyBackgroundColor("");
-                  }
-                }}
-                label="Baby photo background colour"
-                description="If a baby image has transparent pixels, fill them with this colour during rendering."
-              />
-
-              {Boolean(babyBackgroundColor.trim()) && (
-                <div className="field color-override" style={{ maxWidth: 360 }}>
-                  <label htmlFor="babyBgColorText">Fill colour</label>
-                  <div className="inline">
-                    <input
-                      type="color"
-                      className="color-swatch"
-                      aria-label="Baby background fill colour"
-                      value={normalizeHexColor(babyBackgroundColor) ?? "#ffffff"}
-                      onChange={(e) => onBabyBackgroundColor(normalizeHexColor(e.target.value) ?? e.target.value)}
-                    />
-                    <input
-                      id="babyBgColorText"
-                      type="text"
-                      placeholder="#ffffff"
-                      value={babyBackgroundColor}
-                      ref={babyBgHexInputRef}
-                      onChange={(e) => onBabyBackgroundColor(e.target.value)}
-                      onBlur={(e) => {
-                        const normalized = normalizeHexColor(e.target.value);
-                        if (normalized) onBabyBackgroundColor(normalized);
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {Boolean(babyBackgroundColor.trim()) && (
-                <div className="inline" style={{ gap: 10, alignItems: "center" }}>
-                  <button
-                    type="button"
-                    disabled={!workspaceId || babyBgPickBusy}
-                    onClick={async () => {
-                      // Bring attention to the colour input.
-                      babyBgHexInputRef.current?.focus();
-
-                      if (!workspaceId) {
-                        setStatus("Parse the template first");
-                        return;
-                      }
-                      if (babyBgPickActive) {
-                        setBabyBgPickActive(false);
-                        if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
-                        setBabyBgPickUrl(null);
-                        return;
-                      }
-
-                      try {
-                        setBabyBgPickBusy(true);
-                        setStatus("Loading clean template…");
-                        const resp = await fetch(`${templateCleanUrl(workspaceId)}&t=${Date.now()}`);
-                        if (!resp.ok) throw new Error("Could not load clean template");
-                        const blob = await resp.blob();
-                        const url = URL.createObjectURL(blob);
-                        setBabyBgPickUrl(url);
-                        setBabyBgPickActive(true);
-                        setStatus("Click the template preview to pick a colour");
-                      } catch (err) {
-                        console.error(err);
-                        setStatus("Could not load clean template");
-                      } finally {
-                        setBabyBgPickBusy(false);
-                      }
-                    }}
-                  >
-                    {babyBgPickActive ? "Close picker" : "Pick from template"}
-                  </button>
-                  <span className="muted small">Samples a pixel from the clean template and sets the fill colour.</span>
-                </div>
-              )}
-
-              {babyBgPickActive && babyBgPickUrl && (
-                <div className="stack" style={{ gap: 8 }}>
-                  <img
-                    className="template-pick"
-                    src={babyBgPickUrl}
-                    alt="Clean template (click to pick colour)"
-                    onClick={(e) => {
-                      const img = e.currentTarget;
-                      const rect = img.getBoundingClientRect();
-                      const rx = (e.clientX - rect.left) / Math.max(1, rect.width);
-                      const ry = (e.clientY - rect.top) / Math.max(1, rect.height);
-                      const sx = Math.max(0, Math.min(img.naturalWidth - 1, Math.floor(rx * img.naturalWidth)));
-                      const sy = Math.max(0, Math.min(img.naturalHeight - 1, Math.floor(ry * img.naturalHeight)));
-
-                      const canvas = document.createElement("canvas");
-                      canvas.width = 1;
-                      canvas.height = 1;
-                      const ctx = canvas.getContext("2d");
-                      if (!ctx) return;
-                      ctx.drawImage(img, sx, sy, 1, 1, 0, 0, 1, 1);
-                      const data = ctx.getImageData(0, 0, 1, 1).data;
-                      const hex = rgbToHex(data[0], data[1], data[2]);
-                      onBabyBackgroundColor(hex);
-                      setStatus(`Picked ${hex}`);
-                    }}
-                  />
-                  <div className="muted small">Tip: click a background pixel, not a photo subject.</div>
-                </div>
-              )}
-            </div>
-
             {removeBabyBackground && (
-              <div className="stack" style={{ gap: 10 }}>
+              <div className="stack" style={{ gap: 10, marginLeft: 22 }}>
                 <ToggleSwitch
                   checked={babyBackgroundMode === "simple"}
                   onChange={(checked) => {
@@ -4075,6 +4077,124 @@ function BabyPhotosStep({
                 />
               </div>
             )}
+
+            <div className="stack" style={{ gap: 8 }}>
+              <ToggleSwitch
+                checked={Boolean(babyBackgroundColor.trim())}
+                onChange={(checked) => {
+                  if (checked) {
+                    const normalized = normalizeHexColor(babyBackgroundColor);
+                    const trimmed = babyBackgroundColor.trim();
+                    onBabyBackgroundColor(normalized ?? (trimmed ? trimmed : "#ffffff"));
+                  } else {
+                    onBabyBackgroundColor("");
+                  }
+                }}
+                label="Baby photo background colour"
+                description="If a baby image has transparent pixels, fill them with this colour during rendering."
+              />
+
+              {Boolean(babyBackgroundColor.trim()) && (
+                <div className="stack" style={{ gap: 10, marginLeft: 22 }}>
+                  <div className="field color-override" style={{ maxWidth: 360 }}>
+                    <label htmlFor="babyBgColorText">Fill colour</label>
+                    <div className="inline">
+                      <input
+                        type="color"
+                        className="color-swatch"
+                        aria-label="Baby background fill colour"
+                        value={normalizeHexColor(babyBackgroundColor) ?? "#ffffff"}
+                        onChange={(e) => onBabyBackgroundColor(normalizeHexColor(e.target.value) ?? e.target.value)}
+                      />
+                      <input
+                        id="babyBgColorText"
+                        type="text"
+                        placeholder="#ffffff"
+                        value={babyBackgroundColor}
+                        ref={babyBgHexInputRef}
+                        onChange={(e) => onBabyBackgroundColor(e.target.value)}
+                        onBlur={(e) => {
+                          const normalized = normalizeHexColor(e.target.value);
+                          if (normalized) onBabyBackgroundColor(normalized);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="inline" style={{ gap: 10, alignItems: "center" }}>
+                    <button
+                      type="button"
+                      disabled={!workspaceId || babyBgPickBusy}
+                      onClick={async () => {
+                        // Bring attention to the colour input.
+                        babyBgHexInputRef.current?.focus();
+
+                        if (!workspaceId) {
+                          setStatus("Parse the template first");
+                          return;
+                        }
+                        if (babyBgPickActive) {
+                          setBabyBgPickActive(false);
+                          if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
+                          setBabyBgPickUrl(null);
+                          return;
+                        }
+
+                        try {
+                          setBabyBgPickBusy(true);
+                          setStatus("Loading clean template…");
+                          const resp = await fetch(`${templateCleanUrl(workspaceId)}&t=${Date.now()}`);
+                          if (!resp.ok) throw new Error("Could not load clean template");
+                          const blob = await resp.blob();
+                          const url = URL.createObjectURL(blob);
+                          setBabyBgPickUrl(url);
+                          setBabyBgPickActive(true);
+                          setStatus("Click the template preview to pick a colour");
+                        } catch (err) {
+                          console.error(err);
+                          setStatus("Could not load clean template");
+                        } finally {
+                          setBabyBgPickBusy(false);
+                        }
+                      }}
+                    >
+                      {babyBgPickActive ? "Close template" : "Show template"}
+                    </button>
+                    <span className="muted small">Samples a pixel from the clean template and sets the fill colour.</span>
+                  </div>
+
+                  {babyBgPickActive && babyBgPickUrl && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <img
+                        className="template-pick"
+                        src={babyBgPickUrl}
+                        alt="Clean template (click to pick colour)"
+                        onClick={(e) => {
+                          const img = e.currentTarget;
+                          const rect = img.getBoundingClientRect();
+                          const rx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                          const ry = (e.clientY - rect.top) / Math.max(1, rect.height);
+                          const sx = Math.max(0, Math.min(img.naturalWidth - 1, Math.floor(rx * img.naturalWidth)));
+                          const sy = Math.max(0, Math.min(img.naturalHeight - 1, Math.floor(ry * img.naturalHeight)));
+
+                          const canvas = document.createElement("canvas");
+                          canvas.width = 1;
+                          canvas.height = 1;
+                          const ctx = canvas.getContext("2d");
+                          if (!ctx) return;
+                          ctx.drawImage(img, sx, sy, 1, 1, 0, 0, 1, 1);
+                          const data = ctx.getImageData(0, 0, 1, 1).data;
+                          const hex = rgbToHex(data[0], data[1], data[2]);
+                          onBabyBackgroundColor(hex);
+                          setStatus(`Picked ${hex}`);
+                        }}
+                      />
+                      <div className="muted small">Tip: click a background pixel, not a photo subject.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {babyZipWarnings.length > 0 && (
               <details className="muted small">
@@ -4123,8 +4243,15 @@ function BabyPhotosStep({
 
       <div className="panel">
         {workspaceId && people.length > 0 ? (
-          <div className="people-grid">
-            {people.map((p, idx) => {
+          <div className="stack">
+            <div className="inline">
+              <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
+                Reset to original photos
+              </button>
+            </div>
+
+            <div className="people-grid">
+              {people.map((p, idx) => {
               const babyFilename = p.baby_photo_filename || defaultBabyFilename;
               const quote = (p.quote ?? defaultQuote ?? "").trim();
               const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
@@ -4135,8 +4262,8 @@ function BabyPhotosStep({
                 backgroundColor: babyFillColor ?? undefined,
               };
 
-              return (
-                <div className="people-card" key={p.index}>
+                return (
+                  <div className="people-card" key={p.index}>
                   <div className="people-card-header">
                     <div className="stack" style={{ gap: 4 }}>
                       <div className="muted small">#{p.index}</div>
@@ -4266,9 +4393,10 @@ function BabyPhotosStep({
                     />
                     <div className="muted small">{p.baby_photo_filename ?? "No custom photo"}</div>
                   </UploadDropLabel>
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <p className="muted">No people loaded yet. Complete portrait mapping first.</p>
@@ -4342,9 +4470,24 @@ function BabyPhotosStep({
                   >
                     Center
                   </button>
-                  <button type="button" onClick={() => applyEdits()} disabled={editingBusy}>
-                    Apply changes
+                  <button type="button" onClick={resetEditingToOriginal} disabled={editingBusy || !originalBabyPeople}>
+                    Reset to original
                   </button>
+                  <div className="popover-anchor">
+                    <button
+                      type="button"
+                      onClick={() => setShowApplyWarning(true)}
+                      disabled={editingBusy || !croppedAreaPixels}
+                      aria-disabled={editingBusy || !croppedAreaPixels}
+                    >
+                      Apply changes
+                    </button>
+                    {showChangesSaved && (
+                      <div className="popover" role="status" aria-live="polite" style={{ width: "auto", padding: 8 }}>
+                        <span className="muted small">Changes saved</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="popover-anchor">
                     <button
                       type="button"
@@ -4407,12 +4550,27 @@ function BabyPhotosStep({
                             <button
                               type="button"
                               className="primary"
-                              onClick={() => void runBackgroundRemovalPreview()}
+                              onClick={() => void runBackgroundRemovalPreview({ force: false })}
                               disabled={editingBusy}
                             >
                               Remove
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => void runBackgroundRemovalPreview({ force: true })}
+                              disabled={editingBusy}
+                            >
+                              Force
+                            </button>
                           </div>
+
+                          {removeBgAlreadyRemoved && (
+                            <div className="callout warn">
+                              <div className="muted small">
+                                Background already removed. If this is not true, force background removal.
+                              </div>
+                            </div>
+                          )}
 
                           {editingAction === "remove_background" && (
                             <div className="stack" style={{ gap: 6 }}>
@@ -4432,6 +4590,40 @@ function BabyPhotosStep({
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showApplyWarning && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm apply baby photo edits">
+          <div className="modal" style={{ width: "min(560px, 100%)" }}>
+            <div className="modal-header">
+              <div className="stack" style={{ gap: 2 }}>
+                <strong>Apply changes?</strong>
+                <div className="muted small">Undo is not supported, but you can reset to original.</div>
+              </div>
+              <button type="button" onClick={() => setShowApplyWarning(false)} disabled={editingBusy}>
+                Cancel
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="actions" style={{ justifyContent: "flex-end" }}>
+                <button type="button" onClick={() => setShowApplyWarning(false)} disabled={editingBusy}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setShowApplyWarning(false);
+                    void applyEdits();
+                  }}
+                  disabled={editingBusy}
+                >
+                  Apply changes
+                </button>
               </div>
             </div>
           </div>

@@ -331,6 +331,7 @@ export async function removeBackgroundStatus(jobId: string) {
     error?: string | null;
     eta_seconds?: number | null;
     updated_at?: number;
+    already_removed?: boolean;
   }>("/api/mapping/remove-background-status", { params: { job_id: jobId } });
   return data;
 }
@@ -340,12 +341,14 @@ export async function startRemoveBackgroundPreviewJob(params: {
   kind: "baby" | "mugshot";
   filename: string;
   backgroundMode: BackgroundMode;
+  force?: boolean;
 }) {
   const form = new FormData();
   form.append("workspace_id", params.workspaceId);
   form.append("kind", params.kind);
   form.append("filename", params.filename);
   form.append("background_mode", params.backgroundMode);
+  if (params.force) form.append("force", "true");
   const { data } = await axios.post<{ job_id: string }>("/api/mapping/remove-background-preview", form, {
     headers: { "Content-Type": "multipart/form-data" }
   });

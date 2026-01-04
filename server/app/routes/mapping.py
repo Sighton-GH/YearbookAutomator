@@ -21,6 +21,7 @@ from app.services.background_removal import (
     BackgroundMode,
     background_removed_filename,
     remove_background as remove_background_bytes,
+    BackgroundAlreadyRemovedError,
 )
 from app.services.background_jobs import (
     start_job as start_bg_job,
@@ -385,6 +386,7 @@ async def remove_background_preview_job(
     kind: Literal["baby", "mugshot"] = Form(...),
     filename: str = Form(...),
     background_mode: BackgroundMode = Form("simple"),
+    force: bool = Form(False),
 ) -> dict[str, str]:
     """Start a non-destructive background-removal job.
 
@@ -409,7 +411,18 @@ async def remove_background_preview_job(
             raw = src_path.read_bytes()
 
             update_bg_job(job_id, progress=15, message="Removing background…")
-            out_png = remove_background_bytes(raw, mode=background_mode)
+            try:
+                out_png = remove_background_bytes(raw, mode=background_mode, force=force, report_already_removed=True)
+            except BackgroundAlreadyRemovedError:
+                # Signal the UI to offer a Force action.
+                update_bg_job(
+                    job_id,
+                    progress=100,
+                    status="done",
+                    message="Background already removed",
+                    already_removed=True,
+                )
+                return
 
             update_bg_job(job_id, progress=95, message="Finalizing…")
             update_bg_job(job_id, result_bytes=out_png)
