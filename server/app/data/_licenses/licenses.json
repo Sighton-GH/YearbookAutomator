@@ -14,6 +14,36 @@
       "note": "free personal",
       "revoked": false,
       "uses": 0
+    },
+    {
+      "bound_device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "bound_ip": "127.0.0.1",
+      "expires_at": null,
+      "issued_at": 1767517297,
+      "key": "YMGA1-XT4HA-NK2TH-O2DFJ-C5R4D-E4P6P-SLZ3I-WUZCH-NGORI-A6NYO-QKVLZ-YQ",
+      "last_used_at": null,
+      "license_type": "personal",
+      "max_uses": null,
+      "monthly_limit": 5,
+      "monthly_uses": {},
+      "note": "free personal",
+      "revoked": false,
+      "uses": 0
+    },
+    {
+      "bound_device_id": "ee05e1bf88f72c6b720a1e474a14b8dd",
+      "bound_ip": "127.0.0.1",
+      "expires_at": null,
+      "issued_at": 1767546745,
+      "key": "YMGA1-V63CP-B35UR-IQSVS-DQ4HV-6WFVV-7HGJZ-HVBPJ-AITGR-6GFZ4-43IDH-MQ",
+      "last_used_at": null,
+      "license_type": "personal",
+      "max_uses": null,
+      "monthly_limit": 5,
+      "monthly_uses": {},
+      "note": "free personal",
+      "revoked": false,
+      "uses": 0
     }
   ],
   "version": 2

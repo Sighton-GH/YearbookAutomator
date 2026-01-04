@@ -177,6 +177,48 @@ export async function uploadImage(
   return data.filename;
 }
 
+// Like uploadImage, but preserves the exact filename provided.
+// Used for config import to restore references to specific filenames.
+export async function uploadImageAs(
+  workspaceId: string,
+  kind: "baby" | "mugshot",
+  file: File,
+  desiredFilename: string,
+  opts?: {
+    removeBackground?: boolean;
+    backgroundMode?: BackgroundMode;
+    signal?: AbortSignal;
+    onProgress?: (progressPct: number) => void;
+  }
+): Promise<string> {
+  const form = new FormData();
+  form.append("workspace_id", workspaceId);
+  form.append("kind", kind);
+
+  const safeName = (desiredFilename || file.name || `${kind}.png`).split(/[\\/]/).pop() || `${kind}.png`;
+  const uploadFile = new File([file], safeName, {
+    type: file.type || "application/octet-stream",
+    lastModified: file.lastModified,
+  });
+  form.append("file", uploadFile);
+  if (opts?.removeBackground) form.append("remove_background", "true");
+  if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
+
+  const { data } = await axios.post<{ filename: string }>("/api/mapping/upload-image", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
+  });
+  return data.filename;
+}
+
 export async function uploadBabyZip(
   workspaceId: string,
   people: PersonRecord[],

@@ -10,6 +10,7 @@ import {
   ingestSpreadsheet,
   parseTemplate,
   uploadImage,
+  uploadImageAs,
   uploadBabyZip,
   uploadQuotesSpreadsheet,
   listFonts,
@@ -28,11 +29,28 @@ import {
   removeBackgroundPreviewStatus,
   fetchRemoveBackgroundPreviewResult,
   detectFaceCenter,
+  type BackgroundMode,
   type Box,
   type PersonRecord,
   type TemplateSlots,
   type RawParseDebug
 } from "./api";
+import {
+  type ConfigFileV1,
+  type MissingAsset,
+  downloadJson,
+  readConfigFile,
+  safeIsoForFilename,
+  describeApiError,
+} from "./configFile";
+import {
+  computeImportNeeds,
+  computeMissingAssets as computeMissingAssetsRemote,
+  importTemplate as importTemplateRemote,
+  importPortraits as importPortraitsRemote,
+  importBabyZip as importBabyZipRemote,
+  uploadMissingAsset as uploadMissingAssetRemote,
+} from "./configImport";
 
 function createImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -587,15 +605,44 @@ type PersistedSessionV1 = {
   templateId: string | null;
   skipQuotes?: boolean;
   skipBabyPhotos?: boolean;
+  templateParse?: {
+    mugshotColor?: string;
+    babyColor?: string;
+    nameColor?: string;
+    quoteColor?: string;
+    minArea?: number;
+  };
   slots: TemplateSlots[];
   parsedSlots: TemplateSlots[];
   templateSize: { width: number; height: number } | null;
+  portraitsIngest?: {
+    namingPattern?: string;
+    advancedNameMatch?: boolean;
+    allowInsecureUploads?: boolean;
+  };
   people: PersonRecord[];
   slotAssignments: Record<number, number>;
   placementMode?: PlacementMode;
   forceAlphabetical?: boolean;
   defaultQuote: string;
   defaultBabyFilename: string | null;
+  babyIngest?: {
+    advancedNameMatch?: boolean;
+    partialNameMatch?: boolean;
+    removeBackground?: boolean;
+    backgroundMode?: BackgroundMode;
+    allowInsecureUploads?: boolean;
+  };
+  babyEditHistory?: Array<{
+    kind: "baby";
+    person_index: number;
+    input_filename: string;
+    output_filename: string;
+    crop_area_pixels: Area;
+    export_size: { width: number; height: number };
+    used_background_preview?: { background_mode: BackgroundMode; force?: boolean } | null;
+    created_at: string;
+  }>;
   babyBackgroundColor?: string;
   centerBabyOnFace?: boolean;
   defaultMugshotFilename?: string | null;
@@ -610,6 +657,16 @@ type PersistedSessionV1 = {
   quoteAllCaps: boolean;
   quoteAlign: Align;
   peoplePerSpread: number;
+};
+
+const isPersistedSessionV1 = (x: unknown): x is PersistedSessionV1 => {
+  const anyX: any = x;
+  if (!anyX || typeof anyX !== "object") return false;
+  if (anyX.v !== 1) return false;
+  if (!Array.isArray(anyX.slots)) return false;
+  if (!Array.isArray(anyX.parsedSlots)) return false;
+  if (!Array.isArray(anyX.people)) return false;
+  return true;
 };
 
 const SESSION_KEY = "ymga.session.v1";
@@ -661,6 +718,7 @@ function clearSession() {
   }
 }
 
+
 export default function App({ embedded = false }: AppProps) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -673,6 +731,14 @@ export default function App({ embedded = false }: AppProps) {
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [skipQuotes, setSkipQuotes] = useState(false);
   const [skipBabyPhotos, setSkipBabyPhotos] = useState(false);
+
+  // Persisted options for deterministic template parsing across refresh/config import.
+  const [parseMugshotColor, setParseMugshotColor] = useState<string>("");
+  const [parseBabyColor, setParseBabyColor] = useState<string>("");
+  const [parseNameColor, setParseNameColor] = useState<string>("");
+  const [parseQuoteColor, setParseQuoteColor] = useState<string>("");
+  const [parseMinArea, setParseMinArea] = useState<number>(800);
+
   const [slots, setSlots] = useState<TemplateSlots[]>([]);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
@@ -686,6 +752,14 @@ export default function App({ embedded = false }: AppProps) {
   const [slotAssignments, setSlotAssignments] = useState<Record<number, number>>({});
   const [defaultQuote, setDefaultQuote] = useState("404 quote not found");
   const [defaultBabyFilename, setDefaultBabyFilename] = useState<string | null>(null);
+  const [babyIngest, setBabyIngest] = useState<NonNullable<PersistedSessionV1["babyIngest"]>>({
+    advancedNameMatch: true,
+    partialNameMatch: true,
+    removeBackground: false,
+    backgroundMode: "simple",
+    allowInsecureUploads: false,
+  });
+  const [babyEditHistory, setBabyEditHistory] = useState<NonNullable<PersistedSessionV1["babyEditHistory"]>>([]);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
   const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
   const [defaultMugshotFilename, setDefaultMugshotFilename] = useState<string | null>(null);
@@ -724,6 +798,30 @@ export default function App({ embedded = false }: AppProps) {
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
   const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
+
+  // Persisted options for spreadsheet+portrait ingest.
+  const defaultNamingPattern = "\\d{3,4}";
+  const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
+  const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
+  const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
+
+  // Config export/import UI state.
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configImportBusy, setConfigImportBusy] = useState(false);
+  const [configImportStatus, setConfigImportStatus] = useState<string>("");
+  const [configImportError, setConfigImportError] = useState<string>("");
+  const [configToImport, setConfigToImport] = useState<ConfigFileV1<PersistedSessionV1> | null>(null);
+  const [importAnnotated, setImportAnnotated] = useState<File | null>(null);
+  const [importClean, setImportClean] = useState<File | null>(null);
+  const [importSpreadsheet, setImportSpreadsheet] = useState<File | null>(null);
+  const [importMugshotsZip, setImportMugshotsZip] = useState<File | null>(null);
+  const [importBabyZip, setImportBabyZip] = useState<File | null>(null);
+  const [importWorkspaceId, setImportWorkspaceId] = useState<string | null>(null);
+  const [importTemplateDone, setImportTemplateDone] = useState(false);
+  const [importPortraitsDone, setImportPortraitsDone] = useState(false);
+  const [importBabyDone, setImportBabyDone] = useState(false);
+  const [importFinalized, setImportFinalized] = useState(false);
+  const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
 
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
@@ -864,13 +962,29 @@ export default function App({ embedded = false }: AppProps) {
     setTemplateId(null);
     setSkipQuotes(false);
     setSkipBabyPhotos(false);
+    setParseMugshotColor("");
+    setParseBabyColor("");
+    setParseNameColor("");
+    setParseQuoteColor("");
+    setParseMinArea(800);
     setSlots([]);
     setParsedSlots([]);
     setTemplateSize(null);
+    setNamingPattern(defaultNamingPattern);
+    setAdvancedNameMatch(true);
+    setAllowInsecureUploads(false);
     setPeople([]);
     setSlotAssignments({});
     setDefaultQuote("404 quote not found");
     setDefaultBabyFilename(null);
+    setBabyIngest({
+      advancedNameMatch: true,
+      partialNameMatch: true,
+      removeBackground: false,
+      backgroundMode: "simple",
+      allowInsecureUploads: false,
+    });
+    setBabyEditHistory([]);
     setBabyBackgroundColor("");
     setCenterBabyOnFace(false);
     setDefaultMugshotFilename(null);
@@ -904,6 +1018,390 @@ export default function App({ embedded = false }: AppProps) {
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     clearSession();
+  };
+
+  const buildSessionPayload = (): PersistedSessionV1 => {
+    return {
+      v: 1,
+      activeStep,
+      workspaceId,
+      templateId,
+      skipQuotes,
+      skipBabyPhotos,
+      templateParse: {
+        mugshotColor: parseMugshotColor,
+        babyColor: parseBabyColor,
+        nameColor: parseNameColor,
+        quoteColor: parseQuoteColor,
+        minArea: parseMinArea,
+      },
+      slots,
+      parsedSlots,
+      templateSize,
+      portraitsIngest: {
+        namingPattern,
+        advancedNameMatch,
+        allowInsecureUploads,
+      },
+      people,
+      slotAssignments,
+      placementMode,
+      forceAlphabetical,
+      defaultQuote,
+      defaultBabyFilename,
+      babyIngest,
+      babyEditHistory,
+      babyBackgroundColor,
+      centerBabyOnFace,
+      defaultMugshotFilename,
+      nameFontFamily,
+      nameFontWeight,
+      nameFontSize,
+      nameAllCaps,
+      nameAlign,
+      quoteFontFamily,
+      quoteFontWeight,
+      quoteFontSize,
+      quoteAllCaps,
+      quoteAlign,
+      peoplePerSpread,
+    };
+  };
+
+  const handleSaveConfig = () => {
+    const cfg: ConfigFileV1<PersistedSessionV1> = {
+      v: 1,
+      kind: "ymga_config",
+      created_at: new Date().toISOString(),
+      session: buildSessionPayload(),
+    };
+    const name = `ymga_config_${safeIsoForFilename(new Date())}.json`;
+    downloadJson(name, cfg);
+    setStatus("Saved configuration file");
+  };
+
+  const resetImportUi = () => {
+    setConfigImportBusy(false);
+    setConfigImportStatus("");
+    setConfigImportError("");
+    setConfigToImport(null);
+    setImportAnnotated(null);
+    setImportClean(null);
+    setImportSpreadsheet(null);
+    setImportMugshotsZip(null);
+    setImportBabyZip(null);
+    setImportWorkspaceId(null);
+    setImportTemplateDone(false);
+    setImportPortraitsDone(false);
+    setImportBabyDone(false);
+    setImportFinalized(false);
+    setMissingAsset(null);
+  };
+
+  const openConfigImport = () => {
+    resetImportUi();
+    setShowConfigModal(true);
+  };
+
+  const applyImportedSession = (session: PersistedSessionV1, newWorkspaceId: string) => {
+    // Restore the saved state, but always bind it to the newly created workspace.
+    setWorkspaceId(newWorkspaceId);
+    setTemplateId(newWorkspaceId);
+    setSkipQuotes(Boolean(session.skipQuotes));
+    setSkipBabyPhotos(Boolean(session.skipBabyPhotos));
+    setParseMugshotColor(session.templateParse?.mugshotColor ?? "");
+    setParseBabyColor(session.templateParse?.babyColor ?? "");
+    setParseNameColor(session.templateParse?.nameColor ?? "");
+    setParseQuoteColor(session.templateParse?.quoteColor ?? "");
+    setParseMinArea(typeof session.templateParse?.minArea === "number" ? Math.max(400, session.templateParse!.minArea) : 800);
+    setNamingPattern(session.portraitsIngest?.namingPattern ?? defaultNamingPattern);
+    setAdvancedNameMatch(Boolean(session.portraitsIngest?.advancedNameMatch ?? true));
+    setAllowInsecureUploads(Boolean(session.portraitsIngest?.allowInsecureUploads));
+
+    setSlots(session.slots ?? []);
+    setParsedSlots(session.parsedSlots ?? []);
+    setTemplateSize(session.templateSize ?? null);
+    setPeople(session.people ?? []);
+    setSlotAssignments(session.slotAssignments ?? {});
+    setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
+    setForceAlphabetical(Boolean(session.forceAlphabetical));
+    setDefaultQuote(session.defaultQuote ?? "404 quote not found");
+    setDefaultBabyFilename(session.defaultBabyFilename ?? null);
+    setBabyIngest({
+      advancedNameMatch: Boolean(session.babyIngest?.advancedNameMatch ?? true),
+      partialNameMatch: Boolean(session.babyIngest?.partialNameMatch ?? true),
+      removeBackground: Boolean(session.babyIngest?.removeBackground ?? false),
+      backgroundMode: (session.babyIngest?.backgroundMode as BackgroundMode) ?? "simple",
+      allowInsecureUploads: Boolean(session.babyIngest?.allowInsecureUploads ?? false),
+    });
+    setBabyEditHistory((session.babyEditHistory ?? []) as any);
+    setBabyBackgroundColor(session.babyBackgroundColor ?? "");
+    setCenterBabyOnFace(Boolean(session.centerBabyOnFace));
+    setDefaultMugshotFilename(session.defaultMugshotFilename ?? null);
+    setNameFontFamily(session.nameFontFamily ?? "Inter, system-ui, sans-serif");
+    setNameFontWeight((session.nameFontWeight as FontWeight) ?? "normal");
+    setNameFontSize(typeof session.nameFontSize === "number" ? session.nameFontSize : 40);
+    setNameAllCaps(Boolean(session.nameAllCaps));
+    setNameAlign((session.nameAlign as Align) ?? "left");
+    setQuoteFontFamily(session.quoteFontFamily ?? "Inter, system-ui, sans-serif");
+    setQuoteFontWeight((session.quoteFontWeight as FontWeight) ?? "normal");
+    setQuoteFontSize(typeof session.quoteFontSize === "number" ? session.quoteFontSize : 40);
+    setQuoteAllCaps(Boolean(session.quoteAllCaps));
+    setQuoteAlign((session.quoteAlign as Align) ?? "left");
+    setPeoplePerSpread(typeof session.peoplePerSpread === "number" ? session.peoplePerSpread : 16);
+
+    setTemplatePreviewUrl(`${templateCleanUrl(newWorkspaceId)}&t=${Date.now()}`);
+    setAnnotatedPreviewUrl(`${templateAnnotatedUrl(newWorkspaceId)}&t=${Date.now()}`);
+    setCleanPreviewUrl(`${templateCleanUrl(newWorkspaceId)}&t=${Date.now()}`);
+
+    setActiveStep(Math.max(0, Math.min(7, session.activeStep ?? 0)));
+  };
+
+  const computeMissingAssets = async (session: PersistedSessionV1, ws: string): Promise<MissingAsset | null> => {
+    const missing = await computeMissingAssetsRemote(session, ws, (w, k, f) => assetUrl(w, k, f));
+    setMissingAsset(missing);
+    return missing;
+  };
+
+  const clearMissingDefaultsForImport = async (session: PersistedSessionV1, ws: string) => {
+    const exists = async (kind: "baby" | "mugshot", filename: string): Promise<boolean> => {
+      try {
+        const resp = await fetch(assetUrl(ws, kind, filename), { method: "GET" });
+        return resp.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    if (session.defaultBabyFilename) {
+      const f = String(session.defaultBabyFilename);
+      if (!(await exists("baby", f))) session.defaultBabyFilename = null;
+    }
+    if (session.defaultMugshotFilename) {
+      const f = String(session.defaultMugshotFilename);
+      if (!(await exists("mugshot", f))) session.defaultMugshotFilename = null;
+    }
+  };
+
+  const handleConfigSelected = async (file: File) => {
+    setConfigImportError("");
+    setConfigImportStatus("Reading configuration…");
+    setConfigImportBusy(true);
+    try {
+      const cfg = await readConfigFile<PersistedSessionV1>(file, isPersistedSessionV1);
+      setConfigToImport(cfg);
+      setConfigImportStatus("Config loaded. Upload the annotated template to begin.");
+    } catch (err) {
+      setConfigImportError(describeApiError(err, "Could not read config"));
+      setConfigImportStatus("");
+    } finally {
+      setConfigImportBusy(false);
+    }
+  };
+
+  const runImportTemplateIfReady = async (annotatedOverride?: File | null, cleanOverride?: File | null) => {
+    if (!configToImport?.session) return;
+    const annotated = annotatedOverride ?? importAnnotated;
+    const clean = cleanOverride ?? importClean;
+    if (!annotated || !clean) return;
+    setConfigImportError("");
+    setConfigImportBusy(true);
+    try {
+      const s = configToImport.session;
+      const newWs = await importTemplateRemote({
+        session: s,
+        annotated,
+        clean,
+        parseTemplate,
+        setStatus: setConfigImportStatus,
+      });
+
+      // Bind everything to the new workspace.
+      setImportWorkspaceId(newWs);
+      setImportTemplateDone(true);
+
+      // Apply config session immediately (so the user lands back on their stage).
+      applyImportedSession(s, newWs);
+    } catch (err) {
+      setConfigImportError(describeApiError(err, "Template parsing failed"));
+      setConfigImportStatus("");
+      setImportTemplateDone(false);
+      setImportWorkspaceId(null);
+    } finally {
+      setConfigImportBusy(false);
+    }
+  };
+
+  const runImportPortraitsIfReady = async (sheetOverride?: File | null, zipOverride?: File | null) => {
+    if (!configToImport?.session) return;
+    if (!importWorkspaceId) return;
+    const sheet = sheetOverride ?? importSpreadsheet;
+    const zip = zipOverride ?? importMugshotsZip;
+    if (!sheet || !zip) return;
+    setConfigImportError("");
+    setConfigImportBusy(true);
+    try {
+      const s = configToImport.session;
+      await importPortraitsRemote({
+        session: s,
+        workspaceId: importWorkspaceId,
+        spreadsheet: sheet,
+        portraitsZip: zip,
+        ingestSpreadsheet,
+        setStatus: setConfigImportStatus,
+      });
+
+      // Use the config's canonical people (includes mapping adjustments).
+      setPeople(s.people ?? []);
+
+      setImportPortraitsDone(true);
+    } catch (err) {
+      setConfigImportError(describeApiError(err, "Portrait ingest failed"));
+      setConfigImportStatus("");
+      setImportPortraitsDone(false);
+    } finally {
+      setConfigImportBusy(false);
+    }
+  };
+
+  const runImportBabyZipIfReady = async (babyZipOverride?: File | null) => {
+    if (!configToImport?.session) return;
+    if (!importWorkspaceId) return;
+    const babyZip = babyZipOverride ?? importBabyZip;
+    if (!babyZip) return;
+    setConfigImportError("");
+    setConfigImportBusy(true);
+    try {
+      const s = configToImport.session;
+      await importBabyZipRemote({
+        session: s,
+        workspaceId: importWorkspaceId,
+        babyZip,
+        uploadBabyZip,
+        setStatus: setConfigImportStatus,
+      });
+      // Keep the config's people assignments.
+      setPeople(s.people ?? []);
+      setImportBabyDone(true);
+    } catch (err) {
+      setConfigImportError(describeApiError(err, "Baby zip ingest failed"));
+      setConfigImportStatus("");
+      setImportBabyDone(false);
+    } finally {
+      setConfigImportBusy(false);
+    }
+  };
+
+  const replayBabyEditsIfNeeded = async (session: PersistedSessionV1, ws: string) => {
+    const history = (session.babyEditHistory ?? []).filter((h) => h && h.kind === "baby");
+    if (!history.length) return;
+
+    const requestedOutputs = new Set<string>();
+    for (const p of session.people ?? []) {
+      if (p?.baby_photo_filename) requestedOutputs.add(String(p.baby_photo_filename));
+    }
+    if (session.defaultBabyFilename) requestedOutputs.add(String(session.defaultBabyFilename));
+    if (!requestedOutputs.size) return;
+
+    // Only replay operations that are needed to materialize currently-referenced filenames.
+    const neededFilenames = new Set<string>(requestedOutputs);
+    const neededOps = new Set<number>();
+    for (let i = history.length - 1; i >= 0; i--) {
+      const h = history[i];
+      if (neededFilenames.has(h.output_filename)) {
+        neededOps.add(i);
+        neededFilenames.add(h.input_filename);
+      }
+    }
+    if (!neededOps.size) return;
+
+    const exists = async (filename: string): Promise<boolean> => {
+      try {
+        const resp = await fetch(assetUrl(ws, "baby", filename), { method: "GET" });
+        return resp.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    const fetchAssetBlob = async (filename: string): Promise<Blob> => {
+      const resp = await fetch(assetUrl(ws, "baby", filename));
+      if (!resp.ok) throw new Error(`Missing baby asset '${filename}'`);
+      return await resp.blob();
+    };
+
+    for (let i = 0; i < history.length; i++) {
+      if (!neededOps.has(i)) continue;
+      const h = history[i];
+
+      if (await exists(h.output_filename)) continue;
+
+      setConfigImportStatus(`Restoring baby edits (${i + 1}/${history.length})…`);
+
+      let sourceBlob: Blob;
+      if (h.used_background_preview && h.used_background_preview.background_mode) {
+        const { job_id } = await startRemoveBackgroundPreviewJob({
+          workspaceId: ws,
+          kind: "baby",
+          filename: h.input_filename,
+          backgroundMode: h.used_background_preview.background_mode,
+          force: Boolean(h.used_background_preview.force),
+        });
+
+        const start = Date.now();
+        while (true) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 250));
+          // eslint-disable-next-line no-await-in-loop
+          const s = await removeBackgroundPreviewStatus(job_id);
+          if (s.status === "done") {
+            if (s.already_removed) {
+              // Fall back to the original asset if the server says it's already removed.
+              sourceBlob = await fetchAssetBlob(h.input_filename);
+            } else {
+              // eslint-disable-next-line no-await-in-loop
+              sourceBlob = await fetchRemoveBackgroundPreviewResult(job_id);
+            }
+            break;
+          }
+          if (s.status === "error") throw new Error(s.error || "Background removal failed");
+          if (Date.now() - start > 120_000) throw new Error("Background removal timed out");
+        }
+      } else {
+        sourceBlob = await fetchAssetBlob(h.input_filename);
+      }
+
+      const objectUrl = URL.createObjectURL(sourceBlob);
+      try {
+        const outBlob = await cropToPngBlob(objectUrl, h.crop_area_pixels, h.export_size);
+        const file = new File([outBlob], h.output_filename, { type: "image/png" });
+        await uploadImageAs(ws, "baby", file, h.output_filename);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+  };
+
+  const runImportMissingAssetUpload = async (file: File) => {
+    if (!missingAsset) return;
+    if (!importWorkspaceId) return;
+    setConfigImportError("");
+    setConfigImportBusy(true);
+    try {
+      await uploadMissingAssetRemote({
+        workspaceId: importWorkspaceId,
+        missing: missingAsset,
+        file,
+        uploadImageAs,
+        setStatus: setConfigImportStatus,
+      });
+      setMissingAsset(null);
+    } catch (err) {
+      setConfigImportError(describeApiError(err, "Could not upload missing file"));
+      setConfigImportStatus("");
+    } finally {
+      setConfigImportBusy(false);
+    }
   };
 
   // Keep the server workspace marked as active while this tab is open.
@@ -950,6 +1448,64 @@ export default function App({ embedded = false }: AppProps) {
     };
   }, [workspaceId]);
 
+  // Config import finalization: once required uploads are done, check for missing referenced files.
+  useEffect(() => {
+    if (!showConfigModal) return;
+    if (configImportBusy) return;
+    if (importFinalized) return;
+    if (!configToImport?.session) return;
+    if (!importWorkspaceId) return;
+    if (!importTemplateDone) return;
+
+    const s = configToImport.session;
+    const { needsPortraits, needsBaby } = computeImportNeeds(s);
+
+    if (needsPortraits && !importPortraitsDone) return;
+    if (needsBaby && !importBabyDone) return;
+    if (missingAsset) return;
+
+    (async () => {
+      try {
+        setConfigImportBusy(true);
+        // If the config references edited baby images, recreate them now (so missing-asset
+        // checks don't force the user to hunt down intermediate edit outputs).
+        if (needsBaby && importBabyDone) {
+          await replayBabyEditsIfNeeded(s, importWorkspaceId);
+        }
+
+        // Defaults are available without user uploads; if the config captured a workspace-specific
+        // default filename that doesn't exist in this new workspace, drop it and fall back.
+        await clearMissingDefaultsForImport(s, importWorkspaceId);
+
+        setConfigImportStatus("Checking for missing referenced files…");
+        const missing = await computeMissingAssets(s, importWorkspaceId);
+        if (missing) return;
+
+        // Re-apply session last to ensure we restore the intended step/settings.
+        applyImportedSession(s, importWorkspaceId);
+        setImportFinalized(true);
+        setConfigImportStatus("Import complete");
+        setShowConfigModal(false);
+      } catch (err) {
+        setConfigImportError(describeApiError(err, "Import finalization failed"));
+        setConfigImportStatus("");
+      } finally {
+        setConfigImportBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showConfigModal,
+    configImportBusy,
+    importFinalized,
+    configToImport,
+    importWorkspaceId,
+    importTemplateDone,
+    importPortraitsDone,
+    importBabyDone,
+    missingAsset,
+  ]);
+
   // Restore persisted session (workspace + state) so users can resume without reuploading.
   useEffect(() => {
     try {
@@ -968,15 +1524,31 @@ export default function App({ embedded = false }: AppProps) {
         setTemplateId(saved.templateId);
         setSkipQuotes(Boolean(saved.skipQuotes));
         setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
+        setParseMugshotColor(saved.templateParse?.mugshotColor ?? "");
+        setParseBabyColor(saved.templateParse?.babyColor ?? "");
+        setParseNameColor(saved.templateParse?.nameColor ?? "");
+        setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
+        setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
         setSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
+        setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
+        setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
+        setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
         setPeople(saved.people ?? []);
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
         setForceAlphabetical(Boolean(saved.forceAlphabetical));
         setDefaultQuote(saved.defaultQuote ?? "404 quote not found");
         setDefaultBabyFilename(saved.defaultBabyFilename ?? null);
+        setBabyIngest({
+          advancedNameMatch: Boolean(saved.babyIngest?.advancedNameMatch ?? true),
+          partialNameMatch: Boolean(saved.babyIngest?.partialNameMatch ?? true),
+          removeBackground: Boolean(saved.babyIngest?.removeBackground ?? false),
+          backgroundMode: (saved.babyIngest?.backgroundMode as BackgroundMode) ?? "simple",
+          allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
+        });
+        setBabyEditHistory((saved.babyEditHistory ?? []) as any);
         setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         setDefaultMugshotFilename(saved.defaultMugshotFilename ?? null);
@@ -1036,9 +1608,21 @@ export default function App({ embedded = false }: AppProps) {
       templateId,
       skipQuotes,
       skipBabyPhotos,
+      templateParse: {
+        mugshotColor: parseMugshotColor,
+        babyColor: parseBabyColor,
+        nameColor: parseNameColor,
+        quoteColor: parseQuoteColor,
+        minArea: parseMinArea,
+      },
       slots,
       parsedSlots,
       templateSize,
+      portraitsIngest: {
+        namingPattern,
+        advancedNameMatch,
+        allowInsecureUploads,
+      },
       people,
       slotAssignments,
       placementMode,
@@ -1067,9 +1651,17 @@ export default function App({ embedded = false }: AppProps) {
     templateId,
     skipQuotes,
     skipBabyPhotos,
+    parseMugshotColor,
+    parseBabyColor,
+    parseNameColor,
+    parseQuoteColor,
+    parseMinArea,
     slots,
     parsedSlots,
     templateSize,
+    namingPattern,
+    advancedNameMatch,
+    allowInsecureUploads,
     people,
     slotAssignments,
     placementMode,
@@ -1430,11 +2022,281 @@ export default function App({ embedded = false }: AppProps) {
     </div>
   );
 
+  const configActions = (
+    <div className="tool-actions tool-actions-header" aria-label="Configuration">
+      <button type="button" className="tool-action-btn" onClick={handleSaveConfig} disabled={loading}>
+        💾 <span>Save</span>
+      </button>
+      <button type="button" className="tool-action-btn" onClick={openConfigImport} disabled={loading}>
+        ⤴ <span>Upload</span>
+      </button>
+    </div>
+  );
+
+  const saveConfigActionRef = useRef<(() => void) | null>(null);
+  const uploadConfigActionRef = useRef<(() => void) | null>(null);
+  saveConfigActionRef.current = () => {
+    void handleSaveConfig();
+  };
+  uploadConfigActionRef.current = () => {
+    openConfigImport();
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onSave = () => {
+      if (window.location.pathname !== "/tool") return;
+      saveConfigActionRef.current?.();
+    };
+
+    const onUpload = () => {
+      if (window.location.pathname !== "/tool") return;
+      uploadConfigActionRef.current?.();
+    };
+
+    window.addEventListener("ymga:save-config", onSave);
+    window.addEventListener("ymga:upload-config", onUpload);
+    return () => {
+      window.removeEventListener("ymga:save-config", onSave);
+      window.removeEventListener("ymga:upload-config", onUpload);
+    };
+    // These handlers intentionally call refs to avoid re-subscribing every render.
+  }, []);
+
+
   return (
     <>
+      {showConfigModal && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Import configuration"
+        >
+          <div className="modal">
+            <div className="modal-header">
+              <div className="stack" style={{ gap: 2 }}>
+                <strong>Import configuration</strong>
+                <div className="muted small">Upload a config file, then provide the required source files one at a time.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfigModal(false);
+                }}
+                disabled={configImportBusy}
+              >
+                Close
+              </button>
+            </div>
+            <div className="modal-body">
+              {configImportError && <div className="callout danger">{configImportError}</div>}
+              {configImportStatus && <div className="muted small">{configImportStatus}</div>}
+
+              {!configToImport ? (
+                <label className="field">
+                  <span>Configuration file (.json)</span>
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    disabled={configImportBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      if (!f) return;
+                      void handleConfigSelected(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              ) : !importAnnotated ? (
+                <label className="field">
+                  <span>Annotated template (.png)</span>
+                  <input
+                    type="file"
+                    accept="image/png"
+                    disabled={configImportBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      if (!f) return;
+                      setImportAnnotated(f);
+                      setConfigImportStatus("Annotated template loaded. Now upload the clean template.");
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              ) : !importClean ? (
+                <label className="field">
+                  <span>Clean template (.png)</span>
+                  <input
+                    type="file"
+                    accept="image/png"
+                    disabled={configImportBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      if (!f) return;
+                      setImportClean(f);
+                      void runImportTemplateIfReady(importAnnotated, f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              ) : !importTemplateDone ? (
+                <div className="stack">
+                  <div className="muted">Waiting for template parse to complete.</div>
+                  <button
+                    type="button"
+                    onClick={() => void runImportTemplateIfReady()}
+                    disabled={configImportBusy}
+                  >
+                    Retry parse
+                  </button>
+                </div>
+              ) : (() => {
+                const s = configToImport.session;
+                const { needsPortraits, needsBaby } = computeImportNeeds(s);
+
+                if (needsPortraits && !importSpreadsheet) {
+                  return (
+                    <label className="field">
+                      <span>Roster spreadsheet (.xlsx or .csv)</span>
+                      <input
+                        type="file"
+                        accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                        disabled={configImportBusy}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (!f) return;
+                          setImportSpreadsheet(f);
+                          setConfigImportStatus("Spreadsheet loaded. Now upload the portraits ZIP.");
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  );
+                }
+
+                if (needsPortraits && !importMugshotsZip) {
+                  return (
+                    <label className="field">
+                      <span>Portraits ZIP (.zip)</span>
+                      <input
+                        type="file"
+                        accept=".zip,application/zip"
+                        disabled={configImportBusy}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (!f) return;
+                          setImportMugshotsZip(f);
+                          void runImportPortraitsIfReady(importSpreadsheet, f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  );
+                }
+
+                if (needsPortraits && !importPortraitsDone) {
+                  return (
+                    <div className="stack">
+                      <div className="muted">Waiting for portraits ingest to complete.</div>
+                      <button type="button" onClick={() => void runImportPortraitsIfReady()} disabled={configImportBusy}>
+                        Retry portraits ingest
+                      </button>
+                    </div>
+                  );
+                }
+
+                if (needsBaby && !importBabyZip) {
+                  return (
+                    <label className="field">
+                      <span>Baby photos ZIP (.zip)</span>
+                      <input
+                        type="file"
+                        accept=".zip,application/zip"
+                        disabled={configImportBusy}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (!f) return;
+                          setImportBabyZip(f);
+                          void runImportBabyZipIfReady(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  );
+                }
+
+                if (needsBaby && !importBabyDone) {
+                  return (
+                    <div className="stack">
+                      <div className="muted">Waiting for baby zip ingest to complete.</div>
+                      <button type="button" onClick={() => void runImportBabyZipIfReady()} disabled={configImportBusy}>
+                        Retry baby ingest
+                      </button>
+                    </div>
+                  );
+                }
+
+                if (missingAsset) {
+                  return (
+                    <label className="field">
+                      <span>
+                        Missing file: <strong>{missingAsset.filename}</strong>
+                      </span>
+                      <span className="muted small">
+                        Upload the {missingAsset.kind} image that matches this filename to fully restore the configuration.
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={configImportBusy}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (!f) return;
+                          void runImportMissingAssetUpload(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  );
+                }
+
+                return <div className="muted">Finishing import…</div>;
+              })()}
+
+              <div className="actions" style={{ justifyContent: "space-between" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetImportUi();
+                  }}
+                  disabled={configImportBusy}
+                >
+                  Reset import
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setShowConfigModal(false);
+                    resetImportUi();
+                  }}
+                  disabled={configImportBusy}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {embedded ? (
         <section className="ss-steps">
-          <div className="ss-steps-inner">{stepsNav}</div>
+          <div className="ss-steps-inner tool-steps-header">
+            {stepsNav}
+          </div>
         </section>
       ) : (
         <div className="page">
@@ -1443,7 +2305,10 @@ export default function App({ embedded = false }: AppProps) {
               <h1>Custom Yearbook Spread Automator</h1>
               <p className="muted">Developed by Sighton Innovations — local-first, ready to host later.</p>
             </div>
-            {stepsNav}
+            <div className="topbar-right">
+              {configActions}
+              {stepsNav}
+            </div>
           </header>
         </div>
       )}
@@ -1552,6 +2417,16 @@ export default function App({ embedded = false }: AppProps) {
               onCleanChange={updateCleanFile}
               peoplePerSpread={peoplePerSpread}
               setPeoplePerSpread={setPeoplePerSpread}
+              mugshotColor={parseMugshotColor}
+              setMugshotColor={setParseMugshotColor}
+              babyColor={parseBabyColor}
+              setBabyColor={setParseBabyColor}
+              nameColor={parseNameColor}
+              setNameColor={setParseNameColor}
+              quoteColor={parseQuoteColor}
+              setQuoteColor={setParseQuoteColor}
+              minArea={parseMinArea}
+              setMinArea={setParseMinArea}
               onPreviewChange={({ annotated, clean }) => {
                 setAnnotatedPreviewUrl(annotated ?? null);
                 setCleanPreviewUrl(clean ?? null);
@@ -1813,6 +2688,12 @@ export default function App({ embedded = false }: AppProps) {
               defaultMugshotFilename={defaultMugshotFilename}
               onDefaultMugshotFilename={setDefaultMugshotFilename}
               ensureDefaultMugshotEagle={ensureDefaultMugshotEagle}
+              namingPattern={namingPattern}
+              setNamingPattern={setNamingPattern}
+              advancedNameMatch={advancedNameMatch}
+              setAdvancedNameMatch={setAdvancedNameMatch}
+              allowInsecureUploads={allowInsecureUploads}
+              setAllowInsecureUploads={setAllowInsecureUploads}
               onMapped={setPeople}
               setStatus={setStatus}
               setLoading={setLoading}
@@ -1862,6 +2743,9 @@ export default function App({ embedded = false }: AppProps) {
               defaultBabyFilename={defaultBabyFilename}
               defaultQuote={defaultQuote}
               onDefaultBabyFilename={setDefaultBabyFilename}
+              babyIngest={babyIngest}
+              onBabyIngest={setBabyIngest}
+              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyBackgroundColor={babyBackgroundColor}
               onBabyBackgroundColor={setBabyBackgroundColor}
               centerBabyOnFace={centerBabyOnFace}
@@ -2018,6 +2902,16 @@ function TemplateParsing({
   onCleanChange,
   peoplePerSpread,
   setPeoplePerSpread,
+  mugshotColor,
+  setMugshotColor,
+  babyColor,
+  setBabyColor,
+  nameColor,
+  setNameColor,
+  quoteColor,
+  setQuoteColor,
+  minArea,
+  setMinArea,
   onRawDebug,
 }: {
   workspaceId: string | null;
@@ -2038,14 +2932,18 @@ function TemplateParsing({
   onCleanChange: (file: File | null) => void;
   peoplePerSpread: number;
   setPeoplePerSpread: (n: number) => void;
+  mugshotColor: string;
+  setMugshotColor: (v: string) => void;
+  babyColor: string;
+  setBabyColor: (v: string) => void;
+  nameColor: string;
+  setNameColor: (v: string) => void;
+  quoteColor: string;
+  setQuoteColor: (v: string) => void;
+  minArea: number;
+  setMinArea: (n: number) => void;
   onRawDebug?: (debug: RawParseDebug | null) => void;
 }) {
-  const [mugshotColor, setMugshotColor] = useState<string>("");
-  const [babyColor, setBabyColor] = useState<string>("");
-  const [minArea, setMinArea] = useState<number>(800);
-  const [nameColor, setNameColor] = useState<string>("");
-  const [quoteColor, setQuoteColor] = useState<string>("");
-
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -2305,6 +3203,12 @@ function MugshotMapping({
   defaultMugshotFilename,
   onDefaultMugshotFilename,
   ensureDefaultMugshotEagle,
+  namingPattern,
+  setNamingPattern,
+  advancedNameMatch,
+  setAdvancedNameMatch,
+  allowInsecureUploads,
+  setAllowInsecureUploads,
   onMapped,
   setStatus,
   setLoading,
@@ -2323,6 +3227,12 @@ function MugshotMapping({
   defaultMugshotFilename: string | null;
   onDefaultMugshotFilename: (v: string | null) => void;
   ensureDefaultMugshotEagle: () => Promise<string | null>;
+  namingPattern: string;
+  setNamingPattern: (v: string) => void;
+  advancedNameMatch: boolean;
+  setAdvancedNameMatch: (v: boolean) => void;
+  allowInsecureUploads: boolean;
+  setAllowInsecureUploads: (v: boolean) => void;
   onMapped: (people: PersonRecord[]) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
@@ -2340,10 +3250,7 @@ function MugshotMapping({
   const [sheet, setSheet] = useState<File | null>(null);
   const [zip, setZip] = useState<File | null>(null);
   const defaultNamingPattern = "\\d{3,4}";
-  const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
-  const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [showAdvancedNaming, setShowAdvancedNaming] = useState(false);
-  const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
   const [adjustments, setAdjustments] = useState<Record<number, { shiftCount?: number; replacement_mugshot?: string; remove?: boolean }>>({});
   const [adjustmentsResetNonce, setAdjustmentsResetNonce] = useState(0);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -2681,7 +3588,9 @@ function MugshotMapping({
                   </div>
                   <ToggleSwitch
                     checked={allowInsecureUploads}
-                    onChange={setAllowInsecureUploads}
+                    onChange={(checked) => {
+                      setAllowInsecureUploads(checked);
+                    }}
                     label="I understand (continue over HTTP)"
                   />
                 </div>
@@ -3250,6 +4159,9 @@ function BabyPhotosStep({
   defaultBabyFilename,
   defaultQuote,
   onDefaultBabyFilename,
+  babyIngest,
+  onBabyIngest,
+  onBabyEditHistoryAdd,
   babyBackgroundColor,
   onBabyBackgroundColor,
   centerBabyOnFace,
@@ -3272,6 +4184,9 @@ function BabyPhotosStep({
   defaultBabyFilename: string | null;
   defaultQuote: string;
   onDefaultBabyFilename: (v: string | null) => void;
+  babyIngest: NonNullable<PersistedSessionV1["babyIngest"]>;
+  onBabyIngest: React.Dispatch<React.SetStateAction<NonNullable<PersistedSessionV1["babyIngest"]>>>;
+  onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyBackgroundColor: string;
   onBabyBackgroundColor: (v: string) => void;
   centerBabyOnFace: boolean;
@@ -3291,11 +4206,13 @@ function BabyPhotosStep({
 }) {
   const [babyFile, setBabyFile] = useState<File | null>(null);
   const [babyZip, setBabyZip] = useState<File | null>(null);
-  const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
-  const [partialNameMatch, setPartialNameMatch] = useState(true);
-  const [removeBabyBackground, setRemoveBabyBackground] = useState(false);
-  const [babyBackgroundMode, setBabyBackgroundMode] = useState<"simple" | "complex" | "ultra_complex">("simple");
-  const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
+  const [advancedNameMatch, setAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
+  const [partialNameMatch, setPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
+  const [removeBabyBackground, setRemoveBabyBackground] = useState(Boolean(babyIngest.removeBackground ?? false));
+  const [babyBackgroundMode, setBabyBackgroundMode] = useState<"simple" | "complex" | "ultra_complex">(
+    (babyIngest.backgroundMode as any) ?? "simple"
+  );
+  const [allowInsecureUploads, setAllowInsecureUploads] = useState(Boolean(babyIngest.allowInsecureUploads ?? false));
   const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
   const [originalDefaultBabyFilename, setOriginalDefaultBabyFilename] = useState<string | null>(null);
@@ -3316,6 +4233,7 @@ function BabyPhotosStep({
   const [removeBgEtaSeconds, setRemoveBgEtaSeconds] = useState<number | null>(null);
   const [removeBgMessage, setRemoveBgMessage] = useState<string>("");
   const [removeBgAlreadyRemoved, setRemoveBgAlreadyRemoved] = useState(false);
+  const [lastRemoveBgForce, setLastRemoveBgForce] = useState(false);
   const [dirtyEdits, setDirtyEdits] = useState(false);
   const [showDiscardWarning, setShowDiscardWarning] = useState(false);
   const [showApplyWarning, setShowApplyWarning] = useState(false);
@@ -3358,6 +4276,16 @@ function BabyPhotosStep({
     }
     return null;
   };
+
+  // Keep App-level persisted ingest settings in sync so config exports/imports work.
+  useEffect(() => {
+    setAdvancedNameMatch(Boolean(babyIngest.advancedNameMatch ?? true));
+    setPartialNameMatch(Boolean(babyIngest.partialNameMatch ?? true));
+    setRemoveBabyBackground(Boolean(babyIngest.removeBackground ?? false));
+    setBabyBackgroundMode(((babyIngest.backgroundMode as any) ?? "simple") as any);
+    setAllowInsecureUploads(Boolean(babyIngest.allowInsecureUploads ?? false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [babyIngest]);
 
   const thumbSizeForAspect = (maxSize: number, aspect: number) => {
     if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
@@ -3716,6 +4644,25 @@ function BabyPhotosStep({
       updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename }));
       setBabyThumbError((prev) => ({ ...prev, [personIndex]: false }));
 
+      try {
+        if (editingFilename) {
+          onBabyEditHistoryAdd({
+            kind: "baby",
+            person_index: personIndex,
+            input_filename: editingFilename,
+            output_filename: uploadedFilename,
+            crop_area_pixels: { ...croppedAreaPixels },
+            export_size: { ...exportSize },
+            used_background_preview: hasPreview
+              ? { background_mode: removeBgMode, force: Boolean(lastRemoveBgForce) }
+              : null,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // best-effort; don't block the edit applying
+      }
+
       // Refresh editor to the saved image *without* a zoom jump:
       // the newly uploaded file is already cropped to the current framing, so reset cropper
       // state to defaults and swap the image source.
@@ -3752,6 +4699,7 @@ function BabyPhotosStep({
   const runBackgroundRemovalPreview = async ({ force }: { force: boolean }) => {
     if (!workspaceId || !editingFilename) return;
     if (editingBusy) return;
+    setLastRemoveBgForce(Boolean(force));
     setEditingBusy(true);
     setEditingAction("remove_background");
     setRemoveBgProgress(1);
@@ -4114,7 +5062,10 @@ function BabyPhotosStep({
 
             <ToggleSwitch
               checked={advancedNameMatch}
-              onChange={setAdvancedNameMatch}
+              onChange={(checked) => {
+                setAdvancedNameMatch(checked);
+                onBabyIngest((prev) => ({ ...prev, advancedNameMatch: checked }));
+              }}
               label="Advanced name matching"
               description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
             />
@@ -4122,7 +5073,10 @@ function BabyPhotosStep({
             <ToggleSwitch
               disabled={!advancedNameMatch}
               checked={advancedNameMatch && partialNameMatch}
-              onChange={setPartialNameMatch}
+              onChange={(checked) => {
+                setPartialNameMatch(checked);
+                onBabyIngest((prev) => ({ ...prev, partialNameMatch: checked }));
+              }}
               label="Partial name matching"
               description="Helps with minor typos/missing characters."
             />
@@ -4168,7 +5122,10 @@ function BabyPhotosStep({
 
             <ToggleSwitch
               checked={removeBabyBackground}
-              onChange={setRemoveBabyBackground}
+              onChange={(checked) => {
+                setRemoveBabyBackground(checked);
+                onBabyIngest((prev) => ({ ...prev, removeBackground: checked }));
+              }}
               label="Remove background from baby photos"
               description="When enabled, uploads are saved with a transparent background."
             />
@@ -4178,7 +5135,10 @@ function BabyPhotosStep({
                 <ToggleSwitch
                   checked={babyBackgroundMode === "simple"}
                   onChange={(checked) => {
-                    if (checked) setBabyBackgroundMode("simple");
+                    if (checked) {
+                      setBabyBackgroundMode("simple");
+                      onBabyIngest((prev) => ({ ...prev, backgroundMode: "simple" }));
+                    }
                   }}
                   label="Simple backgrounds"
                   description="Best for solid/mostly-solid backgrounds."
@@ -4187,7 +5147,10 @@ function BabyPhotosStep({
                 <ToggleSwitch
                   checked={babyBackgroundMode === "complex"}
                   onChange={(checked) => {
-                    if (checked) setBabyBackgroundMode("complex");
+                    if (checked) {
+                      setBabyBackgroundMode("complex");
+                      onBabyIngest((prev) => ({ ...prev, backgroundMode: "complex" }));
+                    }
                   }}
                   label="Complex backgrounds"
                   description="Best for real-life backgrounds (more intensive)."
@@ -4196,7 +5159,10 @@ function BabyPhotosStep({
                 <ToggleSwitch
                   checked={babyBackgroundMode === "ultra_complex"}
                   onChange={(checked) => {
-                    if (checked) setBabyBackgroundMode("ultra_complex");
+                    if (checked) {
+                      setBabyBackgroundMode("ultra_complex");
+                      onBabyIngest((prev) => ({ ...prev, backgroundMode: "ultra_complex" }));
+                    }
                   }}
                   label="Ultra complex backgrounds"
                   description="Highest quality (ML-based). First run may be slower."

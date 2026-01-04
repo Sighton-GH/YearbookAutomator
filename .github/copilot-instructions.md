@@ -53,6 +53,9 @@ python -m venv .venv
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+- Default port: `8000`; backend accessible at `http://127.0.0.1:8000`
+- Docs: `http://127.0.0.1:8000/docs` (OpenAPI/Swagger)
+- Health check: `http://127.0.0.1:8000/health`
 
 **Frontend:**
 ```sh
@@ -60,15 +63,25 @@ cd web
 npm install
 npm run dev  # Vite proxies /api to http://127.0.0.1:8000
 ```
+- Runs at `http://localhost:5173`; Vite proxy configured in [vite.config.ts](../web/vite.config.ts)
 
 **Tests:**
 ```sh
 cd server
 pytest
 ```
+- No integration tests; focused on unit testing core algorithms
 
 ## Testing patterns
 
 - Use pytest fixtures; workspace tests mock `BASE_DATA` via `monkeypatch`.
 - Background removal, generator, font tests in `server/tests/test_*.py`.
 - No integration tests; unit tests focus on: slot grouping, matching algorithms, font fallback chains.
+- Color detection tests use OpenCV to create synthetic annotated templates with precise BGR values.
+
+## Error handling patterns
+
+- Backend raises `InvalidWorkspaceId` (caught globally, returns 400) for invalid workspace IDs.
+- License errors return 401 with structured JSON: `{"detail": "...", "reason": "...", "hint": "..."}`.
+- Image/file validation: raise `HTTPException(400)` with actionable messages for users.
+- Background removal wraps exceptions from rembg/PIL with user-friendly error details.

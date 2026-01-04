@@ -123,6 +123,68 @@ body { margin: 0; }
   gap: 8px;
 }
 
+.ss-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ss-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ss-menu-btn:hover {
+  background: var(--bg-quiet);
+  border-color: var(--border);
+}
+
+.ss-menu {
+  display: grid;
+  gap: 6px;
+}
+
+.ss-menu-item,
+.ss-menu-link {
+  width: 100%;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ss-menu-item:hover,
+.ss-menu-link:hover {
+  background: var(--bg-quiet);
+  border-color: var(--border);
+}
+
+.ss-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ss-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
 .ss-nav-link {
   color: inherit;
   text-decoration: none;
@@ -295,6 +357,14 @@ body { margin: 0; }
   display: block;
 }
 
+/* Tool stepper header: actions above steps, aligned bottom-right */
+.ss-steps-inner.tool-steps-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
 /* Embedded app stepper: one row, full-width bar */
 .steps.fullwidth {
   width: 100%;
@@ -307,6 +377,26 @@ body { margin: 0; }
 .steps.fullwidth .step {
   flex: 1 1 0;
   justify-content: center;
+  white-space: nowrap;
+}
+
+/* Compact actions on the right side of the tool stepper */
+.tool-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.tool-actions.tool-actions-header {
+  justify-content: flex-end;
+}
+
+.tool-action-btn {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -393,6 +483,14 @@ body { margin: 0; }
   gap: 16px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.topbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .steps {
