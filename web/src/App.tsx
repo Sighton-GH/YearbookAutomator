@@ -2,6 +2,7 @@ import type React from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import Cropper, { type Area } from "react-easy-crop";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { withBase } from "./baseUrl";
 import {
   applyMapping,
@@ -592,6 +593,22 @@ type PersistedSessionV1 = {
 
 const SESSION_KEY = "ymga.session.v1";
 
+function parseStepFromSearch(search: string): number | null {
+  try {
+    const params = new URLSearchParams(search || "");
+    const raw = (params.get("step") || "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    const i = Math.floor(n);
+    if (i < 0) return 0;
+    if (i > 7) return 7;
+    return i;
+  } catch {
+    return null;
+  }
+}
+
 function tryLoadSession(): PersistedSessionV1 | null {
   if (typeof window === "undefined") return null;
   try {
@@ -624,7 +641,11 @@ function clearSession() {
 }
 
 export default function App({ embedded = false }: AppProps) {
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [activeStep, setActiveStep] = useState(0);
+  const [didRestoreSession, setDidRestoreSession] = useState(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [skipQuotes, setSkipQuotes] = useState(false);
@@ -906,47 +927,79 @@ export default function App({ embedded = false }: AppProps) {
 
   // Restore persisted session (workspace + state) so users can resume without reuploading.
   useEffect(() => {
-    const saved = tryLoadSession();
-    if (!saved) return;
-    // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
-    if (workspaceId || templateId || people.length || slots.length) return;
+    try {
+      const saved = tryLoadSession();
 
-    setActiveStep(Math.max(0, Math.min(7, saved.activeStep ?? 0)));
-    setWorkspaceId(saved.workspaceId);
-    setTemplateId(saved.templateId);
-    setSkipQuotes(Boolean(saved.skipQuotes));
-    setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
-    setSlots(saved.slots ?? []);
-    setParsedSlots(saved.parsedSlots ?? []);
-    setTemplateSize(saved.templateSize ?? null);
-    setPeople(saved.people ?? []);
-    setSlotAssignments(saved.slotAssignments ?? {});
-    setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
-    setForceAlphabetical(Boolean(saved.forceAlphabetical));
-    setDefaultQuote(saved.defaultQuote ?? "404 quote not found");
-    setDefaultBabyFilename(saved.defaultBabyFilename ?? null);
-    setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
-    setDefaultMugshotFilename(saved.defaultMugshotFilename ?? null);
-    setNameFontFamily(saved.nameFontFamily ?? "Inter, system-ui, sans-serif");
-    setNameFontWeight((saved.nameFontWeight as FontWeight) ?? "normal");
-    setNameFontSize(typeof saved.nameFontSize === "number" ? saved.nameFontSize : 40);
-    setNameAllCaps(Boolean(saved.nameAllCaps));
-    setNameAlign((saved.nameAlign as Align) ?? "left");
-    setQuoteFontFamily(saved.quoteFontFamily ?? "Inter, system-ui, sans-serif");
-    setQuoteFontWeight((saved.quoteFontWeight as FontWeight) ?? "normal");
-    setQuoteFontSize(typeof saved.quoteFontSize === "number" ? saved.quoteFontSize : 40);
-    setQuoteAllCaps(Boolean(saved.quoteAllCaps));
-    setQuoteAlign((saved.quoteAlign as Align) ?? "left");
-    setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
+      // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
+      if (saved && !(workspaceId || templateId || people.length || slots.length)) {
+        // Allow deep-linking: if /tool?step=N is present, prefer that over the saved step.
+        const urlStep =
+          typeof window !== "undefined" && window.location.pathname === "/tool"
+            ? parseStepFromSearch(window.location.search)
+            : null;
 
-    if (saved.workspaceId) {
-      // Use server-stored template for preview after refresh.
-      setTemplatePreviewUrl(`${templateCleanUrl(saved.workspaceId)}&t=${Date.now()}`);
-      setAnnotatedPreviewUrl(`${templateAnnotatedUrl(saved.workspaceId)}&t=${Date.now()}`);
-      setCleanPreviewUrl(`${templateCleanUrl(saved.workspaceId)}&t=${Date.now()}`);
+        setActiveStep(Math.max(0, Math.min(7, urlStep ?? (saved.activeStep ?? 0))));
+        setWorkspaceId(saved.workspaceId);
+        setTemplateId(saved.templateId);
+        setSkipQuotes(Boolean(saved.skipQuotes));
+        setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
+        setSlots(saved.slots ?? []);
+        setParsedSlots(saved.parsedSlots ?? []);
+        setTemplateSize(saved.templateSize ?? null);
+        setPeople(saved.people ?? []);
+        setSlotAssignments(saved.slotAssignments ?? {});
+        setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
+        setForceAlphabetical(Boolean(saved.forceAlphabetical));
+        setDefaultQuote(saved.defaultQuote ?? "404 quote not found");
+        setDefaultBabyFilename(saved.defaultBabyFilename ?? null);
+        setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+        setDefaultMugshotFilename(saved.defaultMugshotFilename ?? null);
+        setNameFontFamily(saved.nameFontFamily ?? "Inter, system-ui, sans-serif");
+        setNameFontWeight((saved.nameFontWeight as FontWeight) ?? "normal");
+        setNameFontSize(typeof saved.nameFontSize === "number" ? saved.nameFontSize : 40);
+        setNameAllCaps(Boolean(saved.nameAllCaps));
+        setNameAlign((saved.nameAlign as Align) ?? "left");
+        setQuoteFontFamily(saved.quoteFontFamily ?? "Inter, system-ui, sans-serif");
+        setQuoteFontWeight((saved.quoteFontWeight as FontWeight) ?? "normal");
+        setQuoteFontSize(typeof saved.quoteFontSize === "number" ? saved.quoteFontSize : 40);
+        setQuoteAllCaps(Boolean(saved.quoteAllCaps));
+        setQuoteAlign((saved.quoteAlign as Align) ?? "left");
+        setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
+
+        if (saved.workspaceId) {
+          // Use server-stored template for preview after refresh.
+          setTemplatePreviewUrl(`${templateCleanUrl(saved.workspaceId)}&t=${Date.now()}`);
+          setAnnotatedPreviewUrl(`${templateAnnotatedUrl(saved.workspaceId)}&t=${Date.now()}`);
+          setCleanPreviewUrl(`${templateCleanUrl(saved.workspaceId)}&t=${Date.now()}`);
+        }
+      }
+    } finally {
+      setDidRestoreSession(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // URL -> state: allow /tool?step=N to jump to a step (and restore after navigating back).
+  useEffect(() => {
+    if (!didRestoreSession) return;
+    if (location.pathname !== "/tool") return;
+
+    const urlStep = parseStepFromSearch(location.search);
+    if (urlStep == null) return;
+    if (urlStep === activeStep) return;
+    goToStep(urlStep);
+  }, [didRestoreSession, location.pathname, location.search, activeStep]);
+
+  // State -> URL: keep ?step= in sync (without spamming history).
+  useEffect(() => {
+    if (location.pathname !== "/tool") return;
+    const current = parseStepFromSearch(location.search);
+    if (current === activeStep) return;
+
+    const next = new URLSearchParams(searchParams);
+    next.set("step", String(activeStep));
+    setSearchParams(next, { replace: true });
+  }, [location.pathname, location.search, activeStep, searchParams, setSearchParams]);
 
   // Persist session as the user progresses.
   useEffect(() => {
