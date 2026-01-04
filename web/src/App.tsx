@@ -62,7 +62,7 @@ import { TemplatePreview } from "./components/TemplatePreview";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
-import { formatEtaSeconds, scrollPastTopBar } from "./utils/ui";
+import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
 
 import {
   clearSession,
@@ -1443,7 +1443,7 @@ export default function App({ embedded = false }: AppProps) {
           } else {
             parts.push(baseLabel.replace(/\.{3}$/, ""));
           }
-          if (detail) parts.push(detail);
+          if (detail) parts.push(prefixServerMessage(detail));
           if (opts.spreadIndex && opts.totalSpreads) {
             parts.push(`Spread ${Math.round(spreadPct)}%`);
             if (typeof opts.overallStartMs === "number") {
@@ -1915,7 +1915,7 @@ export default function App({ embedded = false }: AppProps) {
                 )}
                 {activeStep === 6 && (
                   <div className="stack" style={{ gap: 6 }}>
-                    {status && !renderFailedMessage && <p className="muted prewrap">{status}</p>}
+                    {status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
                     {loading && progress > 0 && <ProgressBar progress={progress} />}
                   </div>
                 )}
@@ -2015,6 +2015,7 @@ export default function App({ embedded = false }: AppProps) {
               <RenderPreflight
                 people={people}
                 peoplePerSpread={peoplePerSpread}
+                templateSize={templateSize}
                 placementMode={placementMode}
                 onPlacementMode={setPlacementMode}
                 forceAlphabetical={forceAlphabetical}
@@ -2089,7 +2090,7 @@ export default function App({ embedded = false }: AppProps) {
               )}
             </div>
           )}
-          {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted prewrap">{status}</p>}
+          {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
           {activeStep !== 6 && activeStep !== 7 && loading && progress > 0 && <ProgressBar progress={progress} />}
           </section>
         )}

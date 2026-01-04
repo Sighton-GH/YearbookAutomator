@@ -50,7 +50,7 @@ export function SiteTopBar() {
               end
               className={({ isActive }) => (isActive ? "ss-nav-link active" : "ss-nav-link")}
             >
-              How To Use
+              About
             </NavLink>
             <NavLink
               to="/tool"
@@ -59,10 +59,10 @@ export function SiteTopBar() {
               Tool
             </NavLink>
             <NavLink
-              to="/about"
+              to="/how-to-use"
               className={({ isActive }) => (isActive ? "ss-nav-link active" : "ss-nav-link")}
             >
-              About
+              Documentation
             </NavLink>
             <NavLink
               to="/pricing"

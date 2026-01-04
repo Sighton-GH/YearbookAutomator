@@ -23,7 +23,7 @@ import { UploadDropLabel } from "../components/UploadDropLabel";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
-import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function BabyPhotosStep({
   workspaceId,
@@ -596,7 +596,7 @@ export function BabyPhotosStep({
         const s = await removeBackgroundPreviewStatus(job_id);
         setRemoveBgProgress(Math.max(1, Math.min(100, Math.round(s.progress ?? 0))));
         setRemoveBgEtaSeconds(typeof s.eta_seconds === "number" ? s.eta_seconds : null);
-        setRemoveBgMessage((s.message || "Working…").toString());
+        setRemoveBgMessage(prefixServerMessage(s.message || "Working…"));
 
         if (s.status === "done") {
           if (s.already_removed) {
@@ -1209,7 +1209,7 @@ export function BabyPhotosStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{status}</p>}
+            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

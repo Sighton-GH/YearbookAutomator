@@ -11,6 +11,21 @@ export function formatEtaSeconds(seconds: number): string {
   return `${hours}h ${String(remMins).padStart(2, "0")}m`;
 }
 
+export function prefixServerMessage(message: unknown): string {
+  const header = "Server Message: ";
+
+  let body = String(message ?? "").trim();
+  if (!body) return `${header}\n`;
+
+  // Normalize/strip any existing (case-insensitive) "server message:" labels,
+  // whether they appear at the start or on their own line.
+  body = body.replace(/^\s*server message:\s*/i, "");
+  body = body.replace(/(^|\n)\s*server message:\s*/gi, "$1");
+  body = body.trim();
+
+  return `${header}\n${body}`;
+}
+
 export function scrollPastTopBar() {
   if (typeof window === "undefined") return;
   const topBar = document.querySelector(".ss-topbar") as HTMLElement | null;

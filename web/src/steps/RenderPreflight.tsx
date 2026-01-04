@@ -7,6 +7,7 @@ import type { PlacementMode } from "../types";
 type RenderPreflightProps = {
   people: PersonRecord[];
   peoplePerSpread: number;
+  templateSize: { width: number; height: number } | null;
 
   placementMode: PlacementMode;
   onPlacementMode: (mode: PlacementMode) => void;
@@ -27,6 +28,7 @@ type RenderPreflightProps = {
 export function RenderPreflight({
   people,
   peoplePerSpread,
+  templateSize,
   placementMode,
   onPlacementMode,
   forceAlphabetical,
@@ -44,6 +46,10 @@ export function RenderPreflight({
         <div className="stack" style={{ gap: 8 }}>
           <strong>Stats</strong>
           <div className="grid two">
+            <div>
+              <div className="muted small">Resolution</div>
+              <div>{templateSize ? `${templateSize.width} × ${templateSize.height} px` : "—"}</div>
+            </div>
             <div>
               <div className="muted small">Estimated spreads</div>
               <div>

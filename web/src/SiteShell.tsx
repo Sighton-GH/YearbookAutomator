@@ -2,7 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SiteTopBar } from "./layout/SiteTopBar";
 import { SiteFooter } from "./layout/SiteFooter";
 import { AboutPage } from "./pages/AboutPage";
-import { HowToUsePage } from "./pages/HowToUsePage";
+import { DocumentationPage } from "./pages/DocumentationPage";
 import { LicensePage } from "./pages/LicensePage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { PricingPage } from "./pages/PricingPage";
@@ -23,9 +23,9 @@ export default function SiteShell() {
 
         <div hidden={inTool}>
           <Routes>
-            <Route path="/" element={<HowToUsePage />} />
-            <Route path="/how-to-use" element={<HowToUsePage />} />
+            <Route path="/" element={<AboutPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/how-to-use" element={<DocumentationPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             {/* Tool is rendered above and kept mounted; route exists to prevent catch-all redirect. */}
             <Route path="/tool" element={<></>} />

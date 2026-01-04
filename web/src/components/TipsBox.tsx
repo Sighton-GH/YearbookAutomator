@@ -18,8 +18,15 @@ export function TipsBox({ tips }: { tips: string[] }) {
     if (idx >= stableTips.length) setIdx(0);
   }, [idx, stableTips.length]);
 
-  if (!open) return null;
   if (!stableTips.length) return null;
+
+  if (!open) {
+    return (
+      <button type="button" className="tips-box-show" onClick={() => setOpen(true)} aria-label="Show tips">
+        Show tips
+      </button>
+    );
+  }
 
   return (
     <div className="tips-box" role="status" aria-label="Tips">

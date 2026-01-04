@@ -5,7 +5,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
 import { assetUrl, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
 import { formatServerMessage } from "../configFile";
-import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function QuotesStep({
   defaultQuote,
@@ -175,7 +175,7 @@ export function QuotesStep({
               picks the most quote-like cell and ignores obvious non-quotes like emails/URLs.
             </p>
 
-            {status && <p className="muted prewrap">{status}</p>}
+            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
 
             <div ref={sheetRef}>
               <UploadDropLabel
@@ -252,7 +252,7 @@ export function QuotesStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{status}</p>}
+            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

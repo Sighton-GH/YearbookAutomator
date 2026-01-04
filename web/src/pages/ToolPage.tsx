@@ -72,11 +72,22 @@ export function ToolPage() {
 
           <TipsBox
             tips={[
-              "Use crisp solid-color rectangles on the annotated template (name + quote boxes are required).",
-              "Save a config file occasionally so you can restore work after a refresh or long session.",
-              "If portraits are numbered, filenames like 001.jpg map to spreadsheet row 1.",
               "If template parsing fails, try raising the color tolerance or lowering min-area in Custom options.",
-              "For best results, run locally on localhost or HTTPS to avoid unencrypted uploads.",
+              "Clean template must be identical in size and layout to the annotated template for accurate slot detection.",
+              "Non-matching portrait filenames are skipped—check warnings to see which files weren't used.",
+              "Missing quotes are allowed; configure a default quote as a fallback for students without entries.",
+              "Reorder students by dragging cards in the preview step before rendering to customize your spreads.",
+              "Use the 'Prioritize names' toggle to match portraits by student names before falling back to numeric filenames.",
+              "Save a config file occasionally so you can restore work after a refresh or long session.",
+              "Config files preserve your template, mappings, quotes, and styling—upload them to skip redundant steps.",
+              "Reset all to start over; this deletes your workspace and clears all unsaved progress.",
+              "Crop baby photos to match the template cutout exactly—use the preview editor to adjust zoom and position.",
+              "Enable background removal to make baby photo edges transparent, then set a fill color for the cutout.",
+              "Center baby photos on faces automatically with the 'Center on face' toggle during rendering.",
+              "Baby photo fill color can be sampled directly from your clean template using the color picker.",
+              "Custom fonts are uploaded per session; upload TTF/OTF files or use system/default fonts.",
+              "Placement mode 'left then right' fills columns; 'alphabetical' sorts by last name across spreads.",
+              "Template parsing fails? Check that colored boxes are solid, contiguous, and at least 400px² in area.",
             ]}
           />
         </div>

@@ -1,12 +1,26 @@
 import { withBase } from "../baseUrl";
 
+const ASSETS = {
+  cover: withBase("assets/CoverImage1.webp"),
+};
+
 export function AboutPage() {
   return (
-    <main className="ss-page">
-      <section className="ss-cover">
+    <main>
+      <section className="ss-cover ss-hero" style={{ backgroundImage: `url(${ASSETS.cover})` }}>
         <div className="ss-cover-inner">
-          <h1 className="ss-cover-title">About</h1>
-          <p className="ss-cover-subtitle">Revolutionizing yearbook production with local-first automation.</p>
+          <div className="ss-hero-card">
+            <h1 className="ss-cover-title">Custom Yearbook Spread Automator</h1>
+            <p className="ss-cover-subtitle">
+              A guided tool to import your yearbook spread template, map student data and photos, then generate a
+              finished composite spread. Revolutionizing yearbook production with local-first automation.
+            </p>
+            <div className="ss-hero-actions">
+              <a className="ss-cta" href={withBase("tool")}>
+                Open the Tool
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 

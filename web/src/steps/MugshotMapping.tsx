@@ -7,7 +7,7 @@ import { ProgressBar } from "../components/ProgressBar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { formatServerMessage } from "../configFile";
-import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function MugshotMapping({
   workspaceId,
@@ -566,7 +566,7 @@ export function MugshotMapping({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{status}</p>}
+            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
