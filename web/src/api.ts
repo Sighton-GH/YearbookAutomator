@@ -83,7 +83,12 @@ export async function ingestSpreadsheet(
   workspaceId: string,
   sheet?: File | null,
   mugshotsZip?: File | null,
-  opts?: { namingPattern?: string; advancedNameMatch?: boolean }
+  opts?: {
+    namingPattern?: string;
+    advancedNameMatch?: boolean;
+    signal?: AbortSignal;
+    onProgress?: (progressPct: number) => void;
+  }
 ) {
   const form = new FormData();
   form.append("workspace_id", workspaceId);
@@ -92,7 +97,16 @@ export async function ingestSpreadsheet(
   if (opts?.namingPattern) form.append("naming_pattern", opts.namingPattern);
   if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/ingest", form, {
-    headers: { "Content-Type": "multipart/form-data" }
+    headers: { "Content-Type": "multipart/form-data" },
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
   });
   return data;
 }
@@ -139,6 +153,7 @@ export async function uploadBabyZip(
     removeBackground?: boolean;
     backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
+    onProgress?: (progressPct: number) => void;
   }
 ) {
   const form = new FormData();
@@ -151,7 +166,15 @@ export async function uploadBabyZip(
   if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/upload-baby-zip", form, {
     headers: { "Content-Type": "multipart/form-data" },
-    signal: opts?.signal
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
   });
   return data;
 }
@@ -160,7 +183,7 @@ export async function uploadQuotesSpreadsheet(
   workspaceId: string,
   people: PersonRecord[],
   quotesSheet?: File | null,
-  opts?: { advancedNameMatch?: boolean; signal?: AbortSignal }
+  opts?: { advancedNameMatch?: boolean; signal?: AbortSignal; onProgress?: (progressPct: number) => void }
 ) {
   const form = new FormData();
   form.append("workspace_id", workspaceId);
@@ -169,7 +192,15 @@ export async function uploadQuotesSpreadsheet(
   if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/upload-quotes-spreadsheet", form, {
     headers: { "Content-Type": "multipart/form-data" },
-    signal: opts?.signal
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
   });
   return data;
 }

@@ -1808,6 +1808,7 @@ export default function App({ embedded = false }: AppProps) {
               onMapped={setPeople}
               setStatus={setStatus}
               setLoading={setLoading}
+              setProgress={setProgress}
               loading={loading}
               people={people}
               setPeople={setPeople}
@@ -1830,6 +1831,7 @@ export default function App({ embedded = false }: AppProps) {
               workspaceId={workspaceId}
               setStatus={setStatus}
               setLoading={setLoading}
+              setProgress={setProgress}
               people={people}
               setPeople={setPeople}
               loading={loading}
@@ -1856,6 +1858,7 @@ export default function App({ embedded = false }: AppProps) {
               onBabyBackgroundColor={setBabyBackgroundColor}
               setStatus={setStatus}
               setLoading={setLoading}
+              setProgress={setProgress}
               people={people}
               setPeople={setPeople}
               loading={loading}
@@ -2287,6 +2290,7 @@ function MugshotMapping({
   onMapped,
   setStatus,
   setLoading,
+  setProgress,
   loading,
   people,
   setPeople,
@@ -2304,6 +2308,7 @@ function MugshotMapping({
   onMapped: (people: PersonRecord[]) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
+  setProgress: React.Dispatch<React.SetStateAction<number>>;
   loading: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
@@ -2329,6 +2334,9 @@ function MugshotMapping({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
 
+  const ingestProcessingEstimateSecondsRef = useRef<number>(10);
+  const didScrollForProgressRef = useRef(false);
+
   const didInitDefaultMugshot = useRef(false);
 
   useEffect(() => {
@@ -2346,6 +2354,16 @@ function MugshotMapping({
       }
     })();
   }, [workspaceId, defaultMugshotFilename, ensureDefaultMugshotEagle, onDefaultMugshotFilename]);
+
+  useEffect(() => {
+    if (!loading || progress <= 0) {
+      didScrollForProgressRef.current = false;
+      return;
+    }
+    if (didScrollForProgressRef.current) return;
+    didScrollForProgressRef.current = true;
+    scrollPastTopBar();
+  }, [loading, progress]);
 
   const insecureHttp =
     typeof window !== "undefined" &&
@@ -2371,9 +2389,34 @@ function MugshotMapping({
     setAdjustments({});
     setAdjustmentsResetNonce((n) => n + 1);
     setOriginalPeople(null);
+    setProgress(0);
     setLoading(true);
     setStatus("Mapping spreadsheet and portraits...");
     setWarnings([]);
+
+    const opStartMs = performance.now();
+    let uploadFinishedMs: number | null = null;
+    let processingInterval: number | null = null;
+    const clearProcessingInterval = () => {
+      if (processingInterval !== null) {
+        window.clearInterval(processingInterval);
+        processingInterval = null;
+      }
+    };
+    const startProcessingTicker = () => {
+      if (processingInterval !== null) return;
+      const startMs = uploadFinishedMs ?? performance.now();
+      processingInterval = window.setInterval(() => {
+        const elapsed = Math.max(0, (performance.now() - startMs) / 1000);
+        const est = Math.max(1, ingestProcessingEstimateSecondsRef.current);
+        const remaining = Math.max(0, est - elapsed);
+        setProgress((prev) => {
+          const pct = 90 + Math.min(9, Math.round((elapsed / est) * 9));
+          return Math.max(prev, Math.min(99, pct));
+        });
+        setStatus(`Processing portraits… ETA ${formatEtaSeconds(remaining)}`);
+      }, 250);
+    };
     try {
       const resp = await ingestSpreadsheet(
         workspaceId,
@@ -2382,21 +2425,54 @@ function MugshotMapping({
         {
           namingPattern: namingPattern || undefined,
           advancedNameMatch,
+          onProgress: (pct) => {
+            const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
+            const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
+
+            setProgress(Math.max(1, Math.min(90, Math.round(clamped * 0.9))));
+
+            if (clamped >= 100 && uploadFinishedMs === null) {
+              uploadFinishedMs = performance.now();
+              startProcessingTicker();
+              return;
+            }
+
+            let etaPart = "";
+            if (clamped >= 2 && elapsed >= 0.25) {
+              const etaSeconds = (elapsed * (100 - clamped)) / clamped;
+              if (Number.isFinite(etaSeconds)) etaPart = ` — ETA ${formatEtaSeconds(etaSeconds)}`;
+            }
+            setStatus(`Uploading portraits… ${clamped}%${etaPart}`);
+          },
         }
       );
+
+      clearProcessingInterval();
       onMapped(resp.people);
       setPeople(resp.people);
       setOriginalPeople(resp.people.map((p) => ({ ...p })));
       setWarnings(resp.warnings ?? []);
+
+      if (uploadFinishedMs !== null) {
+        const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
+        if (processingSeconds >= 0.25) {
+          ingestProcessingEstimateSecondsRef.current =
+            0.7 * ingestProcessingEstimateSecondsRef.current + 0.3 * processingSeconds;
+        }
+      }
+
       if (resp.warnings?.length) {
         setStatus(`People mapped with warnings: ${resp.warnings.join("; ")}`);
       } else {
         setStatus("People mapped. You can adjust later.");
       }
+      setProgress(100);
     } catch (err) {
+      clearProcessingInterval();
       console.error(err);
       setStatus("Mapping failed");
     } finally {
+      clearProcessingInterval();
       setLoading(false);
     }
   };
@@ -2867,6 +2943,7 @@ function QuotesStep({
   workspaceId,
   setStatus,
   setLoading,
+  setProgress,
   people,
   setPeople,
   loading,
@@ -2882,6 +2959,7 @@ function QuotesStep({
   workspaceId: string | null;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
+  setProgress: React.Dispatch<React.SetStateAction<number>>;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
   loading: boolean;
@@ -2897,10 +2975,23 @@ function QuotesStep({
   const [quotesWarnings, setQuotesWarnings] = useState<string[]>([]);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
 
+  const quotesProcessingEstimateSecondsRef = useRef<number>(6);
+  const didScrollForProgressRef = useRef(false);
+
   const insecureHttp =
     typeof window !== "undefined" &&
     !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) &&
     window.location.protocol !== "https:";
+
+  useEffect(() => {
+    if (!loading || progress <= 0) {
+      didScrollForProgressRef.current = false;
+      return;
+    }
+    if (didScrollForProgressRef.current) return;
+    didScrollForProgressRef.current = true;
+    scrollPastTopBar();
+  }, [loading, progress]);
 
   const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
@@ -2921,14 +3012,73 @@ function QuotesStep({
       setStatus("Warning: uploads over HTTP are not encrypted in transit.");
     }
     try {
+      setProgress(0);
       setLoading(true);
       setStatus("Uploading and matching quotes...");
       setQuotesWarnings([]);
-      const resp = await uploadQuotesSpreadsheet(workspaceId, people, quotesSheet, { advancedNameMatch });
+
+      const opStartMs = performance.now();
+      let uploadFinishedMs: number | null = null;
+      let processingInterval: number | null = null;
+      const clearProcessingInterval = () => {
+        if (processingInterval !== null) {
+          window.clearInterval(processingInterval);
+          processingInterval = null;
+        }
+      };
+      const startProcessingTicker = () => {
+        if (processingInterval !== null) return;
+        const startMs = uploadFinishedMs ?? performance.now();
+        processingInterval = window.setInterval(() => {
+          const elapsed = Math.max(0, (performance.now() - startMs) / 1000);
+          const est = Math.max(1, quotesProcessingEstimateSecondsRef.current);
+          const remaining = Math.max(0, est - elapsed);
+          setProgress((prev) => {
+            const pct = 90 + Math.min(9, Math.round((elapsed / est) * 9));
+            return Math.max(prev, Math.min(99, pct));
+          });
+          setStatus(`Processing quotes… ETA ${formatEtaSeconds(remaining)}`);
+        }, 250);
+      };
+
+      const resp = await uploadQuotesSpreadsheet(workspaceId, people, quotesSheet, {
+        advancedNameMatch,
+        onProgress: (pct) => {
+          const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
+          const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
+
+          setProgress(Math.max(1, Math.min(90, Math.round(clamped * 0.9))));
+
+          if (clamped >= 100 && uploadFinishedMs === null) {
+            uploadFinishedMs = performance.now();
+            startProcessingTicker();
+            return;
+          }
+
+          let etaPart = "";
+          if (clamped >= 2 && elapsed >= 0.25) {
+            const etaSeconds = (elapsed * (100 - clamped)) / clamped;
+            if (Number.isFinite(etaSeconds)) etaPart = ` — ETA ${formatEtaSeconds(etaSeconds)}`;
+          }
+          setStatus(`Uploading quotes… ${clamped}%${etaPart}`);
+        },
+      });
+
+      clearProcessingInterval();
       setPeople(resp.people);
       const warnings = resp.warnings ?? [];
       setQuotesWarnings(warnings);
       setStatus(warnings.length ? `Quotes spreadsheet processed with ${warnings.length} warnings` : "Quotes spreadsheet processed");
+
+      if (uploadFinishedMs !== null) {
+        const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
+        if (processingSeconds >= 0.25) {
+          quotesProcessingEstimateSecondsRef.current =
+            0.7 * quotesProcessingEstimateSecondsRef.current + 0.3 * processingSeconds;
+        }
+      }
+
+      setProgress(100);
     } catch (err) {
       console.error(err);
       setStatus("Quotes spreadsheet upload failed");
@@ -3086,6 +3236,7 @@ function BabyPhotosStep({
   onBabyBackgroundColor,
   setStatus,
   setLoading,
+  setProgress,
   people,
   setPeople,
   loading,
@@ -3105,6 +3256,7 @@ function BabyPhotosStep({
   onBabyBackgroundColor: (v: string) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
+  setProgress: React.Dispatch<React.SetStateAction<number>>;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
   loading: boolean;
@@ -3138,6 +3290,9 @@ function BabyPhotosStep({
   const [removeBgMessage, setRemoveBgMessage] = useState<string>("");
   const [dirtyEdits, setDirtyEdits] = useState(false);
   const [showDiscardWarning, setShowDiscardWarning] = useState(false);
+  const [babyBgPickActive, setBabyBgPickActive] = useState(false);
+  const [babyBgPickUrl, setBabyBgPickUrl] = useState<string | null>(null);
+  const [babyBgPickBusy, setBabyBgPickBusy] = useState(false);
   const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -3146,6 +3301,7 @@ function BabyPhotosStep({
   const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
   const didInitDefaultBaby = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const babyZipProcessingEstimateSecondsRef = useRef<number>(12);
   const processingSnapshotRef = useRef<{
     people: PersonRecord[];
     defaultBabyFilename: string | null;
@@ -3169,6 +3325,17 @@ function BabyPhotosStep({
     }
     return null;
   };
+
+  const rgbToHex = (r: number, g: number, b: number) => {
+    const to2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+    return `#${to2(r)}${to2(g)}${to2(b)}`;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
+    };
+  }, [babyBgPickUrl]);
 
   useEffect(() => {
     // If the default baby image changes, clear any cached thumbnail errors so the UI can retry.
@@ -3471,21 +3638,65 @@ function BabyPhotosStep({
     };
 
     setLoading(true);
+    setProgress(0);
     try {
       setStatus("Processing baby photos...");
 
       if (babyFile) {
-        setStatus("Processing default baby photo...");
+        const stageBase = 0;
+        const stageWeight = babyZip ? 20 : 100;
+        const opStartMs = performance.now();
+        setStatus("Uploading default baby…");
         const filename = await uploadImage(workspaceId, "baby", babyFile, {
           removeBackground: removeBabyBackground,
           backgroundMode: babyBackgroundMode,
           signal: controller.signal,
+          onProgress: (pct) => {
+            const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
+            const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
+            const overall = stageBase + (clamped * stageWeight) / 100;
+            setProgress(Math.max(1, Math.min(99, Math.round(overall))));
+            let etaPart = "";
+            if (clamped >= 2 && elapsed >= 0.25) {
+              const etaSeconds = (elapsed * (100 - clamped)) / clamped;
+              if (Number.isFinite(etaSeconds)) etaPart = ` — ETA ${formatEtaSeconds(etaSeconds)}`;
+            }
+            setStatus(`Uploading default baby… ${clamped}%${etaPart}`);
+          },
         });
         onDefaultBabyFilename(filename);
+        setProgress((prev) => Math.max(prev, babyZip ? 20 : 100));
       }
 
       if (babyZip) {
-        setStatus("Processing baby ZIP...");
+        const stageBase = babyFile ? 20 : 0;
+        const stageWeight = babyFile ? 80 : 100;
+        const opStartMs = performance.now();
+        let uploadFinishedMs: number | null = null;
+        let processingInterval: number | null = null;
+        const clearProcessingInterval = () => {
+          if (processingInterval !== null) {
+            window.clearInterval(processingInterval);
+            processingInterval = null;
+          }
+        };
+        const startProcessingTicker = () => {
+          if (processingInterval !== null) return;
+          const startMs = uploadFinishedMs ?? performance.now();
+          processingInterval = window.setInterval(() => {
+            const elapsed = Math.max(0, (performance.now() - startMs) / 1000);
+            const est = Math.max(1, babyZipProcessingEstimateSecondsRef.current);
+            const remaining = Math.max(0, est - elapsed);
+            setProgress((prev) => {
+              const pct = 90 + Math.min(9, Math.round((elapsed / est) * 9));
+              const weighted = stageBase + (pct * stageWeight) / 100;
+              return Math.max(prev, Math.min(99, Math.round(weighted)));
+            });
+            setStatus(`Processing baby ZIP… ETA ${formatEtaSeconds(remaining)}`);
+          }, 250);
+        };
+
+        setStatus("Uploading baby ZIP…");
         setBabyZipWarnings([]);
         const resp = await uploadBabyZip(workspaceId, people, babyZip, {
           advancedNameMatch,
@@ -3493,12 +3704,42 @@ function BabyPhotosStep({
           removeBackground: removeBabyBackground,
           backgroundMode: babyBackgroundMode,
           signal: controller.signal,
+          onProgress: (pct) => {
+            const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
+            const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
+            const weighted = stageBase + (clamped * stageWeight) / 100;
+            setProgress(Math.max(1, Math.min(90, Math.round(weighted * 0.9 + stageBase * 0.1))));
+
+            if (clamped >= 100 && uploadFinishedMs === null) {
+              uploadFinishedMs = performance.now();
+              startProcessingTicker();
+              return;
+            }
+
+            let etaPart = "";
+            if (clamped >= 2 && elapsed >= 0.25) {
+              const etaSeconds = (elapsed * (100 - clamped)) / clamped;
+              if (Number.isFinite(etaSeconds)) etaPart = ` — ETA ${formatEtaSeconds(etaSeconds)}`;
+            }
+            setStatus(`Uploading baby ZIP… ${clamped}%${etaPart}`);
+          },
         });
+
+        clearProcessingInterval();
         setPeople(resp.people);
         setBabyZipWarnings(resp.warnings ?? []);
+
+        if (uploadFinishedMs !== null) {
+          const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
+          if (processingSeconds >= 0.25) {
+            babyZipProcessingEstimateSecondsRef.current =
+              0.7 * babyZipProcessingEstimateSecondsRef.current + 0.3 * processingSeconds;
+          }
+        }
       }
 
       setStatus("Processing complete");
+      setProgress(100);
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === "AbortError";
       if (isAbort) {
@@ -3530,6 +3771,7 @@ function BabyPhotosStep({
     abortRef.current = null;
     processingSnapshotRef.current = null;
     setStatus("Processing cancelled");
+    setProgress(0);
   };
 
   return (
@@ -3669,6 +3911,75 @@ function BabyPhotosStep({
                   </div>
                 </div>
               )}
+
+              <div className="inline" style={{ gap: 10, alignItems: "center" }}>
+                <button
+                  type="button"
+                  disabled={!workspaceId || babyBgPickBusy}
+                  onClick={async () => {
+                    if (!workspaceId) {
+                      setStatus("Parse the template first");
+                      return;
+                    }
+                    if (babyBgPickActive) {
+                      setBabyBgPickActive(false);
+                      if (babyBgPickUrl) URL.revokeObjectURL(babyBgPickUrl);
+                      setBabyBgPickUrl(null);
+                      return;
+                    }
+
+                    try {
+                      setBabyBgPickBusy(true);
+                      setStatus("Loading clean template…");
+                      const resp = await fetch(`${templateCleanUrl(workspaceId)}&t=${Date.now()}`);
+                      if (!resp.ok) throw new Error("Could not load clean template");
+                      const blob = await resp.blob();
+                      const url = URL.createObjectURL(blob);
+                      setBabyBgPickUrl(url);
+                      setBabyBgPickActive(true);
+                      setStatus("Click the template preview to pick a colour");
+                    } catch (err) {
+                      console.error(err);
+                      setStatus("Could not load clean template");
+                    } finally {
+                      setBabyBgPickBusy(false);
+                    }
+                  }}
+                >
+                  {babyBgPickActive ? "Close picker" : "Pick from clean template"}
+                </button>
+                <span className="muted small">Samples a pixel from the clean template and sets the fill colour.</span>
+              </div>
+
+              {babyBgPickActive && babyBgPickUrl && (
+                <div className="stack" style={{ gap: 8 }}>
+                  <img
+                    className="template-pick"
+                    src={babyBgPickUrl}
+                    alt="Clean template (click to pick colour)"
+                    onClick={(e) => {
+                      const img = e.currentTarget;
+                      const rect = img.getBoundingClientRect();
+                      const rx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                      const ry = (e.clientY - rect.top) / Math.max(1, rect.height);
+                      const sx = Math.max(0, Math.min(img.naturalWidth - 1, Math.floor(rx * img.naturalWidth)));
+                      const sy = Math.max(0, Math.min(img.naturalHeight - 1, Math.floor(ry * img.naturalHeight)));
+
+                      const canvas = document.createElement("canvas");
+                      canvas.width = 1;
+                      canvas.height = 1;
+                      const ctx = canvas.getContext("2d");
+                      if (!ctx) return;
+                      ctx.drawImage(img, sx, sy, 1, 1, 0, 0, 1, 1);
+                      const data = ctx.getImageData(0, 0, 1, 1).data;
+                      const hex = rgbToHex(data[0], data[1], data[2]);
+                      onBabyBackgroundColor(hex);
+                      setStatus(`Picked ${hex}`);
+                    }}
+                  />
+                  <div className="muted small">Tip: click a background pixel, not a photo subject.</div>
+                </div>
+              )}
             </div>
 
             {removeBabyBackground && (
@@ -3715,12 +4026,14 @@ function BabyPhotosStep({
               </details>
             )}
 
-            <div className="actions mapping-actions">
-              <button type="button" onClick={handleStop} disabled={!loading}>
-                Stop
-              </button>
-              <button type="button" className="primary" onClick={handleProcess} disabled={loading}>
-                Process
+            <div className="actions mapping-actions baby-process-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={loading ? handleStop : handleProcess}
+                disabled={!loading && !babyFile && !babyZip}
+              >
+                {loading ? "Stop" : "Process"}
               </button>
             </div>
           </div>
@@ -3927,7 +4240,7 @@ function BabyPhotosStep({
                     setDirtyEdits(true);
                   }}
                   onCropComplete={(_, areaPixels) => setCroppedAreaPixels(areaPixels)}
-                  objectFit="contain"
+                  objectFit="cover"
                   minZoom={0.5}
                   maxZoom={3}
                   restrictPosition={false}
