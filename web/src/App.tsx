@@ -596,6 +596,7 @@ type PersistedSessionV1 = {
   defaultQuote: string;
   defaultBabyFilename: string | null;
   babyBackgroundColor?: string;
+  centerBabyOnFace?: boolean;
   defaultMugshotFilename?: string | null;
   nameFontFamily: string;
   nameFontWeight: FontWeight;
@@ -685,6 +686,7 @@ export default function App({ embedded = false }: AppProps) {
   const [defaultQuote, setDefaultQuote] = useState("404 quote not found");
   const [defaultBabyFilename, setDefaultBabyFilename] = useState<string | null>(null);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
+  const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
   const [defaultMugshotFilename, setDefaultMugshotFilename] = useState<string | null>(null);
   const [nameFontFamily, setNameFontFamily] = useState("Inter, system-ui, sans-serif");
   const [nameFontWeight, setNameFontWeight] = useState<FontWeight>("normal");
@@ -869,6 +871,7 @@ export default function App({ embedded = false }: AppProps) {
     setDefaultQuote("404 quote not found");
     setDefaultBabyFilename(null);
     setBabyBackgroundColor("");
+    setCenterBabyOnFace(false);
     setDefaultMugshotFilename(null);
     setNameFontFamily("Inter, system-ui, sans-serif");
     setNameFontWeight("normal");
@@ -974,6 +977,7 @@ export default function App({ embedded = false }: AppProps) {
         setDefaultQuote(saved.defaultQuote ?? "404 quote not found");
         setDefaultBabyFilename(saved.defaultBabyFilename ?? null);
         setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+        setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         setDefaultMugshotFilename(saved.defaultMugshotFilename ?? null);
         setNameFontFamily(saved.nameFontFamily ?? "Inter, system-ui, sans-serif");
         setNameFontWeight((saved.nameFontWeight as FontWeight) ?? "normal");
@@ -1041,6 +1045,7 @@ export default function App({ embedded = false }: AppProps) {
       defaultQuote,
       defaultBabyFilename,
       babyBackgroundColor,
+      centerBabyOnFace,
       defaultMugshotFilename,
       nameFontFamily,
       nameFontWeight,
@@ -1071,6 +1076,7 @@ export default function App({ embedded = false }: AppProps) {
     defaultQuote,
     defaultBabyFilename,
     babyBackgroundColor,
+    centerBabyOnFace,
     defaultMugshotFilename,
     nameFontFamily,
     nameFontWeight,
@@ -1230,6 +1236,7 @@ export default function App({ embedded = false }: AppProps) {
         quote_all_caps: quoteAllCaps,
         quote_align: quoteAlign,
         baby_background_color: skipBabyPhotos ? undefined : (babyBackgroundColor.trim() ? babyBackgroundColor.trim() : undefined),
+        center_baby_on_face: skipBabyPhotos ? undefined : centerBabyOnFace,
       });
 
       const jobId = gen.jobId;
@@ -1856,6 +1863,8 @@ export default function App({ embedded = false }: AppProps) {
               onDefaultBabyFilename={setDefaultBabyFilename}
               babyBackgroundColor={babyBackgroundColor}
               onBabyBackgroundColor={setBabyBackgroundColor}
+              centerBabyOnFace={centerBabyOnFace}
+              onCenterBabyOnFace={setCenterBabyOnFace}
               setStatus={setStatus}
               setLoading={setLoading}
               setProgress={setProgress}
@@ -3242,6 +3251,8 @@ function BabyPhotosStep({
   onDefaultBabyFilename,
   babyBackgroundColor,
   onBabyBackgroundColor,
+  centerBabyOnFace,
+  onCenterBabyOnFace,
   setStatus,
   setLoading,
   setProgress,
@@ -3262,6 +3273,8 @@ function BabyPhotosStep({
   onDefaultBabyFilename: (v: string | null) => void;
   babyBackgroundColor: string;
   onBabyBackgroundColor: (v: string) => void;
+  centerBabyOnFace: boolean;
+  onCenterBabyOnFace: (v: boolean) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
   setProgress: React.Dispatch<React.SetStateAction<number>>;
@@ -4077,6 +4090,13 @@ function BabyPhotosStep({
                 />
               </div>
             )}
+
+            <ToggleSwitch
+              checked={centerBabyOnFace}
+              onChange={onCenterBabyOnFace}
+              label="Center baby photo on face"
+              description="During rendering, tries to detect a face in each baby photo and center it in the cutout. If background removal is enabled, centering uses the background-removed image."
+            />
 
             <div className="stack" style={{ gap: 8 }}>
               <ToggleSwitch

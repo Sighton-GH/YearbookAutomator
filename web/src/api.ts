@@ -262,6 +262,7 @@ export async function generateSpread(params: {
   quote_all_caps?: boolean;
   quote_align?: "left" | "center";
   baby_background_color?: string | null;
+  center_baby_on_face?: boolean;
 }) {
   const { data } = await axios.post<{
     job_id: string;

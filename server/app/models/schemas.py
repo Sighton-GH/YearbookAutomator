@@ -108,6 +108,11 @@ class GenerationRequest(BaseModel):
         description="Optional hex colour (e.g. #ffffff). If provided and a baby photo has transparency, transparent pixels are filled with this colour before pasting.",
     )
 
+    center_baby_on_face: bool = Field(
+        default=False,
+        description="If true, attempts to detect a face in each baby photo and center the crop on it when fitting into the baby cutout.",
+    )
+
     # Placement controls (optional; keeps backwards compatibility with clients that
     # precompute per-person slots and just want zip(people, slots)).
     auto_place: bool = Field(

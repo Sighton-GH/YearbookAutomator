@@ -198,6 +198,101 @@ def _fit_image(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
     return resized.crop((x0, y0, x0 + target_w, y0 + target_h))
 
 
+def _fit_image_with_focus(img: Image.Image, target_w: int, target_h: int, focus_x: float, focus_y: float) -> Image.Image:
+    """Scale-to-fill then crop so (focus_x, focus_y) ends up near the center.
+
+    focus_x/focus_y are in *original image* pixel coordinates.
+    """
+    if img.width == 0 or img.height == 0:
+        return img
+    scale = max(target_w / img.width, target_h / img.height)
+    new_w = max(1, int(img.width * scale))
+    new_h = max(1, int(img.height * scale))
+    resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Map focus point into resized coordinates.
+    cx = float(focus_x) * scale
+    cy = float(focus_y) * scale
+    x0 = int(round(cx - target_w / 2))
+    y0 = int(round(cy - target_h / 2))
+
+    # Clamp crop box to image bounds.
+    x0 = max(0, min(resized.width - target_w, x0))
+    y0 = max(0, min(resized.height - target_h, y0))
+    return resized.crop((x0, y0, x0 + target_w, y0 + target_h))
+
+
+def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
+    """Best-effort face detection. Returns the center of the largest detected face."""
+    try:
+        import numpy as np
+        import cv2  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        rgb = img_rgb.convert("RGB")
+    except Exception:
+        return None
+
+    # Downscale for speed; map coordinates back to original.
+    max_dim = max(rgb.width, rgb.height)
+    scale = 1.0
+    if max_dim > 900:
+        scale = 900.0 / float(max_dim)
+        new_size = (max(1, int(rgb.width * scale)), max(1, int(rgb.height * scale)))
+        rgb_small = rgb.resize(new_size, Image.BILINEAR)
+    else:
+        rgb_small = rgb
+
+    arr = np.array(rgb_small)
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        return None
+
+    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+    try:
+        gray = cv2.equalizeHist(gray)
+    except Exception:
+        pass
+
+    cascade_paths = []
+    try:
+        base = getattr(cv2, "data", None)
+        if base is not None and getattr(base, "haarcascades", None):
+            cascade_paths = [
+                str(base.haarcascades) + "haarcascade_frontalface_alt2.xml",
+                str(base.haarcascades) + "haarcascade_frontalface_default.xml",
+            ]
+    except Exception:
+        cascade_paths = []
+
+    faces = []
+    for path in cascade_paths:
+        try:
+            clf = cv2.CascadeClassifier(path)
+            if clf.empty():
+                continue
+            found = clf.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+            if found is not None and len(found) > 0:
+                faces = found
+                break
+        except Exception:
+            continue
+
+    if faces is None or len(faces) == 0:
+        return None
+
+    # Choose the largest face.
+    best = max(faces, key=lambda r: float(r[2]) * float(r[3]))
+    x, y, w, h = [float(v) for v in best]
+    cx_small = x + w / 2
+    cy_small = y + h / 2
+
+    # Map from small image coords back to original image coords.
+    inv = 1.0 / scale
+    return (cx_small * inv, cy_small * inv)
+
+
 def _parse_hex_rgb(value: str | None) -> tuple[int, int, int] | None:
     raw = (value or "").strip()
     if not raw:
@@ -360,12 +455,16 @@ def _paste_image(
     kind: str,
     mask_shape: str | None = None,
     alpha_mask: Image.Image | None = None,
+    focus_point: tuple[float, float] | None = None,
 ) -> None:
     if kind == "mugshot":
         target = box.mugshot
     else:
         target = box.baby_photo
-    fitted = _fit_image(overlay, target.width, target.height)
+    if kind == "baby" and focus_point is not None:
+        fitted = _fit_image_with_focus(overlay, target.width, target.height, focus_point[0], focus_point[1])
+    else:
+        fitted = _fit_image(overlay, target.width, target.height)
     if kind == "baby" and alpha_mask is not None:
         base.paste(fitted, (target.x, target.y), alpha_mask)
     elif kind == "baby" and mask_shape == "ellipse":
@@ -414,6 +513,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     baby_shape_cache: dict[int, str] = {}
     baby_mask_cache: dict[str, Image.Image | None] = {}
+    baby_face_center_cache: dict[str, tuple[float, float] | None] = {}
 
     effective_people = payload.people
     effective_slots = payload.slots
@@ -431,6 +531,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     allowed_image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
     baby_bg_rgb = _parse_hex_rgb(getattr(payload, "baby_background_color", None))
+    center_baby_on_face = bool(getattr(payload, "center_baby_on_face", False))
 
     def _looks_like_image(path: Path) -> bool:
         # Extension check is a fast guard, but we still rely on Pillow open errors as truth.
@@ -481,6 +582,12 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             if b_img is None:
                 continue
 
+            focus: tuple[float, float] | None = None
+            if center_baby_on_face:
+                if baby_filename not in baby_face_center_cache:
+                    baby_face_center_cache[baby_filename] = _detect_face_center(b_img)
+                focus = baby_face_center_cache[baby_filename]
+
             # Prefer exact mask saved during template parsing (supports triangles/rounded-rectangles/circles).
             key = f"{slot.baby_photo.x}_{slot.baby_photo.y}_{slot.baby_photo.width}_{slot.baby_photo.height}"
             if key not in baby_mask_cache:
@@ -492,7 +599,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 shape = _detect_baby_slot_shape(template_ref, slot.baby_photo)
                 baby_shape_cache[idx] = shape
 
-            _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask)
+            _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
             break
 
         quote = person.quote or payload.default_quote or ""
