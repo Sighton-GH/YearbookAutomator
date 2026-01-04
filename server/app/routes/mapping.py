@@ -12,7 +12,7 @@ import pandas as pd
 
 import mimetypes
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.spreadsheet import ingest_spreadsheet
@@ -449,6 +449,7 @@ async def remove_background_preview_result(job_id: str):
 
 @router.post("/upload-baby-zip", response_model=SpreadsheetPreview)
 async def upload_baby_zip(
+    request: Request,
     workspace_id: str = Form(...),
     people_json: str = Form(...),
     baby_zip: UploadFile | None = File(None),
@@ -493,8 +494,15 @@ async def upload_baby_zip(
 
     assigned: set[int] = set()
 
+    async def _abort_if_disconnected() -> None:
+        # When the UI's Stop button is pressed, the browser aborts the request.
+        # FastAPI can observe the disconnect; stop quickly to avoid wasted CPU.
+        if await request.is_disconnected():
+            raise HTTPException(status_code=499, detail="Client disconnected")
+
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for member in zf.namelist():
+            await _abort_if_disconnected()
             if member.endswith("/"):
                 continue
             filename_only = Path(member).name
@@ -539,10 +547,12 @@ async def upload_baby_zip(
                         f"Skipped baby photo '{filename_only}' (multiple files match person {person_index} by name)."
                     )
                     continue
+                await _abort_if_disconnected()
                 with zf.open(member) as src:
                     content = src.read()
                 out_name = filename_only
                 if remove_background:
+                    await _abort_if_disconnected()
                     try:
                         content = remove_background_bytes(content, mode=background_mode)
                         out_name = background_removed_filename(filename_only, person_index=person_index)
@@ -551,6 +561,7 @@ async def upload_baby_zip(
                             f"Skipped baby photo '{filename_only}' for person {person_index} (background removal failed: {exc})."
                         )
                         continue
+                    await _abort_if_disconnected()
 
                 out_path = target_dir / out_name
                 out_path.write_bytes(content)

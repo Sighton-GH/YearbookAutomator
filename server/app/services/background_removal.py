@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import io
+import os
 import threading
 from pathlib import Path
 from typing import Literal
@@ -41,14 +43,30 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
             _rembg_session = new_session("isnet-general-use")
 
     # alpha_matting improves edges (hair, soft boundaries) but is slower.
-    out = remove(
-        image_bytes,
-        session=_rembg_session,
-        alpha_matting=True,
-        alpha_matting_foreground_threshold=240,
-        alpha_matting_background_threshold=10,
-        alpha_matting_erode_size=10,
-    )
+    # NOTE: pymatting (used by rembg alpha-matting) prints PERFORMANCE WARNING
+    # messages directly to stdout; suppress those by default to avoid spamming
+    # the server logs.
+    verbose = os.getenv("YMGA_REMBG_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
+    with _rembg_lock:
+        if verbose:
+            out = remove(
+                image_bytes,
+                session=_rembg_session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=10,
+            )
+        else:
+            with contextlib.redirect_stdout(io.StringIO()):
+                out = remove(
+                    image_bytes,
+                    session=_rembg_session,
+                    alpha_matting=True,
+                    alpha_matting_foreground_threshold=240,
+                    alpha_matting_background_threshold=10,
+                    alpha_matting_erode_size=10,
+                )
     if not isinstance(out, (bytes, bytearray)):
         raise ValueError("Ultra complex background removal failed")
     return bytes(out)
