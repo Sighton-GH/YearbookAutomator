@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { parseTemplate, type RawParseDebug, type TemplateSlots } from "../api";
@@ -64,6 +64,10 @@ export function TemplateParsing({
   setMinArea: (n: number) => void;
   onRawDebug?: (debug: RawParseDebug | null) => void;
 }) {
+  const [showMissing, setShowMissing] = useState(false);
+  const annotatedRef = useRef<HTMLDivElement | null>(null);
+  const cleanRef = useRef<HTMLDivElement | null>(null);
+
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -96,9 +100,21 @@ export function TemplateParsing({
     }
   }, [cleanPreview, annotatedPreview, onPreviewChange]);
 
+  const scrollTo = (el: HTMLElement | null | undefined) => {
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const handleParse = async () => {
-    if ((!annotated || !clean) && !workspaceId) {
-      setStatus("Select both annotated and clean templates");
+    const missingAnnotated = !workspaceId && !annotated;
+    const missingClean = !workspaceId && !clean;
+    if (missingAnnotated || missingClean) {
+      setShowMissing(true);
+      const missing: string[] = [];
+      if (missingAnnotated) missing.push("Annotated template (.png)");
+      if (missingClean) missing.push("Clean template (.png)");
+      setStatus(`Missing required file(s): ${missing.join(", ")}`);
+      scrollTo((missingAnnotated ? annotatedRef.current : cleanRef.current) ?? null);
       return;
     }
     setLoading(true);
@@ -110,6 +126,8 @@ export function TemplateParsing({
         babyColor: babyColor || undefined,
         nameColor: nameColor || undefined,
         quoteColor: quoteColor || undefined,
+        disableBabyPhotos: skipBabyPhotos,
+        disableQuotes: skipQuotes,
         minArea,
       });
       onParsed(resp);
@@ -118,41 +136,73 @@ export function TemplateParsing({
     } catch (err: any) {
       console.error(err);
       const detail = err?.response?.data?.detail || err?.message || "Template parsing failed";
-      setStatus(`Template parsing failed: ${detail}`);
+      setStatus(`Template parsing failed.\nserver message:\n${detail}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const missingAnnotatedUi = showMissing && !workspaceId && !annotated;
+  const missingCleanUi = showMissing && !workspaceId && !clean;
 
   return (
     <div className="stack">
       <p className="muted">
         Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.
       </p>
-      <UploadDropLabel accept="image/png" disabled={loading} onFile={(file) => onAnnotatedChange(file)}>
-        <span>Annotated template (.png)</span>
-        <input
-          type="file"
+      <div ref={annotatedRef}>
+        <UploadDropLabel
           accept="image/png"
-          onChange={(e) => {
-            const file = e.target.files?.[0] ?? null;
+          disabled={loading}
+          className={missingAnnotatedUi ? "invalid" : undefined}
+          onFile={(file) => {
+            setShowMissing(false);
             onAnnotatedChange(file);
           }}
-        />
-        {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
-      </UploadDropLabel>
-      <UploadDropLabel accept="image/png" disabled={loading} onFile={(file) => onCleanChange(file)}>
-        <span>Clean template (.png)</span>
-        <input
-          type="file"
+        >
+          <span>
+            {missingAnnotatedUi ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+            Annotated template (.png)
+          </span>
+          <input
+            type="file"
+            accept="image/png"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setShowMissing(false);
+              onAnnotatedChange(file);
+            }}
+          />
+          {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
+        </UploadDropLabel>
+      </div>
+
+      <div ref={cleanRef}>
+        <UploadDropLabel
           accept="image/png"
-          onChange={(e) => {
-            const file = e.target.files?.[0] ?? null;
+          disabled={loading}
+          className={missingCleanUi ? "invalid" : undefined}
+          onFile={(file) => {
+            setShowMissing(false);
             onCleanChange(file);
           }}
-        />
-        {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
-      </UploadDropLabel>
+        >
+          <span>
+            {missingCleanUi ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+            Clean template (.png)
+          </span>
+          <input
+            type="file"
+            accept="image/png"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setShowMissing(false);
+              onCleanChange(file);
+            }}
+          />
+          {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
+        </UploadDropLabel>
+      </div>
       <label className="field">
         <span>People per spread (max slots to keep)</span>
         <input
@@ -178,14 +228,14 @@ export function TemplateParsing({
           <ToggleSwitch
             checked={skipQuotes}
             onChange={onSkipQuotes}
-            label="Skip quotes"
-            description="Hides the Quotes step. Quotes are ignored during rendering (no defaults)."
+            label="Disable quotes (skip detection + step)"
+            description="The template parser will not look for quote boxes, the Quotes step is skipped, and quotes are not rendered."
           />
           <ToggleSwitch
             checked={skipBabyPhotos}
             onChange={onSkipBabyPhotos}
-            label="Skip baby photos"
-            description="Hides the Baby Photos step. Baby photos are ignored during rendering (no defaults)."
+            label="Disable baby photos (skip detection + step)"
+            description="The template parser will not look for baby cutouts, the Baby Photos step is skipped, and baby photos are not rendered."
           />
 
           <div className="color-overrides">

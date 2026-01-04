@@ -48,6 +48,10 @@ export function describeApiError(err: unknown, fallback: string): string {
   return fallback;
 }
 
+export function formatServerMessage(err: unknown, fallback = "No server message provided."): string {
+  return `server message:\n${describeApiError(err, fallback)}`;
+}
+
 export function parseConfigText<TSession>(
   text: string,
   isSession: (x: unknown) => x is TSession,

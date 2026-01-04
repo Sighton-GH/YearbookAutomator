@@ -42,6 +42,7 @@ import {
   readConfigFile,
   safeIsoForFilename,
   describeApiError,
+  formatServerMessage,
 } from "./configFile";
 import {
   computeImportNeeds,
@@ -58,6 +59,7 @@ import { FontPick } from "./components/FontPick";
 import { ProgressBar } from "./components/ProgressBar";
 import { SlotEditor } from "./components/SlotEditor";
 import { TemplatePreview } from "./components/TemplatePreview";
+import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
 import { formatEtaSeconds, scrollPastTopBar } from "./utils/ui";
@@ -244,6 +246,8 @@ export default function App({ embedded = false }: AppProps) {
   const [availableFonts, setAvailableFonts] = useState<{ name: string; filename: string; source?: string }[]>([]);
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [dismissedToolMessageIds, setDismissedToolMessageIds] = useState<Record<string, true>>({});
+  const [showSaveConfigReminder, setShowSaveConfigReminder] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [outputPaths, setOutputPaths] = useState<string[]>([]);
   const [outputNonce, setOutputNonce] = useState(0);
@@ -382,13 +386,45 @@ export default function App({ embedded = false }: AppProps) {
     handleReset();
   };
 
+  // Quotes/baby photos can be disabled entirely; in that case we skip parsing those slots
+  // and also skip the related steps.
   const isStepSkipped = (stepIndex: number) => {
-    if (stepIndex === 3) return skipQuotes;
-    if (stepIndex === 4) return skipBabyPhotos;
+    if (stepIndex === 3) return Boolean(skipQuotes);
+    if (stepIndex === 4) return Boolean(skipBabyPhotos);
     return false;
   };
 
+  const clampStep = (n: number) => Math.max(0, Math.min(steps.length - 1, n));
+
+  const nearestNonSkipped = (target: number, direction: 1 | -1) => {
+    let t = clampStep(target);
+    for (let i = 0; i < steps.length; i++) {
+      if (!isStepSkipped(t)) return t;
+      t = clampStep(t + direction);
+    }
+    return clampStep(target);
+  };
+
+  const nextStepFrom = (from: number) => {
+    if (from === 2) {
+      if (skipQuotes) return skipBabyPhotos ? 5 : 4;
+      return 3;
+    }
+    if (from === 3) return skipBabyPhotos ? 5 : 4;
+    return nearestNonSkipped(from + 1, 1);
+  };
+
+  const prevStepFrom = (from: number) => {
+    if (from === 5) {
+      if (skipBabyPhotos) return skipQuotes ? 2 : 3;
+      return 4;
+    }
+    if (from === 4) return skipQuotes ? 2 : 3;
+    return nearestNonSkipped(from - 1, -1);
+  };
+
   const stepReady = (stepIndex: number) => {
+    if (isStepSkipped(stepIndex)) return false;
     if (stepIndex <= 0) return true;
     if (stepIndex === 1) return Boolean(workspaceId && slots.length);
     if (stepIndex === 2) return Boolean(workspaceId && slots.length);
@@ -406,8 +442,9 @@ export default function App({ embedded = false }: AppProps) {
       return;
     }
     if (isStepSkipped(target)) {
-      setStatus("That step is currently skipped (change this in Import Template)");
-      return;
+      // If the user tries to jump to a disabled step, redirect to the nearest available step.
+      const direction: 1 | -1 = target >= activeStep ? 1 : -1;
+      target = nearestNonSkipped(target, direction);
     }
     if (!stepReady(target)) {
       setStatus("Complete the previous steps before jumping ahead");
@@ -415,6 +452,12 @@ export default function App({ embedded = false }: AppProps) {
     }
     setActiveStep(target);
   };
+
+  useEffect(() => {
+    if (!isStepSkipped(activeStep)) return;
+    setActiveStep(nearestNonSkipped(activeStep, 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, skipBabyPhotos, skipQuotes]);
 
   const handleReset = () => {
     const toDelete = workspaceId;
@@ -516,7 +559,7 @@ export default function App({ embedded = false }: AppProps) {
       forceAlphabetical,
       defaultQuote,
       defaultBabyFilename,
-      babyIngest,
+      babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
       babyBackgroundColor,
       centerBabyOnFace,
@@ -659,7 +702,7 @@ export default function App({ embedded = false }: AppProps) {
       setConfigToImport(cfg);
       setConfigImportStatus("Config loaded. Upload the annotated template to begin.");
     } catch (err) {
-      setConfigImportError(describeApiError(err, "Could not read config"));
+      setConfigImportError(`Could not read config.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
     } finally {
       setConfigImportBusy(false);
@@ -690,7 +733,7 @@ export default function App({ embedded = false }: AppProps) {
       // Apply config session immediately (so the user lands back on their stage).
       applyImportedSession(s, newWs);
     } catch (err) {
-      setConfigImportError(describeApiError(err, "Template parsing failed"));
+      setConfigImportError(`Template parsing failed.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
       setImportTemplateDone(false);
       setImportWorkspaceId(null);
@@ -723,7 +766,7 @@ export default function App({ embedded = false }: AppProps) {
 
       setImportPortraitsDone(true);
     } catch (err) {
-      setConfigImportError(describeApiError(err, "Portrait ingest failed"));
+      setConfigImportError(`Portrait ingest failed.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
       setImportPortraitsDone(false);
     } finally {
@@ -751,7 +794,7 @@ export default function App({ embedded = false }: AppProps) {
       setPeople(s.people ?? []);
       setImportBabyDone(true);
     } catch (err) {
-      setConfigImportError(describeApiError(err, "Baby zip ingest failed"));
+      setConfigImportError(`Baby zip ingest failed.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
       setImportBabyDone(false);
     } finally {
@@ -1151,16 +1194,7 @@ export default function App({ embedded = false }: AppProps) {
     peoplePerSpread,
   ]);
 
-  // If the user enables skipping while currently on that step, jump ahead.
-  useEffect(() => {
-    if (activeStep === 3 && skipQuotes) {
-      setActiveStep(skipBabyPhotos ? 5 : 4);
-      return;
-    }
-    if (activeStep === 4 && skipBabyPhotos) {
-      setActiveStep(5);
-    }
-  }, [activeStep, skipQuotes, skipBabyPhotos]);
+  // Note: quotes/baby steps are not skippable. Disabling only affects rendering.
 
   useEffect(() => {
     const loadFonts = async () => {
@@ -1204,12 +1238,80 @@ export default function App({ embedded = false }: AppProps) {
   const renderFailedMessage = useMemo(() => {
     const s = (status || "").trim();
     if (!s) return null;
-    if (s.startsWith("Generation failed:")) return s;
-    if (s === "Generation failed") return s;
+    if (s.startsWith("Generation failed")) return s;
     if (s.startsWith("Preview generation failed")) return s;
-    if (s === "Generation polling failed") return s;
+    if (s.startsWith("Generation polling failed")) return s;
     return null;
   }, [status]);
+
+  // Gentle reminder to export a config after the session has been active for a while.
+  useEffect(() => {
+    if (!workspaceId) return;
+    setShowSaveConfigReminder(false);
+    const t = window.setTimeout(() => {
+      setShowSaveConfigReminder(true);
+    }, 10 * 60 * 1000);
+    return () => window.clearTimeout(t);
+  }, [workspaceId]);
+
+  const toolMessages: ToolMessage[] = useMemo(() => {
+    const out: ToolMessage[] = [];
+
+    if (insecureHttp) {
+      out.push({
+        id: "insecure-http-uploads",
+        kind: "warning",
+        title: "Warning: Unencrypted uploads (HTTP)",
+        body:
+          "You are not on HTTPS. Uploads may be visible to others on the network while uploading. Use HTTPS or run on localhost if possible.",
+        actions: (
+          <ToggleSwitch
+            checked={allowInsecureUploads}
+            onChange={setAllowInsecureUploads}
+            label="I understand (continue over HTTP)"
+          />
+        ),
+      });
+
+      if (activeStep === 6) {
+        out.push({
+          id: "insecure-http-results",
+          kind: "warning",
+          title: "Warning: Unencrypted results (HTTP)",
+          body:
+            "You are not on HTTPS. Results are not encrypted in transit and may be visible to others on the network. Use HTTPS or run on localhost if possible.",
+          actions: (
+            <ToggleSwitch
+              checked={allowInsecureReviewResults}
+              onChange={setAllowInsecureReviewResults}
+              label="I understand (show results over HTTP)"
+            />
+          ),
+        });
+      }
+    }
+
+    if (showSaveConfigReminder) {
+      out.push({
+        id: "save-config-reminder",
+        kind: "warning",
+        title: "Reminder: save a config file",
+        body: "If this session has been open for a while, save a config file periodically so you can restore your progress after a refresh or unexpected session cleanup.",
+        dismissible: true,
+      });
+    }
+
+    // Show critical generation errors prominently.
+    if (renderFailedMessage) {
+      out.push({
+        id: "generation-failed",
+        kind: "error",
+        title: "Generation error",
+        body: renderFailedMessage,
+      });
+    }
+    return out.filter((m) => !dismissedToolMessageIds[m.id]);
+  }, [activeStep, allowInsecureReviewResults, allowInsecureUploads, dismissedToolMessageIds, insecureHttp, renderFailedMessage, showSaveConfigReminder]);
 
   const slotNumberToIndex = useMemo(() => {
     return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);
@@ -1355,7 +1457,7 @@ export default function App({ embedded = false }: AppProps) {
           setStatus(parts.join(" — "));
 
           if (statusResp.error) {
-            setStatus(`Generation failed: ${statusResp.error}`);
+            setStatus(`Generation failed.\nserver message:\n${statusResp.error}`);
             setLoading(false);
             return null;
           }
@@ -1369,7 +1471,7 @@ export default function App({ embedded = false }: AppProps) {
           await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           console.error(err);
-          setStatus("Generation polling failed");
+          setStatus(`Generation polling failed.\n${formatServerMessage(err)}`);
           setLoading(false);
           return null;
         }
@@ -1378,8 +1480,9 @@ export default function App({ embedded = false }: AppProps) {
       // Unreachable, but keeps TS happy about return type.
       return null;
     } catch (err) {
-      setStatus(opts.outputFilename ? "Preview generation failed" : "Generation failed");
       console.error(err);
+      const base = opts.outputFilename ? "Preview generation failed" : "Generation failed";
+      setStatus(`${base}.\n${formatServerMessage(err)}`);
       setLoading(false);
       return null;
     }
@@ -1452,9 +1555,7 @@ export default function App({ embedded = false }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, workspaceId, templateId, people.length, slots.length]);
 
-  const stepsForNav = useMemo(() => {
-    return steps.map((label, idx) => (isStepSkipped(idx) ? `${label} (skipped)` : label));
-  }, [skipQuotes, skipBabyPhotos]);
+  const stepsForNav = useMemo(() => steps, []);
 
   const stepsNav = (
     <div className={clsx("steps", embedded && "fullwidth")} aria-label="Tool steps">
@@ -1473,9 +1574,7 @@ export default function App({ embedded = false }: AppProps) {
           }}
           aria-disabled={!stepReady(idx) || loading}
           title={
-            isStepSkipped(idx)
-              ? "Skipped (change this in Import Template)"
-              : !stepReady(idx)
+            !stepReady(idx)
                 ? "Complete earlier steps first"
                 : loading
                   ? "Busy"
@@ -1558,8 +1657,8 @@ export default function App({ embedded = false }: AppProps) {
               </button>
             </div>
             <div className="modal-body">
-              {configImportError && <div className="callout danger">{configImportError}</div>}
-              {configImportStatus && <div className="muted small">{configImportStatus}</div>}
+              {configImportError && <div className="callout danger prewrap">{configImportError}</div>}
+              {configImportStatus && <div className="muted small prewrap">{configImportStatus}</div>}
 
               {!configToImport ? (
                 <label className="field">
@@ -1782,16 +1881,13 @@ export default function App({ embedded = false }: AppProps) {
 
       <div className="page">
 
-      {activeStep !== 7 && renderFailedMessage && (
-        <div className="panel" role="alert" aria-live="assertive" style={{ marginBottom: 16 }}>
-          <div className="inline" style={{ gap: 10 }}>
-            <span aria-hidden="true">🛑</span>
-            <div>
-              <strong>{renderFailedMessage}</strong>
-            </div>
-          </div>
-        </div>
-      )}
+      <ToolMessages
+        messages={toolMessages}
+        onDismiss={(id) => {
+          setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+          if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+        }}
+      />
 
       <main
         className={clsx("layout", {
@@ -1812,25 +1908,6 @@ export default function App({ embedded = false }: AppProps) {
             <div className="section-header">
               <div className="stack" style={{ gap: 4 }}>
                 <h2>{steps[activeStep]}</h2>
-                {activeStep === 6 && insecureHttp && (
-                  <div className="callout warn">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <strong>
-                        <span className="warn-icon" aria-hidden="true">⚠</span>
-                        Warning: Unencrypted results (HTTP)
-                      </strong>
-                      <div className="muted small">
-                        You are not on HTTPS. Results are not encrypted in transit and may be visible to others on the network.
-                        Use HTTPS or run on localhost if possible.
-                      </div>
-                      <ToggleSwitch
-                        checked={allowInsecureReviewResults}
-                        onChange={setAllowInsecureReviewResults}
-                        label="I understand (show results over HTTP)"
-                      />
-                    </div>
-                  </div>
-                )}
                 {activeStep === 6 ? (
                   <p className="muted">Preview one page, confirm people, then render all.</p>
                 ) : (
@@ -1838,13 +1915,13 @@ export default function App({ embedded = false }: AppProps) {
                 )}
                 {activeStep === 6 && (
                   <div className="stack" style={{ gap: 6 }}>
-                    {status && !renderFailedMessage && <p className="muted">{status}</p>}
+                    {status && !renderFailedMessage && <p className="muted prewrap">{status}</p>}
                     {loading && progress > 0 && <ProgressBar progress={progress} />}
                   </div>
                 )}
               </div>
               <div className="section-actions">
-                <button disabled={loading} onClick={() => setActiveStep((s) => Math.max(0, s - 1))}>
+                <button disabled={loading} onClick={() => setActiveStep((s) => prevStepFrom(s))}>
                   Back
                 </button>
                 {activeStep === 6 ? (
@@ -1990,7 +2067,7 @@ export default function App({ embedded = false }: AppProps) {
             <div className="actions">
               <button
                 disabled={activeStep === 0}
-                onClick={() => setActiveStep((s) => Math.max(0, s - 1))}
+                onClick={() => setActiveStep((s) => prevStepFrom(s))}
               >
                 Back
               </button>
@@ -2001,7 +2078,7 @@ export default function App({ embedded = false }: AppProps) {
                 <button
                   className="primary"
                   disabled={!canContinue || loading}
-                  onClick={() => setActiveStep((s) => Math.min(steps.length - 1, s + 1))}
+                  onClick={() => setActiveStep((s) => nextStepFrom(s))}
                 >
                   Continue
                 </button>
@@ -2010,12 +2087,9 @@ export default function App({ embedded = false }: AppProps) {
                   {loading ? "Rendering..." : "Render all"}
                 </button>
               )}
-              {activeStep === 0 && (
-                <span className="muted small">Live preview is on the next step.</span>
-              )}
             </div>
           )}
-          {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted">{status}</p>}
+          {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted prewrap">{status}</p>}
           {activeStep !== 6 && activeStep !== 7 && loading && progress > 0 && <ProgressBar progress={progress} />}
           </section>
         )}
@@ -2033,7 +2107,6 @@ export default function App({ embedded = false }: AppProps) {
               advancedNameMatch={advancedNameMatch}
               setAdvancedNameMatch={setAdvancedNameMatch}
               allowInsecureUploads={allowInsecureUploads}
-              setAllowInsecureUploads={setAllowInsecureUploads}
               onMapped={setPeople}
               setStatus={setStatus}
               setLoading={setLoading}
@@ -2046,7 +2119,7 @@ export default function App({ embedded = false }: AppProps) {
               canContinue={canContinue}
               onBack={() => setActiveStep(1)}
               onReset={requestResetAll}
-              onContinue={() => setActiveStep(skipQuotes ? (skipBabyPhotos ? 5 : 4) : 3)}
+              onContinue={() => setActiveStep(nextStepFrom(2))}
             />
           </section>
         )}
@@ -2058,6 +2131,7 @@ export default function App({ embedded = false }: AppProps) {
               defaultQuote={defaultQuote}
               onDefaultQuote={setDefaultQuote}
               workspaceId={workspaceId}
+              allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               setLoading={setLoading}
               setProgress={setProgress}
@@ -2069,7 +2143,7 @@ export default function App({ embedded = false }: AppProps) {
               canContinue={canContinue}
               onBack={() => setActiveStep(2)}
               onReset={requestResetAll}
-              onContinue={() => setActiveStep(skipBabyPhotos ? 5 : 4)}
+              onContinue={() => setActiveStep(nextStepFrom(3))}
             />
           </section>
         )}
@@ -2090,6 +2164,7 @@ export default function App({ embedded = false }: AppProps) {
               onBabyBackgroundColor={setBabyBackgroundColor}
               centerBabyOnFace={centerBabyOnFace}
               onCenterBabyOnFace={setCenterBabyOnFace}
+              allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               setLoading={setLoading}
               setProgress={setProgress}
@@ -2099,7 +2174,7 @@ export default function App({ embedded = false }: AppProps) {
               status={status}
               progress={progress}
               canContinue={canContinue}
-              onBack={() => setActiveStep(3)}
+              onBack={() => setActiveStep(prevStepFrom(4))}
               onReset={requestResetAll}
               onContinue={() => setActiveStep(5)}
             />

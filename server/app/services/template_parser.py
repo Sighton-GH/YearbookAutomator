@@ -142,6 +142,8 @@ def extract_slots(
     min_area: int = 400,
     name_hex: str | None = None,
     quote_hex: str | None = None,
+    enable_baby_photos: bool = True,
+    enable_quotes: bool = True,
     template_id: str | None = None,
 ) -> TemplateParseResponse:
     annotated_bytes = annotated_png.read()
@@ -177,43 +179,50 @@ def extract_slots(
     else:
         mugshot_boxes, green_mask = _detect_boxes_with_color(DEFAULT_MUGSHOT_HEX, hsv, min_area, [20, 24, 32, 40, 48])
 
-    if baby_hex:
-        baby_boxes, blue_mask = _detect_boxes_with_color(baby_hex, hsv, min_area, tol_steps)
+    if enable_baby_photos:
+        if baby_hex:
+            baby_boxes, blue_mask = _detect_boxes_with_color(baby_hex, hsv, min_area, tol_steps)
+        else:
+            baby_boxes, blue_mask = _detect_boxes_with_color(DEFAULT_BABY_HEX, hsv, min_area, [20, 24, 32, 40, 48])
     else:
-        baby_boxes, blue_mask = _detect_boxes_with_color(DEFAULT_BABY_HEX, hsv, min_area, [20, 24, 32, 40, 48])
+        baby_boxes = []
+        blue_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
 
-    filled_blue_mask = _filled_mask(blue_mask, min_area=min_area)
+    filled_blue_mask = _filled_mask(blue_mask, min_area=min_area) if enable_baby_photos else np.zeros_like(blue_mask)
 
     # Fallback: if custom colours yielded nothing, retry with defaults to avoid hard failure.
-    if use_custom and not mugshot_boxes and not baby_boxes:
+    if use_custom and not mugshot_boxes and (not enable_baby_photos or not baby_boxes):
         green_range = GREEN_RANGE
         blue_range = BLUE_RANGE
         green_mask = cv2.inRange(hsv, np.array(green_range[0]), np.array(green_range[1]))
-        blue_mask = cv2.inRange(hsv, np.array(blue_range[0]), np.array(blue_range[1]))
         mugshot_boxes = _boxes_from_mask(green_mask, min_area=min_area)
-        baby_boxes = _boxes_from_mask(blue_mask, min_area=min_area)
+        if enable_baby_photos:
+            blue_mask = cv2.inRange(hsv, np.array(blue_range[0]), np.array(blue_range[1]))
+            baby_boxes = _boxes_from_mask(blue_mask, min_area=min_area)
 
-    if not mugshot_boxes and not baby_boxes:
-        raise ValueError("No green or blue rectangles detected. Ensure the annotated template has coloured regions.")
+    if not mugshot_boxes and (not enable_baby_photos or not baby_boxes):
+        if enable_baby_photos:
+            raise ValueError("No green or blue rectangles detected. Ensure the annotated template has coloured regions.")
+        raise ValueError("No green rectangles detected. Ensure the annotated template has portrait regions.")
 
     name_hex = name_hex or TEXT_NAME_HEX
     quote_hex = quote_hex or TEXT_QUOTE_HEX
     tol_default = [20, 24, 32, 40, 48]
     name_boxes, _ = _detect_boxes_with_color(name_hex, hsv, min_area, tol_default)
-    quote_boxes, _ = _detect_boxes_with_color(quote_hex, hsv, min_area, tol_default)
+    quote_boxes, _ = _detect_boxes_with_color(quote_hex, hsv, min_area, tol_default) if enable_quotes else ([], np.zeros(hsv.shape[:2], dtype=np.uint8))
     if not name_boxes:
         raise ValueError("No name (orange) rectangles detected. Ensure the annotated template has coloured regions for names.")
-    if not quote_boxes:
+    if enable_quotes and not quote_boxes:
         raise ValueError("No quote (red) rectangles detected. Ensure the annotated template has coloured regions for quotes.")
 
     # Deduplicate boxes to remove elements with exact or near-identical coordinates
     mugshot_boxes = _dedupe_boxes(mugshot_boxes)
-    baby_boxes = _dedupe_boxes(baby_boxes)
+    baby_boxes = _dedupe_boxes(baby_boxes) if enable_baby_photos else []
     name_boxes = _dedupe_boxes(name_boxes)
-    quote_boxes = _dedupe_boxes(quote_boxes)
+    quote_boxes = _dedupe_boxes(quote_boxes) if enable_quotes else []
 
     # Primary element determines slot count - mugshots preferred, else baby photos.
-    primary_boxes = mugshot_boxes if mugshot_boxes else baby_boxes
+    primary_boxes = mugshot_boxes if mugshot_boxes else (baby_boxes if enable_baby_photos else [])
     primary_count = len(primary_boxes)
 
     # Cross-list deduplication: if name and quote colours are similar, both may detect same boxes.
@@ -229,11 +238,11 @@ def extract_slots(
     quote_boxes_filtered = [
         q for q in quote_boxes
         if not any(boxes_match(q, n) for n in name_boxes)
-    ]
+    ] if enable_quotes else []
 
     # If filtering removed all quotes, the colours are likely detecting identical boxes.
     # In this case, try to split by size: group boxes by height and separate into two groups.
-    if not quote_boxes_filtered and len(name_boxes) > primary_count:
+    if enable_quotes and not quote_boxes_filtered and len(name_boxes) > primary_count:
         all_text_boxes = list(name_boxes)
         # Sort by height to find natural break point
         heights = sorted(set(b.height for b in all_text_boxes))
@@ -348,11 +357,14 @@ def extract_slots(
     slots: List[TemplateSlots] = []
     for mug in primary_boxes_sorted:
         # Find nearest baby photo
-        baby, baby_idx = find_nearest(mug, baby_boxes, used_baby)
-        if baby_idx is not None:
-            used_baby.add(baby_idx)
-        if baby is None:
-            baby = mug  # fallback
+        if enable_baby_photos:
+            baby, baby_idx = find_nearest(mug, baby_boxes, used_baby)
+            if baby_idx is not None:
+                used_baby.add(baby_idx)
+            if baby is None:
+                baby = mug  # fallback
+        else:
+            baby = mug
 
         # Find nearest name box
         name_box, name_idx = find_nearest(mug, name_boxes, used_name)
@@ -362,16 +374,19 @@ def extract_slots(
             name_box = Box(x=mug.x, y=mug.y + mug.height + 6, width=mug.width, height=36)
 
         # Find nearest quote box
-        quote_box, quote_idx = find_nearest(mug, quote_boxes, used_quote)
-        if quote_idx is not None:
-            used_quote.add(quote_idx)
-        if quote_box is None:
-            quote_box = Box(
-                x=name_box.x,
-                y=name_box.y + name_box.height + 4,
-                width=name_box.width,
-                height=max(48, name_box.height),
-            )
+        if enable_quotes:
+            quote_box, quote_idx = find_nearest(mug, quote_boxes, used_quote)
+            if quote_idx is not None:
+                used_quote.add(quote_idx)
+            if quote_box is None:
+                quote_box = Box(
+                    x=name_box.x,
+                    y=name_box.y + name_box.height + 4,
+                    width=name_box.width,
+                    height=max(48, name_box.height),
+                )
+        else:
+            quote_box = name_box
 
         slots.append(TemplateSlots(mugshot=mug, baby_photo=baby, name=name_box, quote=quote_box))
 
@@ -418,32 +433,33 @@ def extract_slots(
     # Persist baby-photo masks for exact shape cropping (circle/rounded-rect/triangle/etc).
     # Filenames are keyed by the baby box coordinates so generation can find the correct mask
     # even when users remap slots.
-    masks_dir = workspace_dir(template_id) / "masks" / "baby"
-    # If re-parsing within an existing workspace, clear old masks so we don't
-    # accumulate stale coordinate-keyed masks.
-    if masks_dir.exists():
-        for p in masks_dir.glob("*.png"):
-            try:
-                p.unlink()
-            except OSError:
-                pass
-    masks_dir.mkdir(parents=True, exist_ok=True)
-    for slot in out_slots:
-        b = slot.baby_photo
-        x0 = max(0, int(b.x))
-        y0 = max(0, int(b.y))
-        x1 = min(int(out_width), int(b.x + b.width))
-        y1 = min(int(out_height), int(b.y + b.height))
-        if x1 <= x0 or y1 <= y0:
-            continue
-        crop = out_filled_blue_mask[y0:y1, x0:x1]
-        # Skip empty masks (e.g. when baby box was a fallback).
-        if int(cv2.countNonZero(crop)) == 0:
-            continue
-        out_path = masks_dir / f"{x0}_{y0}_{x1 - x0}_{y1 - y0}.png"
-        ok, buf = cv2.imencode(".png", crop)
-        if ok:
-            out_path.write_bytes(buf.tobytes())
+    if enable_baby_photos:
+        masks_dir = workspace_dir(template_id) / "masks" / "baby"
+        # If re-parsing within an existing workspace, clear old masks so we don't
+        # accumulate stale coordinate-keyed masks.
+        if masks_dir.exists():
+            for p in masks_dir.glob("*.png"):
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+        masks_dir.mkdir(parents=True, exist_ok=True)
+        for slot in out_slots:
+            b = slot.baby_photo
+            x0 = max(0, int(b.x))
+            y0 = max(0, int(b.y))
+            x1 = min(int(out_width), int(b.x + b.width))
+            y1 = min(int(out_height), int(b.y + b.height))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            crop = out_filled_blue_mask[y0:y1, x0:x1]
+            # Skip empty masks (e.g. when baby box was a fallback).
+            if int(cv2.countNonZero(crop)) == 0:
+                continue
+            out_path = masks_dir / f"{x0}_{y0}_{x1 - x0}_{y1 - y0}.png"
+            ok, buf = cv2.imencode(".png", crop)
+            if ok:
+                out_path.write_bytes(buf.tobytes())
     return TemplateParseResponse(
         template_id=template_id,
         width=int(out_width),

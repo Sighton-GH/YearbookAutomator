@@ -6,6 +6,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
 
 export function MugshotMapping({
@@ -18,7 +19,6 @@ export function MugshotMapping({
   advancedNameMatch,
   setAdvancedNameMatch,
   allowInsecureUploads,
-  setAllowInsecureUploads,
   onMapped,
   setStatus,
   setLoading,
@@ -42,7 +42,6 @@ export function MugshotMapping({
   advancedNameMatch: boolean;
   setAdvancedNameMatch: (v: boolean) => void;
   allowInsecureUploads: boolean;
-  setAllowInsecureUploads: (v: boolean) => void;
   onMapped: (people: PersonRecord[]) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
@@ -59,6 +58,7 @@ export function MugshotMapping({
 }) {
   const [sheet, setSheet] = useState<File | null>(null);
   const [zip, setZip] = useState<File | null>(null);
+  const [showMissing, setShowMissing] = useState(false);
   const defaultNamingPattern = "\\d{3,4}";
   const [showAdvancedNaming, setShowAdvancedNaming] = useState(false);
   const [adjustments, setAdjustments] = useState<
@@ -73,6 +73,9 @@ export function MugshotMapping({
 
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
+
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const zipRef = useRef<HTMLDivElement | null>(null);
 
   const didInitDefaultMugshot = useRef(false);
 
@@ -114,12 +117,23 @@ export function MugshotMapping({
       setStatus("Parse the template first");
       return;
     }
+
+    const missingSheet = !sheet;
+    const missingZip = !zip;
+    if (missingSheet || missingZip) {
+      setShowMissing(true);
+      const missing: string[] = [];
+      if (missingSheet) missing.push("Spreadsheet (.xlsx or .csv)");
+      if (missingZip) missing.push("Portraits ZIP (.zip)");
+      setStatus(`Missing required file(s): ${missing.join(", ")}`);
+      const target = (missingSheet ? sheetRef.current : zipRef.current) as HTMLElement | null;
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     if (insecureHttp && !allowInsecureUploads) {
       setStatus("Uploads over HTTP are not encrypted in transit. Toggle 'I understand' to continue.");
       return;
-    }
-    if (insecureHttp) {
-      setStatus("Warning: uploads over HTTP are not encrypted in transit.");
     }
     onMapped([]);
     setPeople([]);
@@ -207,7 +221,7 @@ export function MugshotMapping({
     } catch (err) {
       clearProcessingInterval();
       console.error(err);
-      setStatus("Mapping failed");
+      setStatus(`Mapping failed.\n${formatServerMessage(err)}`);
     } finally {
       clearProcessingInterval();
       setLoading(false);
@@ -283,7 +297,7 @@ export function MugshotMapping({
       setStatus("Uploaded replacement portrait");
     } catch (err) {
       console.error(err);
-      setStatus("Upload failed");
+      setStatus(`Upload failed.\n${formatServerMessage(err)}`);
     }
   };
 
@@ -295,7 +309,7 @@ export function MugshotMapping({
       setStatus("Default portrait updated");
     } catch (err) {
       console.error(err);
-      setStatus("Default portrait upload failed");
+      setStatus(`Default portrait upload failed.\n${formatServerMessage(err)}`);
     }
   };
 
@@ -350,7 +364,7 @@ export function MugshotMapping({
       setAdjustmentsResetNonce((n) => n + 1);
     } catch (err) {
       console.error(err);
-      setStatus("Mapping update failed");
+      setStatus(`Mapping update failed.\n${formatServerMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -387,29 +401,6 @@ export function MugshotMapping({
       <div className="mapping-top">
         <div className="panel">
           <div className="stack">
-            {insecureHttp && (
-              <div className="callout warn">
-                <div className="stack" style={{ gap: 8 }}>
-                  <strong>
-                    <span className="warn-icon" aria-hidden="true">
-                      ⚠
-                    </span>
-                    Warning: Unencrypted uploads (HTTP)
-                  </strong>
-                  <div className="muted small">
-                    You are not on HTTPS. Spreadsheets and photos may be visible to others on the network while uploading.
-                    Use HTTPS or run on localhost if possible.
-                  </div>
-                  <ToggleSwitch
-                    checked={allowInsecureUploads}
-                    onChange={(checked) => {
-                      setAllowInsecureUploads(checked);
-                    }}
-                    label="I understand (continue over HTTP)"
-                  />
-                </div>
-              </div>
-            )}
             <p className="muted">
               Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this step matches portraits by
               digits first (example: 001.jpg → row 1) using the filename pattern, with rows starting at 1 (header row is
@@ -417,14 +408,55 @@ export function MugshotMapping({
               whose filenames contain a student's first + last name, then fill the remaining rows by digits (numbered
               files may shift down if a name match took that row). Non-matching files are skipped and listed in warnings.
             </p>
-            <UploadDropLabel accept=".xlsx,.csv" disabled={loading} onFile={(file) => setSheet(file)}>
-              <span>Spreadsheet</span>
-              <input type="file" accept=".xlsx,.csv" onChange={(e) => setSheet(e.target.files?.[0] ?? null)} />
-            </UploadDropLabel>
-            <UploadDropLabel accept=".zip" disabled={loading} onFile={(file) => setZip(file)}>
-              <span>Portraits zip</span>
-              <input type="file" accept=".zip" onChange={(e) => setZip(e.target.files?.[0] ?? null)} />
-            </UploadDropLabel>
+            <div ref={sheetRef}>
+              <UploadDropLabel
+                accept=".xlsx,.csv"
+                disabled={loading}
+                className={showMissing && !sheet ? "invalid" : undefined}
+                onFile={(file) => {
+                  setShowMissing(false);
+                  setSheet(file);
+                }}
+              >
+                <span>
+                  {showMissing && !sheet ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+                  Spreadsheet
+                </span>
+                <input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={(e) => {
+                    setShowMissing(false);
+                    setSheet(e.target.files?.[0] ?? null);
+                  }}
+                />
+              </UploadDropLabel>
+            </div>
+
+            <div ref={zipRef}>
+              <UploadDropLabel
+                accept=".zip"
+                disabled={loading}
+                className={showMissing && !zip ? "invalid" : undefined}
+                onFile={(file) => {
+                  setShowMissing(false);
+                  setZip(file);
+                }}
+              >
+                <span>
+                  {showMissing && !zip ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+                  Portraits ZIP
+                </span>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => {
+                    setShowMissing(false);
+                    setZip(e.target.files?.[0] ?? null);
+                  }}
+                />
+              </UploadDropLabel>
+            </div>
             <ToggleSwitch
               checked={showAdvancedNaming}
               onChange={setShowAdvancedNaming}
@@ -534,7 +566,7 @@ export function MugshotMapping({
                 Continue
               </button>
             </div>
-            {status && <p className="muted">{status}</p>}
+            {status && <p className="muted prewrap">{status}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

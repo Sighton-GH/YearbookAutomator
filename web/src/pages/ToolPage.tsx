@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import App from "../App";
+import { TipsBox } from "../components/TipsBox";
 import {
   getStoredLicenseKey,
   requestFreePersonalKey,
@@ -68,6 +69,16 @@ export function ToolPage() {
             Parse a yearbook template, ingest spreadsheets and photos, review assignments, then generate a
             print-ready composite.
           </p>
+
+          <TipsBox
+            tips={[
+              "Use crisp solid-color rectangles on the annotated template (name + quote boxes are required).",
+              "Save a config file occasionally so you can restore work after a refresh or long session.",
+              "If portraits are numbered, filenames like 001.jpg map to spreadsheet row 1.",
+              "If template parsing fails, try raising the color tolerance or lowering min-area in Custom options.",
+              "For best results, run locally on localhost or HTTPS to avoid unencrypted uploads.",
+            ]}
+          />
         </div>
       </section>
 

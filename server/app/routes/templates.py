@@ -37,6 +37,8 @@ async def parse_template(
     baby_color: str | None = Form(None),
     name_color: str | None = Form(None),
     quote_color: str | None = Form(None),
+    disable_baby_photos: bool = Form(False),
+    disable_quotes: bool = Form(False),
     min_area: int = Form(400),
 ) -> TemplateParseResponse:
     try:
@@ -75,6 +77,8 @@ async def parse_template(
             baby_hex=baby_color,
             name_hex=name_color,
             quote_hex=quote_color,
+            enable_baby_photos=not disable_baby_photos,
+            enable_quotes=not disable_quotes,
             min_area=min_area,
             template_id=workspace_id,
         )

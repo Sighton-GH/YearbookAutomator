@@ -4,12 +4,14 @@ import { UploadDropLabel } from "../components/UploadDropLabel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
 import { assetUrl, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
+import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
 
 export function QuotesStep({
   defaultQuote,
   onDefaultQuote,
   workspaceId,
+  allowInsecureUploads,
   setStatus,
   setLoading,
   setProgress,
@@ -26,6 +28,7 @@ export function QuotesStep({
   defaultQuote: string;
   onDefaultQuote: (v: string) => void;
   workspaceId: string | null;
+  allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
   setProgress: React.Dispatch<React.SetStateAction<number>>;
@@ -41,8 +44,10 @@ export function QuotesStep({
 }) {
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [quotesSheet, setQuotesSheet] = useState<File | null>(null);
+  const [showMissing, setShowMissing] = useState(false);
   const [quotesWarnings, setQuotesWarnings] = useState<string[]>([]);
-  const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
+
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   const quotesProcessingEstimateSecondsRef = useRef<number>(6);
   const didScrollForProgressRef = useRef(false);
@@ -69,16 +74,19 @@ export function QuotesStep({
   const handleProcessQuotes = async () => {
     // Make sure the user can see status/progress updates.
     scrollPastTopBar();
-    if (!workspaceId || !quotesSheet) {
-      setStatus("Select a quotes spreadsheet (.xlsx or .csv) and ensure template is parsed first");
+    if (!workspaceId) {
+      setStatus("Parse the template and ingest portraits first (workspace is missing)");
+      return;
+    }
+    if (!quotesSheet) {
+      setShowMissing(true);
+      setStatus("Missing required file: Quotes spreadsheet (.xlsx or .csv)");
+      sheetRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (insecureHttp && !allowInsecureUploads) {
       setStatus("Uploads over HTTP are not encrypted in transit. Toggle 'I understand' to continue.");
       return;
-    }
-    if (insecureHttp) {
-      setStatus("Warning: uploads over HTTP are not encrypted in transit.");
     }
     try {
       setProgress(0);
@@ -150,7 +158,7 @@ export function QuotesStep({
       setProgress(100);
     } catch (err) {
       console.error(err);
-      setStatus("Quotes spreadsheet upload failed");
+      setStatus(`Quotes spreadsheet upload failed.\n${formatServerMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -161,35 +169,37 @@ export function QuotesStep({
       <div className="mapping-top">
         <div className="panel">
           <div className="stack">
-            {insecureHttp && (
-              <div className="callout warn">
-                <div className="stack" style={{ gap: 8 }}>
-                  <strong>
-                    <span className="warn-icon" aria-hidden="true">⚠</span>
-                    Warning: Unencrypted uploads (HTTP)
-                  </strong>
-                  <div className="muted small">
-                    You are not on HTTPS. Spreadsheets may be visible to others on the network while uploading.
-                    Use HTTPS or run on localhost if possible.
-                  </div>
-                  <ToggleSwitch
-                    checked={allowInsecureUploads}
-                    onChange={setAllowInsecureUploads}
-                    label="I understand (continue over HTTP)"
-                  />
-                </div>
-              </div>
-            )}
             <p className="muted">
               Upload a quotes spreadsheet (.xlsx or .csv) and click <strong>Process</strong>. The app matches spreadsheet rows to students by name
               and sets each person's quote (missing quotes are allowed). If a row has a <strong>quote</strong> column, it prefers that; otherwise it
               picks the most quote-like cell and ignores obvious non-quotes like emails/URLs.
             </p>
 
-            <UploadDropLabel accept=".xlsx,.csv" disabled={loading} onFile={(file) => setQuotesSheet(file)}>
-              <span>Quotes spreadsheet (.xlsx or .csv)</span>
-              <input type="file" accept=".xlsx,.csv" onChange={(e) => setQuotesSheet(e.target.files?.[0] ?? null)} />
-            </UploadDropLabel>
+            {status && <p className="muted prewrap">{status}</p>}
+
+            <div ref={sheetRef}>
+              <UploadDropLabel
+                disabled={loading}
+                className={showMissing && !quotesSheet ? "invalid" : undefined}
+                onFile={(file) => {
+                  setShowMissing(false);
+                  setQuotesSheet(file);
+                }}
+              >
+                <span>
+                  {showMissing && !quotesSheet ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+                  Quotes spreadsheet (.xlsx or .csv)
+                </span>
+                <input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={(e) => {
+                    setShowMissing(false);
+                    setQuotesSheet(e.target.files?.[0] ?? null);
+                  }}
+                />
+              </UploadDropLabel>
+            </div>
 
             <ToggleSwitch
               checked={advancedNameMatch}
@@ -209,7 +219,7 @@ export function QuotesStep({
               />
             </div>
 
-            <button className="primary" type="button" onClick={handleProcessQuotes} disabled={!quotesSheet || loading}>
+            <button className="primary" type="button" onClick={handleProcessQuotes} disabled={loading}>
               {loading ? "Processing..." : "Process quotes"}
             </button>
 
@@ -242,7 +252,7 @@ export function QuotesStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted">{status}</p>}
+            {status && <p className="muted prewrap">{status}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
@@ -276,12 +286,12 @@ export function QuotesStep({
                 </div>
 
                 <label className="field">
-                  <span>Quote (optional)</span>
+                  <span>Quote</span>
                   <textarea
                     rows={2}
                     value={p.quote ?? ""}
                     onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
-                    placeholder="Quote (optional)"
+                    placeholder="Quote"
                   />
                 </label>
               </div>

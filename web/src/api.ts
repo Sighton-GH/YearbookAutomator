@@ -70,6 +70,8 @@ export async function parseTemplate(
     babyColor?: string;
     nameColor?: string;
     quoteColor?: string;
+    disableBabyPhotos?: boolean;
+    disableQuotes?: boolean;
     minArea?: number;
   }
 ) {
@@ -81,6 +83,8 @@ export async function parseTemplate(
   if (opts?.babyColor) form.append("baby_color", opts.babyColor);
   if (opts?.nameColor) form.append("name_color", opts.nameColor);
   if (opts?.quoteColor) form.append("quote_color", opts.quoteColor);
+  if (opts?.disableBabyPhotos) form.append("disable_baby_photos", "true");
+  if (opts?.disableQuotes) form.append("disable_quotes", "true");
   if (opts?.minArea) form.append("min_area", String(opts.minArea));
   const { data } = await axios.post<TemplateParseResponse>("/api/templates/parse", form, {
     headers: { "Content-Type": "multipart/form-data" }

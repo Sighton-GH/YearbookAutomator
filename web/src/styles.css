@@ -796,6 +796,125 @@ button:disabled {
   margin-right: 6px;
 }
 
+/* Tool messages strip (between steps navbar and tool content) */
+.tool-messages {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.tool-message {
+  overflow: hidden;
+}
+
+.tool-message summary {
+  list-style: none;
+}
+.tool-message summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-message-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.tool-message-icon {
+  flex: 0 0 auto;
+}
+
+.tool-message-summary-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tool-message-title {
+  flex: 0 0 auto;
+}
+
+.tool-message-snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-message-details {
+  margin-top: 8px;
+}
+
+.tool-message-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.tool-message-dismiss {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.tool-message-body {
+  white-space: pre-wrap;
+}
+
+.prewrap {
+  white-space: pre-wrap;
+}
+
+.tool-message-actions {
+  display: grid;
+  gap: 8px;
+}
+
+/* Required-field highlighting */
+.upload.invalid,
+.field.invalid {
+  outline: 2px solid var(--danger);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* Tips box (Tool page) */
+.tips-box {
+  margin-top: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  display: grid;
+  gap: 10px;
+  max-width: 820px;
+}
+
+.tips-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tips-box-close {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-quiet);
+}
+
+.tips-box-body {
+  color: var(--muted);
+}
+
 .grid.two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

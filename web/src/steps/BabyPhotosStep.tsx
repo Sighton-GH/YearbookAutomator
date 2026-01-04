@@ -20,6 +20,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
 import { formatEtaSeconds, scrollPastTopBar } from "../utils/ui";
@@ -37,6 +38,7 @@ export function BabyPhotosStep({
   onBabyBackgroundColor,
   centerBabyOnFace,
   onCenterBabyOnFace,
+  allowInsecureUploads,
   setStatus,
   setLoading,
   setProgress,
@@ -62,6 +64,7 @@ export function BabyPhotosStep({
   onBabyBackgroundColor: (v: string) => void;
   centerBabyOnFace: boolean;
   onCenterBabyOnFace: (v: boolean) => void;
+  allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
   setProgress: React.Dispatch<React.SetStateAction<number>>;
@@ -77,13 +80,13 @@ export function BabyPhotosStep({
 }) {
   const [babyFile, setBabyFile] = useState<File | null>(null);
   const [babyZip, setBabyZip] = useState<File | null>(null);
+  const [showMissing, setShowMissing] = useState(false);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
   const [partialNameMatch, setPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
   const [removeBabyBackground, setRemoveBabyBackground] = useState(Boolean(babyIngest.removeBackground ?? false));
   const [babyBackgroundMode, setBabyBackgroundMode] = useState<BackgroundMode>(
     (babyIngest.backgroundMode as any) ?? "simple"
   );
-  const [allowInsecureUploads, setAllowInsecureUploads] = useState(Boolean(babyIngest.allowInsecureUploads ?? false));
   const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
   const [originalDefaultBabyFilename, setOriginalDefaultBabyFilename] = useState<string | null>(null);
@@ -130,6 +133,8 @@ export function BabyPhotosStep({
     babyZipWarnings: string[];
   } | null>(null);
 
+  const babyZipRef = useRef<HTMLDivElement | null>(null);
+
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -154,7 +159,6 @@ export function BabyPhotosStep({
     setPartialNameMatch(Boolean(babyIngest.partialNameMatch ?? true));
     setRemoveBabyBackground(Boolean(babyIngest.removeBackground ?? false));
     setBabyBackgroundMode(((babyIngest.backgroundMode as any) ?? "simple") as any);
-    setAllowInsecureUploads(Boolean(babyIngest.allowInsecureUploads ?? false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [babyIngest]);
 
@@ -614,7 +618,7 @@ export function BabyPhotosStep({
           break;
         }
         if (s.status === "error") {
-          setStatus(s.error ? `Background removal failed: ${s.error}` : "Background removal failed");
+          setStatus(s.error ? `Background removal failed.\nserver message:\n${s.error}` : "Background removal failed.");
           break;
         }
         if (Date.now() - start > 120_000) {
@@ -624,7 +628,7 @@ export function BabyPhotosStep({
       }
     } catch (err) {
       console.error(err);
-      setStatus("Background removal failed");
+      setStatus(`Background removal failed.\n${formatServerMessage(err)}`);
     } finally {
       setEditingBusy(false);
       setEditingAction(null);
@@ -710,7 +714,7 @@ export function BabyPhotosStep({
       setStatus(`Uploaded baby photo for ${people[idx].first_name}`);
     } catch (err) {
       console.error(err);
-      setStatus("Upload failed");
+      setStatus(`Upload failed.\n${formatServerMessage(err)}`);
     }
   };
 
@@ -725,11 +729,10 @@ export function BabyPhotosStep({
       setStatus("Uploads over HTTP are not encrypted in transit. Toggle 'I understand' to continue.");
       return;
     }
-    if (insecureHttp) {
-      setStatus("Warning: uploads over HTTP are not encrypted in transit.");
-    }
     if (!babyFile && !babyZip) {
-      setStatus("Select a baby photo and/or a baby ZIP to process");
+      setShowMissing(true);
+      setStatus("Missing required input: select a baby ZIP and/or a default baby photo to process");
+      babyZipRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (abortRef.current) {
@@ -865,7 +868,7 @@ export function BabyPhotosStep({
         setStatus("Processing cancelled");
       } else {
         console.error(err);
-        setStatus("Processing failed");
+        setStatus(`Processing failed.\n${formatServerMessage(err)}`);
       }
     } finally {
       setLoading(false);
@@ -898,33 +901,36 @@ export function BabyPhotosStep({
       <div className="mapping-top">
         <div className="panel">
           <div className="stack">
-            {insecureHttp && (
-              <div className="callout warn">
-                <div className="stack" style={{ gap: 8 }}>
-                  <strong>
-                    <span className="warn-icon" aria-hidden="true">
-                      ⚠
-                    </span>
-                    Warning: Unencrypted uploads (HTTP)
-                  </strong>
-                  <div className="muted small">
-                    You are not on HTTPS. Photos may be visible to others on the network while uploading.
-                    Use HTTPS or run on localhost if possible.
-                  </div>
-                  <ToggleSwitch checked={allowInsecureUploads} onChange={setAllowInsecureUploads} label="I understand (continue over HTTP)" />
-                </div>
-              </div>
-            )}
             <p className="muted">
-              Upload baby photos in two ways: (1) a ZIP to automatically match photos to students by filename, and (2) an optional default
+              Upload baby photos in two ways: (1) a ZIP to automatically match photos to students by filename, and (2) a default
               baby photo used when a student is missing one. Click <strong>Process</strong> to apply your selections. After processing, you can
               override per person (and click a thumbnail to crop to the template cutout).
             </p>
 
-            <UploadDropLabel accept=".zip" disabled={loading} onFile={(file) => setBabyZip(file)}>
-              <span>Baby photo ZIP (optional)</span>
-              <input type="file" accept=".zip" onChange={(e) => setBabyZip(e.target.files?.[0] ?? null)} />
-            </UploadDropLabel>
+            <div ref={babyZipRef}>
+              <UploadDropLabel
+                accept=".zip"
+                disabled={loading}
+                className={showMissing && !babyZip && !babyFile ? "invalid" : undefined}
+                onFile={(file) => {
+                  setShowMissing(false);
+                  setBabyZip(file);
+                }}
+              >
+                <span>
+                  {showMissing && !babyZip && !babyFile ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
+                  Baby photo ZIP
+                </span>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => {
+                    setShowMissing(false);
+                    setBabyZip(e.target.files?.[0] ?? null);
+                  }}
+                />
+              </UploadDropLabel>
+            </div>
 
             <ToggleSwitch
               checked={advancedNameMatch}
@@ -947,9 +953,9 @@ export function BabyPhotosStep({
               description="Helps with minor typos/missing characters."
             />
 
-            <div className="stack" style={{ gap: 6 }}>
-              <strong>Default baby photo (optional)</strong>
-              <div className="muted small">Used when a student is missing a baby photo. Missing baby photos are allowed.</div>
+            <div className={clsx("stack", showMissing && !babyZip && !babyFile ? "invalid" : undefined)} style={{ gap: 6 }}>
+              <strong>Default baby photo</strong>
+              <div className="muted small">Used when a student is missing a baby photo.</div>
 
               {workspaceId && defaultBabyFilename ? (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>
@@ -969,7 +975,14 @@ export function BabyPhotosStep({
 
               <UploadDropLabel accept="image/*" disabled={loading} onFile={(file) => setBabyFile(file)}>
                 <span className="muted small">Upload default baby photo</span>
-                <input type="file" accept="image/*" onChange={(e) => setBabyFile(e.target.files?.[0] ?? null)} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    setShowMissing(false);
+                    setBabyFile(e.target.files?.[0] ?? null);
+                  }}
+                />
               </UploadDropLabel>
 
               <div className="inline" style={{ gap: 10 }}>
@@ -1196,7 +1209,7 @@ export function BabyPhotosStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted">{status}</p>}
+            {status && <p className="muted prewrap">{status}</p>}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
@@ -1342,7 +1355,7 @@ export function BabyPhotosStep({
                     </div>
 
                     <UploadDropLabel accept="image/*" disabled={loading} onFile={(file) => handlePerPersonBaby(idx, file)}>
-                      <span>Upload/replace baby photo (optional)</span>
+                      <span>Upload/replace baby photo</span>
                       <input type="file" accept="image/*" onChange={(e) => handlePerPersonBaby(idx, e.target.files?.[0] ?? null)} />
                       <div className="muted small">{p.baby_photo_filename ?? "No custom photo"}</div>
                     </UploadDropLabel>
