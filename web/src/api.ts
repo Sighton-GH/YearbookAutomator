@@ -52,6 +52,15 @@ export type SpreadsheetPreview = {
   warnings?: string[];
 };
 
+export type FaceCenterResponse = {
+  found: boolean;
+  reason?: "unavailable" | "not_found" | null;
+  center_x: number | null;
+  center_y: number | null;
+  width: number;
+  height: number;
+};
+
 export async function parseTemplate(
   annotated: File | null,
   clean: File | null,
@@ -74,6 +83,16 @@ export async function parseTemplate(
   if (opts?.quoteColor) form.append("quote_color", opts.quoteColor);
   if (opts?.minArea) form.append("min_area", String(opts.minArea));
   const { data } = await axios.post<TemplateParseResponse>("/api/templates/parse", form, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return data;
+}
+
+export async function detectFaceCenter(image: File | Blob) {
+  const form = new FormData();
+  const file = image instanceof File ? image : new File([image], "image.png", { type: image.type || "image/png" });
+  form.append("image", file);
+  const { data } = await axios.post<FaceCenterResponse>("/api/mapping/detect-face-center", form, {
     headers: { "Content-Type": "multipart/form-data" }
   });
   return data;

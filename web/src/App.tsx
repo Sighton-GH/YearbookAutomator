@@ -1,7 +1,7 @@
 import type React from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import Cropper, { type Area } from "react-easy-crop";
+import Cropper, { getInitialCropFromCroppedAreaPixels, type Area, type MediaSize } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { withBase } from "./baseUrl";
 import {
@@ -27,6 +27,7 @@ import {
   startRemoveBackgroundPreviewJob,
   removeBackgroundPreviewStatus,
   fetchRemoveBackgroundPreviewResult,
+  detectFaceCenter,
   type Box,
   type PersonRecord,
   type TemplateSlots,
@@ -3307,6 +3308,9 @@ function BabyPhotosStep({
   const [editingBusy, setEditingBusy] = useState(false);
   const [editingAction, setEditingAction] = useState<"apply" | "remove_background" | null>(null);
   const [removeBgPopoverOpen, setRemoveBgPopoverOpen] = useState(false);
+  const [centerFacePopoverOpen, setCenterFacePopoverOpen] = useState(false);
+  const [centerFaceWorking, setCenterFaceWorking] = useState(false);
+  const [centerFaceMessage, setCenterFaceMessage] = useState<string>("");
   const [removeBgMode, setRemoveBgMode] = useState<"simple" | "complex" | "ultra_complex">("simple");
   const [removeBgProgress, setRemoveBgProgress] = useState(0);
   const [removeBgEtaSeconds, setRemoveBgEtaSeconds] = useState<number | null>(null);
@@ -3327,6 +3331,7 @@ function BabyPhotosStep({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const editorCropRef = useRef<HTMLDivElement | null>(null);
   const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
+  const [editorMediaSize, setEditorMediaSize] = useState<MediaSize | null>(null);
   const didInitDefaultBaby = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const babyZipProcessingEstimateSecondsRef = useRef<number>(12);
@@ -3467,8 +3472,12 @@ function BabyPhotosStep({
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setEditorMediaSize(null);
     setEditingAction(null);
     setRemoveBgPopoverOpen(false);
+    setCenterFacePopoverOpen(false);
+    setCenterFaceWorking(false);
+    setCenterFaceMessage("");
     setRemoveBgMode(babyBackgroundMode);
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
@@ -3502,8 +3511,12 @@ function BabyPhotosStep({
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setEditorMediaSize(null);
     setEditingAction(null);
     setRemoveBgPopoverOpen(false);
+    setCenterFacePopoverOpen(false);
+    setCenterFaceWorking(false);
+    setCenterFaceMessage("");
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
@@ -3537,8 +3550,12 @@ function BabyPhotosStep({
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setEditorMediaSize(null);
     setEditingAction(null);
     setRemoveBgPopoverOpen(false);
+    setCenterFacePopoverOpen(false);
+    setCenterFaceWorking(false);
+    setCenterFaceMessage("");
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
@@ -3552,6 +3569,99 @@ function BabyPhotosStep({
       changesSavedTimerRef.current = null;
     }
     setStatus("Edits discarded");
+  };
+
+  const centerEditingOnFace = async () => {
+    if (editingBusy) return;
+    if (!editingSrc) return;
+
+    if (!editorMediaSize || !editorCropSize) {
+      setCenterFacePopoverOpen(true);
+      setRemoveBgPopoverOpen(false);
+      setCenterFaceWorking(false);
+      setCenterFaceMessage("Initializing crop… please try again");
+      window.setTimeout(() => {
+        setCenterFacePopoverOpen(false);
+        setCenterFaceMessage("");
+      }, 1400);
+      return;
+    }
+
+    if (!croppedAreaPixels) {
+      setCenterFacePopoverOpen(true);
+      setRemoveBgPopoverOpen(false);
+      setCenterFaceWorking(false);
+      setCenterFaceMessage("Initializing crop… move the photo slightly, then retry");
+      window.setTimeout(() => {
+        setCenterFacePopoverOpen(false);
+        setCenterFaceMessage("");
+      }, 1600);
+      return;
+    }
+
+    setCenterFacePopoverOpen(true);
+    setRemoveBgPopoverOpen(false);
+    setCenterFaceWorking(true);
+    setCenterFaceMessage("Detecting face…");
+
+    try {
+      const resp = await fetch(editingSrc);
+      if (!resp.ok) throw new Error("Could not read image");
+      const blob = await resp.blob();
+      const fc = await detectFaceCenter(blob);
+
+      if (!fc.found || fc.center_x == null || fc.center_y == null) {
+        if (fc.reason === "unavailable") {
+          setCenterFaceMessage("Face detection unavailable (missing OpenCV)");
+        } else {
+          setCenterFaceMessage("No face found");
+        }
+        return;
+      }
+
+      const imgW = editorMediaSize.naturalWidth;
+      const imgH = editorMediaSize.naturalHeight;
+      const fx = Math.max(0, Math.min(imgW, fc.center_x));
+      const fy = Math.max(0, Math.min(imgH, fc.center_y));
+
+      // Center the detected face within the *current* crop frame.
+      // We do this by shifting the cropped rectangle (in source pixels) so its
+      // center equals the face center, then using react-easy-crop's own inverse
+      // mapping to compute the corresponding `crop` translation.
+      const w = Math.max(1, Math.round(croppedAreaPixels.width));
+      const h = Math.max(1, Math.round(croppedAreaPixels.height));
+      const maxX = Math.max(0, imgW - w);
+      const maxY = Math.max(0, imgH - h);
+      const desiredArea: Area = {
+        width: w,
+        height: h,
+        x: Math.max(0, Math.min(maxX, Math.round(fx - w / 2))),
+        y: Math.max(0, Math.min(maxY, Math.round(fy - h / 2))),
+      };
+
+      const { crop: nextCrop, zoom: nextZoom } = getInitialCropFromCroppedAreaPixels(
+        desiredArea,
+        editorMediaSize,
+        0,
+        editorCropSize,
+        0.5,
+        3
+      );
+
+      setCrop(nextCrop);
+      setZoom(Math.max(0.5, Math.min(3, nextZoom)));
+      setDirtyEdits(true);
+      setCenterFaceMessage("Centered on face");
+    } catch (err) {
+      console.error(err);
+      setCenterFaceMessage("Could not detect face");
+    } finally {
+      setCenterFaceWorking(false);
+      window.setTimeout(() => {
+        setCenterFacePopoverOpen(false);
+        setCenterFaceMessage("");
+      }, 1400);
+    }
   };
 
   const applyEdits = async () => {
@@ -3746,6 +3856,9 @@ function BabyPhotosStep({
     setZoom(1);
     setCroppedAreaPixels(null);
     setRemoveBgPopoverOpen(false);
+    setCenterFacePopoverOpen(false);
+    setCenterFaceWorking(false);
+    setCenterFaceMessage("");
     setRemoveBgProgress(0);
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("");
@@ -4425,7 +4538,7 @@ function BabyPhotosStep({
 
       {workspaceId && editingIdx !== null && editingSrc && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit baby photo">
-          <div className="modal">
+          <div className="modal baby-editor-modal">
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Edit baby photo</strong>
@@ -4437,177 +4550,203 @@ function BabyPhotosStep({
             </div>
 
             <div className="modal-body">
-              <div
-                className="baby-editor-crop"
-                ref={editorCropRef}
-                style={{ aspectRatio: `${outSize.width} / ${outSize.height}`, backgroundColor: babyFillColor ?? undefined }}
-              >
-                <Cropper
-                  image={editingSrc}
-                  crop={crop}
-                  zoom={zoom}
-                  aspect={cropAspect}
-                  cropSize={editorCropSize ?? undefined}
-                  onCropChange={setCrop}
-                  onZoomChange={(z) => {
-                    setZoom(Math.max(0.5, Math.min(3, z)));
+              <div className="baby-editor-toolbar">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCrop({ x: 0, y: 0 });
                     setDirtyEdits(true);
                   }}
-                  onCropComplete={(_, areaPixels) => setCroppedAreaPixels(areaPixels)}
-                  objectFit="cover"
-                  minZoom={0.5}
-                  maxZoom={3}
-                  restrictPosition={false}
-                />
-                {maskUrl && <img src={maskUrl} className="baby-editor-mask" alt="" aria-hidden="true" />}
-              </div>
+                  disabled={editingBusy}
+                >
+                  Center
+                </button>
 
-              <div className="grid two" style={{ alignItems: "end" }}>
-                <label className="field">
-                  <span>Zoom</span>
-                  <input
-                    type="range"
-                    min={0.5}
-                    max={3}
-                    step={0.001}
-                    value={zoom}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setZoom(Math.max(0.5, Math.min(3, v)));
-                      setDirtyEdits(true);
-                    }}
-                    disabled={editingBusy}
-                  />
-                </label>
-                <div className="actions" style={{ justifyContent: "flex-end" }}>
+                <div className="popover-anchor">
+                  <button type="button" onClick={() => void centerEditingOnFace()} disabled={editingBusy}>
+                    Center on face
+                  </button>
+                  {centerFacePopoverOpen && (
+                    <div className="popover below" role="status" aria-live="polite">
+                      <div className="stack" style={{ gap: 8 }}>
+                        <div className="muted small">{centerFaceMessage || (centerFaceWorking ? "Working…" : "")}</div>
+                        {centerFaceWorking && (
+                          <div className="progress" aria-label="Face centering progress">
+                            <div className="progress-bar" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button type="button" onClick={resetEditingToOriginal} disabled={editingBusy || !originalBabyPeople}>
+                  Reset to original
+                </button>
+
+                <div className="popover-anchor">
                   <button
                     type="button"
                     onClick={() => {
-                      setCrop({ x: 0, y: 0 });
-                      setDirtyEdits(true);
+                      if (editingBusy) return;
+                      setRemoveBgMode(babyBackgroundMode);
+                      setRemoveBgProgress(0);
+                      setRemoveBgPopoverOpen((v) => !v);
                     }}
                     disabled={editingBusy}
                   >
-                    Center
+                    Remove background
                   </button>
-                  <button type="button" onClick={resetEditingToOriginal} disabled={editingBusy || !originalBabyPeople}>
-                    Reset to original
-                  </button>
-                  <div className="popover-anchor">
-                    <button
-                      type="button"
-                      onClick={() => setShowApplyWarning(true)}
-                      disabled={editingBusy || !croppedAreaPixels}
-                      aria-disabled={editingBusy || !croppedAreaPixels}
-                    >
-                      Apply changes
-                    </button>
-                    {showChangesSaved && (
-                      <div className="popover" role="status" aria-live="polite" style={{ width: "auto", padding: 8 }}>
-                        <span className="muted small">Changes saved</span>
+
+                  {removeBgPopoverOpen && (
+                    <div className="popover below" role="dialog" aria-label="Background removal options">
+                      <div className="stack" style={{ gap: 10 }}>
+                        <div className="stack" style={{ gap: 2 }}>
+                          <strong>Background removal</strong>
+                          <div className="muted small">Choose a mode, then remove.</div>
+                        </div>
+
+                        <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="baby-bg-mode"
+                            checked={removeBgMode === "simple"}
+                            onChange={() => setRemoveBgMode("simple")}
+                            disabled={editingBusy}
+                          />
+                          <span>Simple</span>
+                          <span className="muted small">(solid backgrounds)</span>
+                        </label>
+
+                        <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="baby-bg-mode"
+                            checked={removeBgMode === "complex"}
+                            onChange={() => setRemoveBgMode("complex")}
+                            disabled={editingBusy}
+                          />
+                          <span>Complex</span>
+                          <span className="muted small">(real-life backgrounds)</span>
+                        </label>
+
+                        <label className="inline" style={{ alignItems: "center", gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="baby-bg-mode"
+                            checked={removeBgMode === "ultra_complex"}
+                            onChange={() => setRemoveBgMode("ultra_complex")}
+                            disabled={editingBusy}
+                          />
+                          <span>Ultra complex</span>
+                          <span className="muted small">(highest quality; heavier)</span>
+                        </label>
+
+                        <div className="actions" style={{ justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => void runBackgroundRemovalPreview({ force: false })}
+                            disabled={editingBusy}
+                          >
+                            Remove
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void runBackgroundRemovalPreview({ force: true })}
+                            disabled={editingBusy}
+                          >
+                            Force
+                          </button>
+                        </div>
+
+                        {removeBgAlreadyRemoved && (
+                          <div className="callout warn">
+                            <div className="muted small">
+                              Background already removed. If this is not true, force background removal.
+                            </div>
+                          </div>
+                        )}
+
+                        {editingAction === "remove_background" && (
+                          <div className="stack" style={{ gap: 6 }}>
+                            <div className="inline" style={{ justifyContent: "space-between", gap: 10 }}>
+                              <span className="muted small">{removeBgMessage || "Working…"}</span>
+                              <span className="muted small">
+                                {removeBgEtaSeconds != null ? `ETA ${formatEtaSeconds(removeBgEtaSeconds)}` : ""}
+                              </span>
+                            </div>
+                            <div className="progress determinate" aria-label="Background removal progress">
+                              <div className="progress-bar determinate" style={{ width: `${removeBgProgress}%` }} />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="popover-anchor">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (editingBusy) return;
-                        setRemoveBgMode(babyBackgroundMode);
-                        setRemoveBgProgress(0);
-                        setRemoveBgPopoverOpen((v) => !v);
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="baby-editor-scroll">
+                <div
+                  className="baby-editor-crop"
+                  ref={editorCropRef}
+                  style={{ aspectRatio: `${outSize.width} / ${outSize.height}`, backgroundColor: babyFillColor ?? undefined }}
+                >
+                  <Cropper
+                    image={editingSrc}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={cropAspect}
+                    cropSize={editorCropSize ?? undefined}
+                    onMediaLoaded={(ms) => setEditorMediaSize(ms)}
+                    onCropChange={setCrop}
+                    onZoomChange={(z) => {
+                      setZoom(Math.max(0.5, Math.min(3, z)));
+                      setDirtyEdits(true);
+                    }}
+                    onCropComplete={(_, areaPixels) => setCroppedAreaPixels(areaPixels)}
+                    objectFit="cover"
+                    minZoom={0.5}
+                    maxZoom={3}
+                    restrictPosition={false}
+                  />
+                  {maskUrl && <img src={maskUrl} className="baby-editor-mask" alt="" aria-hidden="true" />}
+                </div>
+
+                <div className="grid two" style={{ alignItems: "end" }}>
+                  <label className="field">
+                    <span>Zoom</span>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={3}
+                      step={0.001}
+                      value={zoom}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setZoom(Math.max(0.5, Math.min(3, v)));
+                        setDirtyEdits(true);
                       }}
                       disabled={editingBusy}
-                    >
-                      Remove background
-                    </button>
-
-                    {removeBgPopoverOpen && (
-                      <div className="popover" role="dialog" aria-label="Background removal options">
-                        <div className="stack" style={{ gap: 10 }}>
-                          <div className="stack" style={{ gap: 2 }}>
-                            <strong>Background removal</strong>
-                            <div className="muted small">Choose a mode, then remove.</div>
-                          </div>
-
-                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
-                            <input
-                              type="radio"
-                              name="baby-bg-mode"
-                              checked={removeBgMode === "simple"}
-                              onChange={() => setRemoveBgMode("simple")}
-                              disabled={editingBusy}
-                            />
-                            <span>Simple</span>
-                            <span className="muted small">(solid backgrounds)</span>
-                          </label>
-
-                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
-                            <input
-                              type="radio"
-                              name="baby-bg-mode"
-                              checked={removeBgMode === "complex"}
-                              onChange={() => setRemoveBgMode("complex")}
-                              disabled={editingBusy}
-                            />
-                            <span>Complex</span>
-                            <span className="muted small">(real-life backgrounds)</span>
-                          </label>
-
-                          <label className="inline" style={{ alignItems: "center", gap: 8 }}>
-                            <input
-                              type="radio"
-                              name="baby-bg-mode"
-                              checked={removeBgMode === "ultra_complex"}
-                              onChange={() => setRemoveBgMode("ultra_complex")}
-                              disabled={editingBusy}
-                            />
-                            <span>Ultra complex</span>
-                            <span className="muted small">(highest quality; heavier)</span>
-                          </label>
-
-                          <div className="actions" style={{ justifyContent: "flex-end" }}>
-                            <button
-                              type="button"
-                              className="primary"
-                              onClick={() => void runBackgroundRemovalPreview({ force: false })}
-                              disabled={editingBusy}
-                            >
-                              Remove
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void runBackgroundRemovalPreview({ force: true })}
-                              disabled={editingBusy}
-                            >
-                              Force
-                            </button>
-                          </div>
-
-                          {removeBgAlreadyRemoved && (
-                            <div className="callout warn">
-                              <div className="muted small">
-                                Background already removed. If this is not true, force background removal.
-                              </div>
-                            </div>
-                          )}
-
-                          {editingAction === "remove_background" && (
-                            <div className="stack" style={{ gap: 6 }}>
-                              <div className="inline" style={{ justifyContent: "space-between", gap: 10 }}>
-                                <span className="muted small">{removeBgMessage || "Working…"}</span>
-                                <span className="muted small">
-                                  {removeBgEtaSeconds != null ? `ETA ${formatEtaSeconds(removeBgEtaSeconds)}` : ""}
-                                </span>
-                              </div>
-                              <div className="progress determinate" aria-label="Background removal progress">
-                                <div className="progress-bar determinate" style={{ width: `${removeBgProgress}%` }} />
-                              </div>
-                            </div>
-                          )}
+                    />
+                  </label>
+                  <div className="actions" style={{ justifyContent: "flex-end" }}>
+                    <div className="popover-anchor">
+                      <button
+                        type="button"
+                        onClick={() => setShowApplyWarning(true)}
+                        disabled={editingBusy || !croppedAreaPixels}
+                        aria-disabled={editingBusy || !croppedAreaPixels}
+                      >
+                        Apply changes
+                      </button>
+                      {showChangesSaved && (
+                        <div className="popover" role="status" aria-live="polite" style={{ width: "auto", padding: 8 }}>
+                          <span className="muted small">Changes saved</span>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -919,6 +919,11 @@ button:disabled {
   z-index: 60;
 }
 
+.popover.below {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
 @keyframes slide {
   0% { transform: translateX(-100%); }
   50% { transform: translateX(20%); }
@@ -1031,6 +1036,13 @@ button:disabled {
   background: var(--bg-panel);
 }
 
+.modal.baby-editor-modal {
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
 .modal-header {
   display: flex;
   align-items: flex-start;
@@ -1046,6 +1058,14 @@ button:disabled {
   gap: 12px;
 }
 
+.modal.baby-editor-modal .modal-body {
+  padding: 10px;
+  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .baby-editor-crop {
   width: min(680px, 100%);
   margin: 0 auto;
@@ -1054,6 +1074,25 @@ button:disabled {
   border-radius: 12px;
   overflow: hidden;
   background: var(--bg-quiet);
+}
+
+.modal.baby-editor-modal .baby-editor-crop {
+  width: min(620px, 100%);
+}
+
+.baby-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: -2px;
+}
+
+.baby-editor-scroll {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .baby-editor-mask {

@@ -293,6 +293,16 @@ def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
     return (cx_small * inv, cy_small * inv)
 
 
+def detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
+    """Public wrapper around face detection used by generation.
+
+    Returns (center_x, center_y) in original image pixel coordinates, or None
+    if detection is unavailable or no face is found.
+    """
+
+    return _detect_face_center(img_rgb)
+
+
 def _parse_hex_rgb(value: str | None) -> tuple[int, int, int] | None:
     raw = (value or "").strip()
     if not raw:

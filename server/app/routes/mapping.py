@@ -30,7 +30,9 @@ from app.services.background_jobs import (
     pop_result_bytes as pop_bg_result_bytes,
     to_status_payload,
 )
+from app.services.generator import detect_face_center
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from uuid import uuid4
 from threading import Thread
@@ -59,6 +61,59 @@ async def get_baby_mask(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Mask not found")
     return FileResponse(path, media_type="image/png")
+
+
+@router.post("/detect-face-center")
+async def detect_face_center_api(image: UploadFile = File(...)):
+    """Detect the face center in an arbitrary uploaded image.
+
+    This is used by the baby-photo editor to auto-center the crop on a face.
+    """
+
+    try:
+        raw = await image.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Empty image")
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image")
+
+    center = detect_face_center(img)
+    if not center:
+        # Face detection is optional (depends on numpy/opencv). Make this
+        # user-actionable for the UI.
+        try:
+            import cv2  # type: ignore
+
+            _ = cv2  # avoid lint unused
+            unavailable = False
+        except Exception:
+            unavailable = True
+        return JSONResponse(
+            {
+                "found": False,
+                "reason": "unavailable" if unavailable else "not_found",
+                "center_x": None,
+                "center_y": None,
+                "width": img.width,
+                "height": img.height,
+            }
+        )
+
+    cx, cy = center
+    return JSONResponse(
+        {
+            "found": True,
+            "center_x": float(cx),
+            "center_y": float(cy),
+            "width": img.width,
+            "height": img.height,
+        }
+    )
 
 
 def _normalize_name(text: str) -> str:
