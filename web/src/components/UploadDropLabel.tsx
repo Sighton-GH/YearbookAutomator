@@ -1,5 +1,4 @@
-import type React from "react";
-import { useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { filesFromDataTransfer, matchesAccept } from "../utils/dragDrop";
 
@@ -14,9 +13,11 @@ export function UploadDropLabel({
   disabled?: boolean;
   className?: string;
   onFile: (file: File) => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const [hasFile, setHasFile] = useState(false);
+  const [fileName, setFileName] = useState<string>("");
   const labelRef = useRef<HTMLLabelElement | null>(null);
 
   const setInputFileAndDispatch = (file: File): boolean => {
@@ -35,26 +36,26 @@ export function UploadDropLabel({
     }
   };
 
-  const handleDragEnter = (e: React.DragEvent) => {
+  const handleDragEnter = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(true);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     setDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
@@ -67,8 +68,92 @@ export function UploadDropLabel({
     // Prefer updating the underlying file input so the UI shows the filename
     // in the same place as a normal file picker selection.
     const dispatched = setInputFileAndDispatch(firstAccepted);
-    if (!dispatched) onFile(firstAccepted);
+    if (!dispatched) {
+      setHasFile(true);
+      setFileName(firstAccepted.name);
+      onFile(firstAccepted);
+    }
   };
+
+  const childrenWithInlineTip = useMemo(() => {
+    let injected = false;
+    const out: ReactNode[] = [];
+
+    for (const child of Children.toArray(children)) {
+      if (!injected && isValidElement(child) && child.type === "input") {
+        const props: any = child.props;
+        if (props?.type === "file") {
+          injected = true;
+
+          const existingOnChange = props?.onChange as ((e: any) => void) | undefined;
+          const wrappedOnChange = (e: any) => {
+            const files = e?.target?.files as FileList | undefined;
+            const nextHasFile = Boolean(files && files.length > 0);
+            setHasFile(nextHasFile);
+            setFileName(nextHasFile ? files?.[0]?.name ?? "" : "");
+            existingOnChange?.(e);
+          };
+
+          const mergedClassName = clsx(props?.className, "upload-native-input");
+          const mergedDisabled = Boolean(disabled || props?.disabled);
+          const clonedInput = cloneElement(child as any, {
+            onChange: wrappedOnChange,
+            className: mergedClassName,
+            disabled: mergedDisabled,
+          });
+
+          out.push(
+            <div key="__upload_file_row" className="upload-file-row">
+              {clonedInput}
+              <div className="upload-file-ui" aria-hidden="true">
+                <button type="button" className="upload-file-button">
+                  <svg
+                    className="upload-file-icon"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 16V4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M7 9L12 4L17 9"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M4 20H20"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Upload File
+                </button>
+                <span className="upload-file-name">{hasFile ? fileName || "File selected" : "No file chosen"}</span>
+                {!hasFile ? <span className="upload-file-tip">(you can also drag and drop a file)</span> : null}
+              </div>
+            </div>
+          );
+          continue;
+        }
+      }
+
+      out.push(child);
+    }
+
+    return out;
+  }, [children, disabled, fileName, hasFile]);
 
   return (
     <label
@@ -79,8 +164,7 @@ export function UploadDropLabel({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {children}
-      <span className="muted small">You can also drag and drop a file here.</span>
+      {childrenWithInlineTip}
     </label>
   );
 }

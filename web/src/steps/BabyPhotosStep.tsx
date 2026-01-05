@@ -908,6 +908,12 @@ export function BabyPhotosStep({
             </p>
 
             <div ref={babyZipRef}>
+              <div className="upload-title">Baby photo ZIP</div>
+              {showMissing && !babyZip && !babyFile ? (
+                <div className="upload-error">
+                  <span aria-hidden="true">❗</span> Please upload a file
+                </div>
+              ) : null}
               <UploadDropLabel
                 accept=".zip"
                 disabled={loading}
@@ -917,10 +923,6 @@ export function BabyPhotosStep({
                   setBabyZip(file);
                 }}
               >
-                <span>
-                  {showMissing && !babyZip && !babyFile ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-                  Baby photo ZIP
-                </span>
                 <input
                   type="file"
                   accept=".zip"
@@ -953,7 +955,7 @@ export function BabyPhotosStep({
               description="Helps with minor typos/missing characters."
             />
 
-            <div className={clsx("stack", showMissing && !babyZip && !babyFile ? "invalid" : undefined)} style={{ gap: 6 }}>
+            <div className={clsx("stack")} style={{ gap: 6 }}>
               <strong>Default baby photo</strong>
               <div className="muted small">Used when a student is missing a baby photo.</div>
 
@@ -973,7 +975,17 @@ export function BabyPhotosStep({
                 </div>
               )}
 
-              <UploadDropLabel accept="image/*" disabled={loading} onFile={(file) => setBabyFile(file)}>
+              {showMissing && !babyZip && !babyFile ? (
+                <div className="upload-error">
+                  <span aria-hidden="true">❗</span> Please upload a file
+                </div>
+              ) : null}
+              <UploadDropLabel
+                accept="image/*"
+                disabled={loading}
+                className={showMissing && !babyZip && !babyFile ? "invalid" : undefined}
+                onFile={(file) => setBabyFile(file)}
+              >
                 <span className="muted small">Upload default baby photo</span>
                 <input
                   type="file"

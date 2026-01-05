@@ -409,6 +409,12 @@ export function MugshotMapping({
               files may shift down if a name match took that row). Non-matching files are skipped and listed in warnings.
             </p>
             <div ref={sheetRef}>
+              <div className="upload-title">Spreadsheet</div>
+              {showMissing && !sheet ? (
+                <div className="upload-error">
+                  <span aria-hidden="true">❗</span> Please upload a file
+                </div>
+              ) : null}
               <UploadDropLabel
                 accept=".xlsx,.csv"
                 disabled={loading}
@@ -418,10 +424,6 @@ export function MugshotMapping({
                   setSheet(file);
                 }}
               >
-                <span>
-                  {showMissing && !sheet ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-                  Spreadsheet
-                </span>
                 <input
                   type="file"
                   accept=".xlsx,.csv"
@@ -434,6 +436,12 @@ export function MugshotMapping({
             </div>
 
             <div ref={zipRef}>
+              <div className="upload-title">Portraits ZIP</div>
+              {showMissing && !zip ? (
+                <div className="upload-error">
+                  <span aria-hidden="true">❗</span> Please upload a file
+                </div>
+              ) : null}
               <UploadDropLabel
                 accept=".zip"
                 disabled={loading}
@@ -443,10 +451,6 @@ export function MugshotMapping({
                   setZip(file);
                 }}
               >
-                <span>
-                  {showMissing && !zip ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-                  Portraits ZIP
-                </span>
                 <input
                   type="file"
                   accept=".zip"

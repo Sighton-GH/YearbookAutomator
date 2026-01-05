@@ -150,58 +150,64 @@ export function TemplateParsing({
       <p className="muted">
         Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.
       </p>
-      <div ref={annotatedRef}>
-        <UploadDropLabel
-          accept="image/png"
-          disabled={loading}
-          className={missingAnnotatedUi ? "invalid" : undefined}
-          onFile={(file) => {
-            setShowMissing(false);
-            onAnnotatedChange(file);
-          }}
-        >
-          <span>
-            {missingAnnotatedUi ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-            Annotated template (.png)
-          </span>
-          <input
-            type="file"
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "12px" }}>
+        <div ref={annotatedRef}>
+          <div className="upload-title">Annotated template (.png)</div>
+          {missingAnnotatedUi && (
+            <div className="upload-error">
+              <span aria-hidden="true">❗</span> Please upload a file
+            </div>
+          )}
+          <UploadDropLabel
             accept="image/png"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
+            disabled={loading}
+            className={missingAnnotatedUi ? "invalid" : undefined}
+            onFile={(file) => {
               setShowMissing(false);
               onAnnotatedChange(file);
             }}
-          />
-          {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
-        </UploadDropLabel>
-      </div>
+          >
+            <input
+              type="file"
+              accept="image/png"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setShowMissing(false);
+                onAnnotatedChange(file);
+              }}
+            />
+            {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
+          </UploadDropLabel>
+        </div>
 
-      <div ref={cleanRef}>
-        <UploadDropLabel
-          accept="image/png"
-          disabled={loading}
-          className={missingCleanUi ? "invalid" : undefined}
-          onFile={(file) => {
-            setShowMissing(false);
-            onCleanChange(file);
-          }}
-        >
-          <span>
-            {missingCleanUi ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-            Clean template (.png)
-          </span>
-          <input
-            type="file"
+        <div ref={cleanRef}>
+          <div className="upload-title">Clean template (.png)</div>
+          {missingCleanUi && (
+            <div className="upload-error">
+              <span aria-hidden="true">❗</span> Please upload a file
+            </div>
+          )}
+          <UploadDropLabel
             accept="image/png"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
+            disabled={loading}
+            className={missingCleanUi ? "invalid" : undefined}
+            onFile={(file) => {
               setShowMissing(false);
               onCleanChange(file);
             }}
-          />
-          {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
-        </UploadDropLabel>
+          >
+            <input
+              type="file"
+              accept="image/png"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setShowMissing(false);
+                onCleanChange(file);
+              }}
+            />
+            {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
+          </UploadDropLabel>
+        </div>
       </div>
       <label className="field">
         <span>People per spread (max slots to keep)</span>

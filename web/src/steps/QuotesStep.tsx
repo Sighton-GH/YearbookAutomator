@@ -176,6 +176,12 @@ export function QuotesStep({
             </p>
 
             <div ref={sheetRef}>
+              <div className="upload-title">Quotes spreadsheet (.xlsx or .csv)</div>
+              {showMissing && !quotesSheet ? (
+                <div className="upload-error">
+                  <span aria-hidden="true">❗</span> Please upload a file
+                </div>
+              ) : null}
               <UploadDropLabel
                 disabled={loading}
                 className={showMissing && !quotesSheet ? "invalid" : undefined}
@@ -184,10 +190,6 @@ export function QuotesStep({
                   setQuotesSheet(file);
                 }}
               >
-                <span>
-                  {showMissing && !quotesSheet ? <span className="warn-icon" aria-hidden="true">⚠</span> : null}
-                  Quotes spreadsheet (.xlsx or .csv)
-                </span>
                 <input
                   type="file"
                   accept=".xlsx,.csv"
