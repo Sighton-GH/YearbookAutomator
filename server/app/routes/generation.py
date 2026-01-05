@@ -32,6 +32,25 @@ router = APIRouter()
 _SAFE_BASENAME_RE = re.compile(r"[^0-9A-Za-z._-]+")
 
 
+_OUTPUT_EXTS = {".png", ".pdf", ".tif", ".tiff"}
+
+
+def _list_output_files(root) -> list:
+    # Prefer multi-spread outputs if present; otherwise fall back to a single output.<ext>.
+    spread_files: list = []
+    for ext in sorted(_OUTPUT_EXTS):
+        spread_files.extend(sorted(root.glob(f"output_*.{ext.lstrip('.')}")))
+
+    if not spread_files:
+        for ext in sorted(_OUTPUT_EXTS):
+            single = root / f"output{ext}"
+            if single.exists():
+                spread_files = [single]
+                break
+
+    return spread_files
+
+
 def _safe_basename(name: str) -> str:
     base = (name or "").split("/")[-1].split("\\")[-1].strip()
     if not base:
@@ -137,12 +156,7 @@ async def download_all(workspace_id: str):
     if not root.exists():
         raise HTTPException(status_code=404, detail="workspace not found")
 
-    # Prefer multi-spread outputs if present; otherwise fall back to single output.png.
-    spread_files = sorted(root.glob("output_*.png"))
-    if not spread_files:
-        single = root / "output.png"
-        if single.exists():
-            spread_files = [single]
+    spread_files = _list_output_files(root)
 
     if not spread_files:
         raise HTTPException(status_code=404, detail="no rendered spreads found")
@@ -168,12 +182,7 @@ async def download_spreadsheet(workspace_id: str):
     if not root.exists():
         raise HTTPException(status_code=404, detail="workspace not found")
 
-    # Prefer multi-spread outputs if present; otherwise fall back to single output.png.
-    spread_files = sorted(root.glob("output_*.png"))
-    if not spread_files:
-        single = root / "output.png"
-        if single.exists():
-            spread_files = [single]
+    spread_files = _list_output_files(root)
 
     if not spread_files:
         raise HTTPException(status_code=404, detail="no rendered spreads found")
@@ -185,7 +194,7 @@ async def download_spreadsheet(workspace_id: str):
     rows: list[dict[str, object]] = []
 
     def parse_spread_number(fname: str, fallback: int) -> int:
-        m = re.search(r"output_(\d+)\.png$", fname, flags=re.IGNORECASE)
+        m = re.search(r"output_(\d+)\.(png|pdf|tif|tiff)$", fname, flags=re.IGNORECASE)
         if m:
             try:
                 return int(m.group(1))

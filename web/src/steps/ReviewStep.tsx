@@ -59,6 +59,7 @@ export function ReviewStep({
           {swapMode ? "Swap mode: on" : "Swap mode: off"}
         </button>
       </div>
+
       {swapDisabled && <p className="muted small">Disable “Force alphabetical” to reorder cards.</p>}
       {swapMode && <p className="muted small">Drag a person card onto another to swap positions.</p>}
       <div className="people-grid">

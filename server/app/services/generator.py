@@ -11,6 +11,26 @@ from app.services.placement import auto_place_slots_for_people
 from app.services.storage import workspace_dir
 
 
+_OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
+    "png": ".png",
+    "pdf": ".pdf",
+    "tiff": ".tiff",
+}
+
+
+def _normalize_output_filename(name: str | None, output_format: str) -> str:
+    ext = _OUTPUT_EXT_BY_FORMAT.get((output_format or "").lower(), ".png")
+    raw = (name or "").strip()
+    if not raw:
+        return f"output{ext}"
+    base = raw.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].strip()
+    if not base:
+        return f"output{ext}"
+    stem = base.rsplit(".", 1)[0] if "." in base else base
+    stem = stem.strip() or "output"
+    return f"{stem}{ext}"
+
+
 def _font_candidates(font_family: str) -> list[str]:
     # Accept either a single name/filename or a CSS font stack.
     # Examples from the UI: '"Georgia"' or 'Inter, system-ui, sans-serif'
@@ -501,6 +521,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     if not template_path.exists():
         raise FileNotFoundError("Clean template not found; parse step must run first")
 
+    output_format = (getattr(payload, "output_format", "png") or "png").lower()
     tick(5, "Loading template")
     base = Image.open(template_path).convert("RGB")
     template_ref = base.copy()
@@ -634,8 +655,18 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         pct = 10 + int((idx + 1) / total * 80)
         tick(pct, f"Rendered {idx + 1}/{total}")
 
-    out_name = (payload.output_filename or "output.png").strip() or "output.png"
+    out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
     out_path = root / out_name
-    base.save(out_path)
+
+    if output_format == "tiff":
+        tick(92, "Saving TIFF")
+        base.save(out_path, format="TIFF", compression="tiff_deflate")
+    elif output_format == "pdf":
+        tick(92, "Saving PDF")
+        base.save(out_path, format="PDF")
+    else:
+        tick(92, "Saving PNG")
+        base.save(out_path, format="PNG")
+
     tick(100, "Done")
     return out_path

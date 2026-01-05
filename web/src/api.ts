@@ -303,6 +303,7 @@ export async function generateSpread(params: {
   template_id: string;
   slots: TemplateSlots[];
   people: PersonRecord[];
+  output_format?: "png" | "pdf" | "tiff";
   count_usage?: boolean;
   auto_place?: boolean;
   placement_mode?: "left_then_right" | "simultaneous";

@@ -265,6 +265,7 @@ export default function App({ embedded = false }: AppProps) {
   const [swapMode, setSwapMode] = useState(false);
   const [allowInsecureReviewResults, setAllowInsecureReviewResults] = useState(false);
   const [peoplePerSpread, setPeoplePerSpread] = useState<number>(16);
+  const [outputFormat, setOutputFormat] = useState<"png" | "pdf" | "tiff">("png");
   const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
@@ -1073,6 +1074,9 @@ export default function App({ embedded = false }: AppProps) {
         setQuoteAllCaps(Boolean(saved.quoteAllCaps));
         setQuoteAlign((saved.quoteAlign as Align) ?? "left");
         setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
+        if (saved.outputFormat === "png" || saved.outputFormat === "pdf" || saved.outputFormat === "tiff") {
+          setOutputFormat(saved.outputFormat);
+        }
 
         if (saved.workspaceId) {
           // Use server-stored template for preview after refresh.
@@ -1153,6 +1157,7 @@ export default function App({ embedded = false }: AppProps) {
       quoteAllCaps,
       quoteAlign,
       peoplePerSpread,
+      outputFormat,
     };
     trySaveSession(payload);
   }, [
@@ -1192,6 +1197,7 @@ export default function App({ embedded = false }: AppProps) {
     quoteAllCaps,
     quoteAlign,
     peoplePerSpread,
+    outputFormat,
   ]);
 
   // Note: quotes/baby steps are not skippable. Disabling only affects rendering.
@@ -1372,6 +1378,7 @@ export default function App({ embedded = false }: AppProps) {
         template_id: templateId,
         slots,
         people: peopleToSend,
+        output_format: outputFormat,
         count_usage: Boolean(opts.countUsage),
         auto_place: true,
         placement_mode: placementMode,
@@ -1492,8 +1499,10 @@ export default function App({ embedded = false }: AppProps) {
     if (!workspaceId || !templateId) return;
     const count = Math.min(slots.length || people.length, people.length);
     const previewPeople = getPeopleForGeneration(people).slice(0, count);
+
+    const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
     await runGeneration({
-      outputFilename: "preview.png",
+      outputFilename: `preview.${ext}`,
       peopleOverride: previewPeople,
       onDone: (out) => {
         setPreviewPath(out);
@@ -1525,7 +1534,8 @@ export default function App({ embedded = false }: AppProps) {
       const start = spreadIdx * perSpread;
       const end = Math.min(peopleForAll.length, start + perSpread);
       const spreadPeople = peopleForAll.slice(start, end);
-      const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.png`;
+      const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
+      const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.${ext}`;
       const out = await runGeneration({
         outputFilename: filename,
         peopleOverride: spreadPeople,
@@ -2016,6 +2026,8 @@ export default function App({ embedded = false }: AppProps) {
                 people={people}
                 peoplePerSpread={peoplePerSpread}
                 templateSize={templateSize}
+                outputFormat={outputFormat}
+                onOutputFormat={setOutputFormat}
                 placementMode={placementMode}
                 onPlacementMode={setPlacementMode}
                 forceAlphabetical={forceAlphabetical}

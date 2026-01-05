@@ -71,6 +71,10 @@ class GenerationRequest(BaseModel):
     template_id: str
     slots: list[TemplateSlots]
     people: list[PersonRecord]
+    output_format: Literal["png", "pdf", "tiff"] = Field(
+        default="png",
+        description="Output format for rendered spreads. Default is png.",
+    )
     count_usage: bool = Field(
         default=False,
         description="If true, this generation counts against license usage limits (used for the Render All action).",

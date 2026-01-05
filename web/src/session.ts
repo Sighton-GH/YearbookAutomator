@@ -61,6 +61,7 @@ export type PersistedSessionV1 = {
   quoteAllCaps: boolean;
   quoteAlign: Align;
   peoplePerSpread: number;
+  outputFormat?: "png" | "pdf" | "tiff";
 };
 
 export const isPersistedSessionV1 = (x: unknown): x is PersistedSessionV1 => {

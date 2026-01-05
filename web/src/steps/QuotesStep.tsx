@@ -175,8 +175,6 @@ export function QuotesStep({
               picks the most quote-like cell and ignores obvious non-quotes like emails/URLs.
             </p>
 
-            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
-
             <div ref={sheetRef}>
               <UploadDropLabel
                 disabled={loading}

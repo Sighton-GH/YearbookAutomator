@@ -18,7 +18,7 @@ export function ResultsStep({
     .map((p) => p.split(/[\\/]/).pop() || p)
     .filter(Boolean);
   const parseSpreadNumber = (fname: string) => {
-    const m = fname.match(/output_(\d+)\.png$/i);
+    const m = fname.match(/output_(\d+)\.(png|pdf|tif|tiff)$/i);
     return m ? Number(m[1]) : null;
   };
   const files = [...rawFiles].sort((a, b) => {
@@ -74,6 +74,7 @@ export function ResultsStep({
 
       {files.map((fname, idx) => {
         const spreadNumber = parseSpreadNumber(fname) ?? idx + 1;
+        const isPng = /\.png$/i.test(fname);
         return (
           <div key={fname} className="stack" style={{ gap: 8 }}>
             <div className="inline" style={{ justifyContent: "space-between", width: "100%", gap: 12, flexWrap: "wrap" }}>
@@ -89,11 +90,15 @@ export function ResultsStep({
                 Download
               </button>
             </div>
-            <img
-              src={generationDownloadUrl(workspaceId, fname, { cache: `${outputNonce}-${idx}` })}
-              alt={`spread-${spreadNumber}`}
-              style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 12 }}
-            />
+            {isPng ? (
+              <img
+                src={generationDownloadUrl(workspaceId, fname, { cache: `${outputNonce}-${idx}` })}
+                alt={`spread-${spreadNumber}`}
+                style={{ width: "100%", border: "1px solid var(--border)", borderRadius: 12 }}
+              />
+            ) : (
+              <p className="muted small">Preview not available for {fname.split(".").pop()?.toUpperCase() || "this format"}. Use Download.</p>
+            )}
           </div>
         );
       })}
