@@ -84,6 +84,15 @@ class GenerationRequest(BaseModel):
         description="Optional output filename (e.g. preview.png). Defaults to output.png",
     )
 
+    output_width: Optional[int] = Field(
+        default=None,
+        description="Optional output width in pixels. If provided, output is downscaled (never upscaled) and aspect ratio is locked to the template.",
+    )
+    output_height: Optional[int] = Field(
+        default=None,
+        description="Optional output height in pixels. If provided, output is downscaled (never upscaled) and aspect ratio is locked to the template.",
+    )
+
     # Styling (legacy single-style fields)
     default_quote: Optional[str] = None
     default_baby_photo_filename: Optional[str] = None

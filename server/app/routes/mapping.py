@@ -41,6 +41,33 @@ import time
 router = APIRouter()
 
 
+def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[bytes, int]:
+    """Render the first page of a PDF to PNG bytes.
+
+    Returns: (png_bytes, page_count)
+    """
+
+    if not pdf_bytes:
+        raise ValueError("Empty PDF")
+    try:
+        import fitz  # PyMuPDF
+    except Exception as exc:
+        raise RuntimeError("PyMuPDF not installed") from exc
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page_count = int(getattr(doc, "page_count", 0) or 0)
+        if page_count <= 0:
+            raise ValueError("PDF has no pages")
+        page = doc.load_page(0)
+        scale = float(dpi) / 72.0
+        mat = fitz.Matrix(scale, scale)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        return pix.tobytes("png"), page_count
+    finally:
+        doc.close()
+
+
 @router.get("/baby-mask")
 async def get_baby_mask(
     workspace_id: str,
@@ -510,6 +537,7 @@ async def upload_baby_zip(
     baby_zip: UploadFile | None = File(None),
     advanced_name_match: bool = Form(True),
     partial_name_match: bool = Form(False),
+    convert_pdfs: bool = Form(False),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> SpreadsheetPreview:
@@ -555,16 +583,18 @@ async def upload_baby_zip(
         if await request.is_disconnected():
             raise HTTPException(status_code=499, detail="Client disconnected")
 
+    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for member in zf.namelist():
             await _abort_if_disconnected()
             if member.endswith("/"):
                 continue
             filename_only = Path(member).name
-            if Path(filename_only).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
-                warnings.append(
-                    f"Skipped baby file '{filename_only}' (unsupported type; images only)."
-                )
+            suffix = Path(filename_only).suffix.lower()
+            is_pdf = suffix == ".pdf"
+            if suffix not in image_exts and not (convert_pdfs and is_pdf):
+                warnings.append(f"Skipped baby file '{filename_only}' (unsupported type; images only).")
                 continue
             stem_raw = Path(filename_only).stem
             stem_norm = _normalize_name(stem_raw)
@@ -604,13 +634,27 @@ async def upload_baby_zip(
                     continue
                 await _abort_if_disconnected()
                 with zf.open(member) as src:
-                    content = src.read()
+                    raw_content = src.read()
+
                 out_name = filename_only
+                content = raw_content
+                if is_pdf:
+                    try:
+                        content, page_count = _pdf_first_page_to_png_bytes(raw_content)
+                        out_name = f"{Path(filename_only).stem}.png"
+                        if page_count > 1:
+                            warnings.append(
+                                f"Converted '{filename_only}' to '{out_name}' (used first page only; {page_count} pages total)."
+                            )
+                    except Exception as exc:
+                        warnings.append(f"Skipped baby file '{filename_only}' (PDF conversion failed: {exc}).")
+                        continue
+
                 if remove_background:
                     await _abort_if_disconnected()
                     try:
                         content = remove_background_bytes(content, mode=background_mode)
-                        out_name = background_removed_filename(filename_only, person_index=person_index)
+                        out_name = background_removed_filename(out_name, person_index=person_index)
                     except Exception as exc:
                         warnings.append(
                             f"Skipped baby photo '{filename_only}' for person {person_index} (background removal failed: {exc})."

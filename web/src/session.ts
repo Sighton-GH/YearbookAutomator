@@ -33,6 +33,7 @@ export type PersistedSessionV1 = {
   babyIngest?: {
     advancedNameMatch?: boolean;
     partialNameMatch?: boolean;
+    convertPdfs?: boolean;
     removeBackground?: boolean;
     backgroundMode?: BackgroundMode;
     allowInsecureUploads?: boolean;
@@ -62,6 +63,7 @@ export type PersistedSessionV1 = {
   quoteAlign: Align;
   peoplePerSpread: number;
   outputFormat?: "png" | "pdf" | "tiff";
+  outputSize?: { width: number; height: number } | null;
 };
 
 export const isPersistedSessionV1 = (x: unknown): x is PersistedSessionV1 => {

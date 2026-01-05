@@ -73,6 +73,8 @@ export async function parseTemplate(
     disableBabyPhotos?: boolean;
     disableQuotes?: boolean;
     minArea?: number;
+    signal?: AbortSignal;
+    onProgress?: (progressPct: number) => void;
   }
 ) {
   const form = new FormData();
@@ -87,7 +89,16 @@ export async function parseTemplate(
   if (opts?.disableQuotes) form.append("disable_quotes", "true");
   if (opts?.minArea) form.append("min_area", String(opts.minArea));
   const { data } = await axios.post<TemplateParseResponse>("/api/templates/parse", form, {
-    headers: { "Content-Type": "multipart/form-data" }
+    headers: { "Content-Type": "multipart/form-data" },
+    signal: opts?.signal,
+    onUploadProgress: opts?.onProgress
+      ? (evt) => {
+          const total = evt.total ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / total) * 100)));
+          opts.onProgress?.(pct);
+        }
+      : undefined,
   });
   return data;
 }
@@ -230,6 +241,7 @@ export async function uploadBabyZip(
   opts?: {
     advancedNameMatch?: boolean;
     partialNameMatch?: boolean;
+    convertPdfs?: boolean;
     removeBackground?: boolean;
     backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
@@ -242,6 +254,7 @@ export async function uploadBabyZip(
   if (babyZip) form.append("baby_zip", babyZip);
   if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
   if (opts?.partialNameMatch) form.append("partial_name_match", "true");
+  if (opts?.convertPdfs) form.append("convert_pdfs", "true");
   if (opts?.removeBackground) form.append("remove_background", "true");
   if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/upload-baby-zip", form, {
@@ -304,6 +317,8 @@ export async function generateSpread(params: {
   slots: TemplateSlots[];
   people: PersonRecord[];
   output_format?: "png" | "pdf" | "tiff";
+  output_width?: number;
+  output_height?: number;
   count_usage?: boolean;
   auto_place?: boolean;
   placement_mode?: "left_then_right" | "simultaneous";

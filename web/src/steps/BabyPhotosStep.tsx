@@ -20,6 +20,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
@@ -31,6 +32,12 @@ export function BabyPhotosStep({
   defaultBabyFilename,
   defaultQuote,
   onDefaultBabyFilename,
+  babyZipWarnings,
+  onBabyZipWarnings,
+  babyZipWarningsOpen,
+  onBabyZipWarningsOpen,
+  babyCompletedErrorCount,
+  onBabyCompletedErrorCount,
   babyIngest,
   onBabyIngest,
   onBabyEditHistoryAdd,
@@ -57,6 +64,12 @@ export function BabyPhotosStep({
   defaultBabyFilename: string | null;
   defaultQuote: string;
   onDefaultBabyFilename: (v: string | null) => void;
+  babyZipWarnings: string[];
+  onBabyZipWarnings: (v: string[]) => void;
+  babyZipWarningsOpen: boolean;
+  onBabyZipWarningsOpen: (v: boolean) => void;
+  babyCompletedErrorCount: number | null;
+  onBabyCompletedErrorCount: (v: number | null) => void;
   babyIngest: NonNullable<PersistedSessionV1["babyIngest"]>;
   onBabyIngest: React.Dispatch<React.SetStateAction<NonNullable<PersistedSessionV1["babyIngest"]>>>;
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
@@ -83,11 +96,11 @@ export function BabyPhotosStep({
   const [showMissing, setShowMissing] = useState(false);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
   const [partialNameMatch, setPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
+  const [convertPdfs, setConvertPdfs] = useState(Boolean(babyIngest.convertPdfs ?? false));
   const [removeBabyBackground, setRemoveBabyBackground] = useState(Boolean(babyIngest.removeBackground ?? false));
   const [babyBackgroundMode, setBabyBackgroundMode] = useState<BackgroundMode>(
     (babyIngest.backgroundMode as any) ?? "simple"
   );
-  const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
   const [originalDefaultBabyFilename, setOriginalDefaultBabyFilename] = useState<string | null>(null);
   const [babyThumbError, setBabyThumbError] = useState<Record<number, boolean>>({});
@@ -134,6 +147,7 @@ export function BabyPhotosStep({
   } | null>(null);
 
   const babyZipRef = useRef<HTMLDivElement | null>(null);
+  const babyZipWarningsRef = useRef<HTMLDetailsElement | null>(null);
 
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -157,6 +171,7 @@ export function BabyPhotosStep({
   useEffect(() => {
     setAdvancedNameMatch(Boolean(babyIngest.advancedNameMatch ?? true));
     setPartialNameMatch(Boolean(babyIngest.partialNameMatch ?? true));
+    setConvertPdfs(Boolean(babyIngest.convertPdfs ?? false));
     setRemoveBabyBackground(Boolean(babyIngest.removeBackground ?? false));
     setBabyBackgroundMode(((babyIngest.backgroundMode as any) ?? "simple") as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -750,6 +765,8 @@ export function BabyPhotosStep({
 
     setLoading(true);
     setProgress(0);
+    onBabyZipWarningsOpen(false);
+    onBabyCompletedErrorCount(null);
     try {
       setStatus("Processing baby photos...");
 
@@ -813,10 +830,12 @@ export function BabyPhotosStep({
         };
 
         setStatus("Uploading baby ZIP…");
-        setBabyZipWarnings([]);
+        onBabyZipWarnings([]);
+        onBabyCompletedErrorCount(null);
         const resp = await uploadBabyZip(workspaceId, people, babyZip, {
           advancedNameMatch,
           partialNameMatch: advancedNameMatch && partialNameMatch,
+          convertPdfs,
           removeBackground: removeBabyBackground,
           backgroundMode: babyBackgroundMode,
           signal: controller.signal,
@@ -845,7 +864,7 @@ export function BabyPhotosStep({
         nextPeople = resp.people;
         nextWarnings = resp.warnings ?? [];
         setPeople(nextPeople);
-        setBabyZipWarnings(nextWarnings);
+        onBabyZipWarnings(nextWarnings);
 
         if (uploadFinishedMs !== null) {
           const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
@@ -860,7 +879,8 @@ export function BabyPhotosStep({
       setOriginalBabyPeople(nextPeople.map((p) => ({ ...p })));
       setOriginalDefaultBabyFilename(nextDefaultBabyFilename);
 
-      setStatus("Processing complete");
+      onBabyCompletedErrorCount(nextWarnings.length);
+      setStatus("Baby photo processing completed");
       setProgress(100);
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === "AbortError";
@@ -886,7 +906,7 @@ export function BabyPhotosStep({
     if (snap) {
       setPeople(snap.people);
       onDefaultBabyFilename(snap.defaultBabyFilename);
-      setBabyZipWarnings(snap.babyZipWarnings);
+      onBabyZipWarnings(snap.babyZipWarnings);
     }
 
     setLoading(false);
@@ -953,6 +973,16 @@ export function BabyPhotosStep({
               }}
               label="Partial name matching"
               description="Helps with minor typos/missing characters."
+            />
+
+            <ToggleSwitch
+              checked={convertPdfs}
+              onChange={(checked) => {
+                setConvertPdfs(checked);
+                onBabyIngest((prev) => ({ ...prev, convertPdfs: checked }));
+              }}
+              label="Convert PDFs in baby ZIP to images"
+              description="If the ZIP contains .pdf files, the first page is converted to a PNG before matching/processing."
             />
 
             <div className={clsx("stack")} style={{ gap: 6 }}>
@@ -1183,7 +1213,12 @@ export function BabyPhotosStep({
             </div>
 
             {babyZipWarnings.length > 0 && (
-              <details className="muted small">
+              <details
+                ref={babyZipWarningsRef}
+                className="muted small"
+                open={babyZipWarningsOpen}
+                onToggle={(e) => onBabyZipWarningsOpen((e.currentTarget as HTMLDetailsElement).open)}
+              >
                 <summary>
                   <strong>⚠ Baby ZIP warnings ({babyZipWarnings.length})</strong>
                 </summary>
@@ -1221,7 +1256,15 @@ export function BabyPhotosStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
+            <CompletionServerMessageWithWarningsLink
+              completedErrorCount={babyCompletedErrorCount}
+              baseMessage="Baby photo processing completed"
+              detailsRef={babyZipWarningsRef}
+              setDetailsOpen={onBabyZipWarningsOpen}
+            />
+            {babyCompletedErrorCount === null && status ? (
+              <p className="muted prewrap">{prefixServerMessage(status)}</p>
+            ) : null}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

@@ -11,6 +11,7 @@ export type SessionLike = {
   babyIngest?: {
     advancedNameMatch?: boolean;
     partialNameMatch?: boolean;
+    convertPdfs?: boolean;
     removeBackground?: boolean;
     backgroundMode?: "simple" | "complex" | "ultra_complex";
     allowInsecureUploads?: boolean;
@@ -107,6 +108,7 @@ type UploadBabyZipFn<S extends SessionLike> = (
   opts?: {
     advancedNameMatch?: boolean;
     partialNameMatch?: boolean;
+    convertPdfs?: boolean;
     removeBackground?: boolean;
     backgroundMode?: "simple" | "complex" | "ultra_complex";
     onProgress?: (pct: number) => void;
@@ -176,6 +178,7 @@ export async function importBabyZip<S extends SessionLike>(args: {
   await uploadBabyZip(workspaceId, (session.people ?? []) as NonNullable<S["people"]>, babyZip, {
     advancedNameMatch: Boolean(session.babyIngest?.advancedNameMatch ?? true),
     partialNameMatch: Boolean(session.babyIngest?.partialNameMatch ?? true),
+    convertPdfs: Boolean(session.babyIngest?.convertPdfs ?? false),
     removeBackground: Boolean(session.babyIngest?.removeBackground ?? false),
     backgroundMode: (session.babyIngest?.backgroundMode as any) || undefined,
     onProgress: (pct) => setStatus?.(`Uploading baby photos zip… ${Math.round(pct)}%`),

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
+import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { assetUrl, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
 import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
@@ -10,6 +11,12 @@ import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../util
 export function QuotesStep({
   defaultQuote,
   onDefaultQuote,
+  quotesWarnings,
+  onQuotesWarnings,
+  quotesWarningsOpen,
+  onQuotesWarningsOpen,
+  quotesCompletedErrorCount,
+  onQuotesCompletedErrorCount,
   workspaceId,
   allowInsecureUploads,
   setStatus,
@@ -27,6 +34,12 @@ export function QuotesStep({
 }: {
   defaultQuote: string;
   onDefaultQuote: (v: string) => void;
+  quotesWarnings: string[];
+  onQuotesWarnings: (v: string[]) => void;
+  quotesWarningsOpen: boolean;
+  onQuotesWarningsOpen: (v: boolean) => void;
+  quotesCompletedErrorCount: number | null;
+  onQuotesCompletedErrorCount: (v: number | null) => void;
   workspaceId: string | null;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
@@ -45,9 +58,9 @@ export function QuotesStep({
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [quotesSheet, setQuotesSheet] = useState<File | null>(null);
   const [showMissing, setShowMissing] = useState(false);
-  const [quotesWarnings, setQuotesWarnings] = useState<string[]>([]);
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const warningsRef = useRef<HTMLDetailsElement | null>(null);
 
   const quotesProcessingEstimateSecondsRef = useRef<number>(6);
   const didScrollForProgressRef = useRef(false);
@@ -92,7 +105,9 @@ export function QuotesStep({
       setProgress(0);
       setLoading(true);
       setStatus("Uploading and matching quotes...");
-      setQuotesWarnings([]);
+      onQuotesWarnings([]);
+      onQuotesWarningsOpen(false);
+      onQuotesCompletedErrorCount(null);
 
       const opStartMs = performance.now();
       let uploadFinishedMs: number | null = null;
@@ -144,8 +159,9 @@ export function QuotesStep({
       clearProcessingInterval();
       setPeople(resp.people);
       const warnings = resp.warnings ?? [];
-      setQuotesWarnings(warnings);
-      setStatus(warnings.length ? `Quotes spreadsheet processed with ${warnings.length} warnings` : "Quotes spreadsheet processed");
+      onQuotesWarnings(warnings);
+      onQuotesCompletedErrorCount(warnings.length);
+      setStatus("Quote processing completed");
 
       if (uploadFinishedMs !== null) {
         const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
@@ -224,7 +240,12 @@ export function QuotesStep({
             </button>
 
             {quotesWarnings.length > 0 && (
-              <details className="muted small">
+              <details
+                ref={warningsRef}
+                className="muted small"
+                open={quotesWarningsOpen}
+                onToggle={(e) => onQuotesWarningsOpen((e.currentTarget as HTMLDetailsElement).open)}
+              >
                 <summary>
                   <strong>Quotes warnings ({quotesWarnings.length})</strong>
                 </summary>
@@ -252,7 +273,15 @@ export function QuotesStep({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
+            <CompletionServerMessageWithWarningsLink
+              completedErrorCount={quotesCompletedErrorCount}
+              baseMessage="Quote processing completed"
+              detailsRef={warningsRef}
+              setDetailsOpen={onQuotesWarningsOpen}
+            />
+            {quotesCompletedErrorCount === null && status ? (
+              <p className="muted prewrap">{prefixServerMessage(status)}</p>
+            ) : null}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

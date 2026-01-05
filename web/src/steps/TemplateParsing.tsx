@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { parseTemplate, type RawParseDebug, type TemplateSlots } from "../api";
+import { formatEtaSeconds } from "../utils/ui";
 
 export function TemplateParsing({
   workspaceId,
@@ -12,6 +13,7 @@ export function TemplateParsing({
   onSkipBabyPhotos,
   setStatus,
   setLoading,
+  setProgress,
   loading,
   onPreviewChange,
   annotated,
@@ -42,6 +44,7 @@ export function TemplateParsing({
   onSkipBabyPhotos: (v: boolean) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
+  setProgress: Dispatch<SetStateAction<number>>;
   loading: boolean;
   onPreviewChange?: (urls: { annotated?: string | null; clean?: string | null }) => void;
   annotated: File | null;
@@ -67,6 +70,7 @@ export function TemplateParsing({
   const [showMissing, setShowMissing] = useState(false);
   const annotatedRef = useRef<HTMLDivElement | null>(null);
   const cleanRef = useRef<HTMLDivElement | null>(null);
+  const parseProcessingEstimateSecondsRef = useRef(4);
 
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -106,6 +110,7 @@ export function TemplateParsing({
   };
 
   const handleParse = async () => {
+    const hasUpload = Boolean(annotated || clean);
     const missingAnnotated = !workspaceId && !annotated;
     const missingClean = !workspaceId && !clean;
     if (missingAnnotated || missingClean) {
@@ -117,9 +122,46 @@ export function TemplateParsing({
       scrollTo((missingAnnotated ? annotatedRef.current : cleanRef.current) ?? null);
       return;
     }
+    setProgress(0);
     setLoading(true);
-    setStatus("Parsing template...");
+    setStatus(hasUpload ? "Uploading templates..." : "Parsing template...");
+
+    const opStartMs = performance.now();
+    let uploadFinishedMs: number | null = null;
+    let processingInterval: number | null = null;
+    const clearProcessingInterval = () => {
+      if (processingInterval !== null) {
+        window.clearInterval(processingInterval);
+        processingInterval = null;
+      }
+    };
+    const startProcessingTicker = () => {
+      if (processingInterval !== null) return;
+      const startMs = uploadFinishedMs ?? performance.now();
+      processingInterval = window.setInterval(() => {
+        const elapsed = Math.max(0, (performance.now() - startMs) / 1000);
+        const est = Math.max(1, parseProcessingEstimateSecondsRef.current);
+        const remaining = Math.max(0, est - elapsed);
+        setProgress((prev) => {
+          const pct = 90 + Math.min(9, Math.round((elapsed / est) * 9));
+          return Math.max(prev, Math.min(99, pct));
+        });
+        setStatus(`Parsing template… ETA ${formatEtaSeconds(remaining)}`);
+      }, 250);
+    };
+
     try {
+      if (hasUpload) {
+        // Ensure the progress bar shows even if the browser can't compute upload totals.
+        setProgress(1);
+      } else {
+        // Parsing-only mode (workspace re-parse): no upload bytes, so start directly at the
+        // parsing stage.
+        uploadFinishedMs = opStartMs;
+        setProgress(90);
+        startProcessingTicker();
+      }
+
       const resp = await parseTemplate(annotated, clean, {
         workspaceId: workspaceId || undefined,
         mugshotColor: mugshotColor || undefined,
@@ -129,15 +171,46 @@ export function TemplateParsing({
         disableBabyPhotos: skipBabyPhotos,
         disableQuotes: skipQuotes,
         minArea,
+        onProgress: (pct) => {
+          const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
+          const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
+
+          setProgress(Math.max(1, Math.min(90, Math.round(clamped * 0.9))));
+
+          if (clamped >= 100 && uploadFinishedMs === null) {
+            uploadFinishedMs = performance.now();
+            startProcessingTicker();
+            return;
+          }
+
+          let etaPart = "";
+          if (clamped >= 2 && elapsed >= 0.25) {
+            const etaSeconds = (elapsed * (100 - clamped)) / clamped;
+            if (Number.isFinite(etaSeconds)) etaPart = ` — ETA ${formatEtaSeconds(etaSeconds)}`;
+          }
+          setStatus(`Uploading templates… ${clamped}%${etaPart}`);
+        },
       });
+
+      clearProcessingInterval();
       onParsed(resp);
       if (onRawDebug) onRawDebug(resp.raw_debug ?? null);
       setStatus("Template parsed successfully");
+      setProgress(100);
+
+      const processingStartMs = uploadFinishedMs ?? opStartMs;
+      const processingSeconds = Math.max(0, (performance.now() - processingStartMs) / 1000);
+      if (processingSeconds >= 0.25) {
+        parseProcessingEstimateSecondsRef.current =
+          0.7 * parseProcessingEstimateSecondsRef.current + 0.3 * processingSeconds;
+      }
     } catch (err: any) {
+      clearProcessingInterval();
       console.error(err);
       const detail = err?.response?.data?.detail || err?.message || "Template parsing failed";
       setStatus(`Template parsing failed.\nserver message:\n${detail}`);
     } finally {
+      clearProcessingInterval();
       setLoading(false);
     }
   };

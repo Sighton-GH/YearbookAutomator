@@ -946,6 +946,16 @@ button:disabled {
 
 .tool-message-details {
   margin-top: 8px;
+  overflow: hidden;
+  max-height: 1000px;
+  opacity: 1;
+  transition: max-height 500ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tool-message.closing .tool-message-details {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
 }
 
 .tool-message-row {
@@ -953,6 +963,40 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
+}
+
+.tool-message-toggle {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tool-message-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tool-message-toggle:active {
+  transform: scale(0.95);
+}
+
+.tool-message-toggle-icon {
+  width: 24px;
+  height: 24px;
+  transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tool-message-toggle.open .tool-message-toggle-icon {
+  transform: rotate(180deg);
 }
 
 .tool-message-dismiss {
@@ -984,43 +1028,154 @@ button:disabled {
 
 /* Tips box (Tool page) */
 .tips-box {
-  margin-top: 14px;
+  margin-top: 22px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 14px;
+  padding: 12px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   display: grid;
-  gap: 10px;
+  gap: 4px;
   max-width: 820px;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1), transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tips-box.closing {
+  opacity: 0;
+  transform: scale(0.95);
 }
 
 .tips-box-show {
-  margin-top: 14px;
-  padding: 8px 12px;
+  margin-top: 22px;
+  padding: 10px 14px;
   border-radius: 10px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: inherit;
   font-size: inherit;
   cursor: pointer;
+  font-weight: 500;
+  transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1), border-color 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tips-box-show:hover {
+  background: var(--bg-quiet);
+  border-color: var(--accent);
 }
 
 .tips-box-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px;
+}
+
+.tips-box-title {
+  font-size: 14px;
+  color: inherit;
+  line-height: 1.2;
 }
 
 .tips-box-close {
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: var(--bg-quiet);
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tips-box-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.tips-box-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  margin-top: -2px;
+}
+
+.tips-box-nav {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tips-box-nav:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--accent);
+}
+
+.tips-box-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.tips-box-nav svg {
+  width: 16px;
+  height: 16px;
 }
 
 .tips-box-body {
+  flex: 1 1 auto;
   color: var(--muted);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  overflow: hidden;
+  position: relative;
+  font-size: 14px;
+  text-align: center;
+}
+
+.tips-box-body.scroll-forward {
+  animation: slideInFromRight 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tips-box-body.scroll-backward {
+  animation: slideInFromLeft 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .grid.two {
@@ -2269,6 +2424,17 @@ button:disabled {
 
 .document-article a:hover {
   text-decoration: underline;
+}
+
+.inline-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 @media (max-width: 640px) {

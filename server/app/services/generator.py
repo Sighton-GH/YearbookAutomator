@@ -525,6 +525,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     tick(5, "Loading template")
     base = Image.open(template_path).convert("RGB")
     template_ref = base.copy()
+    template_w, template_h = base.size
 
     name_font_family = payload.name_font_family or payload.font_family
     name_font_weight = payload.name_font_weight or payload.font_weight
@@ -657,6 +658,50 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
     out_path = root / out_name
+
+    # Optional export resolution override.
+    # Rules:
+    # - Never upscale above the template's original size
+    # - Always keep the same aspect ratio as the template
+    # - If both width+height are provided but don't match the ratio, width wins
+    raw_w = getattr(payload, "output_width", None)
+    raw_h = getattr(payload, "output_height", None)
+
+    def _clamp_int(n: int, lo: int, hi: int) -> int:
+        return max(lo, min(hi, int(n)))
+
+    target_w: int | None = None
+    target_h: int | None = None
+    try:
+        if raw_w is not None:
+            target_w = int(raw_w)
+        if raw_h is not None:
+            target_h = int(raw_h)
+    except (TypeError, ValueError):
+        target_w = None
+        target_h = None
+
+    if template_w > 0 and template_h > 0 and (target_w is not None or target_h is not None):
+        max_w = int(template_w)
+        max_h = int(template_h)
+
+        if target_w is not None:
+            w = _clamp_int(target_w, 1, max_w)
+            h = _clamp_int(round((w * max_h) / max_w), 1, max_h)
+            if h > max_h:
+                h = max_h
+                w = _clamp_int(round((h * max_w) / max_h), 1, max_w)
+        else:
+            h = _clamp_int(target_h or max_h, 1, max_h)
+            w = _clamp_int(round((h * max_w) / max_h), 1, max_w)
+            if w > max_w:
+                w = max_w
+                h = _clamp_int(round((w * max_h) / max_w), 1, max_h)
+
+        if (w, h) != (template_w, template_h):
+            tick(90, f"Resizing to {w}x{h}")
+            resampling = getattr(Image, "Resampling", Image).LANCZOS
+            base = base.resize((w, h), resample=resampling)
 
     if output_format == "tiff":
         tick(92, "Saving TIFF")

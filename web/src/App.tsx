@@ -220,7 +220,16 @@ export default function App({ embedded = false }: AppProps) {
 
   const [slotAssignments, setSlotAssignments] = useState<Record<number, number>>({});
   const [defaultQuote, setDefaultQuote] = useState("404 quote not found");
+  const [quotesWarnings, setQuotesWarnings] = useState<string[]>([]);
+  const [quotesWarningsOpen, setQuotesWarningsOpen] = useState(false);
+  const [quotesCompletedErrorCount, setQuotesCompletedErrorCount] = useState<number | null>(null);
   const [defaultBabyFilename, setDefaultBabyFilename] = useState<string | null>(null);
+  const [babyZipWarnings, setBabyZipWarnings] = useState<string[]>([]);
+  const [babyZipWarningsOpen, setBabyZipWarningsOpen] = useState(false);
+  const [babyCompletedErrorCount, setBabyCompletedErrorCount] = useState<number | null>(null);
+  const [portraitWarnings, setPortraitWarnings] = useState<string[]>([]);
+  const [portraitWarningsOpen, setPortraitWarningsOpen] = useState(false);
+  const [portraitCompletedErrorCount, setPortraitCompletedErrorCount] = useState<number | null>(null);
   const [babyIngest, setBabyIngest] = useState<NonNullable<PersistedSessionV1["babyIngest"]>>({
     advancedNameMatch: true,
     partialNameMatch: true,
@@ -266,10 +275,33 @@ export default function App({ embedded = false }: AppProps) {
   const [allowInsecureReviewResults, setAllowInsecureReviewResults] = useState(false);
   const [peoplePerSpread, setPeoplePerSpread] = useState<number>(16);
   const [outputFormat, setOutputFormat] = useState<"png" | "pdf" | "tiff">("png");
+  const [outputSize, setOutputSize] = useState<{ width: number; height: number } | null>(null);
   const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
   const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
+
+  useEffect(() => {
+    if (!templateSize) {
+      if (outputSize) setOutputSize(null);
+      return;
+    }
+    if (!outputSize) return;
+
+    const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+    const maxW = Math.max(1, Math.round(templateSize.width));
+    const maxH = Math.max(1, Math.round(templateSize.height));
+
+    // Keep aspect ratio aligned with the template by anchoring to width.
+    let w = clamp(Math.round(outputSize.width), 1, maxW);
+    let h = clamp(Math.round((w * maxH) / maxW), 1, maxH);
+    if (h > maxH) {
+      h = maxH;
+      w = clamp(Math.round((h * maxW) / maxH), 1, maxW);
+    }
+
+    if (w !== outputSize.width || h !== outputSize.height) setOutputSize({ width: w, height: h });
+  }, [templateSize, outputSize]);
 
   // Persisted options for spreadsheet+portrait ingest.
   const defaultNamingPattern = "\\d{3,4}";
@@ -1077,6 +1109,9 @@ export default function App({ embedded = false }: AppProps) {
         if (saved.outputFormat === "png" || saved.outputFormat === "pdf" || saved.outputFormat === "tiff") {
           setOutputFormat(saved.outputFormat);
         }
+        if (saved.outputSize && typeof saved.outputSize.width === "number" && typeof saved.outputSize.height === "number") {
+          setOutputSize({ width: saved.outputSize.width, height: saved.outputSize.height });
+        }
 
         if (saved.workspaceId) {
           // Use server-stored template for preview after refresh.
@@ -1158,6 +1193,7 @@ export default function App({ embedded = false }: AppProps) {
       quoteAlign,
       peoplePerSpread,
       outputFormat,
+      outputSize,
     };
     trySaveSession(payload);
   }, [
@@ -1198,6 +1234,7 @@ export default function App({ embedded = false }: AppProps) {
     quoteAlign,
     peoplePerSpread,
     outputFormat,
+    outputSize,
   ]);
 
   // Note: quotes/baby steps are not skippable. Disabling only affects rendering.
@@ -1379,6 +1416,8 @@ export default function App({ embedded = false }: AppProps) {
         slots,
         people: peopleToSend,
         output_format: outputFormat,
+        output_width: outputSize ? outputSize.width : undefined,
+        output_height: outputSize ? outputSize.height : undefined,
         count_usage: Boolean(opts.countUsage),
         auto_place: true,
         placement_mode: placementMode,
@@ -1962,6 +2001,7 @@ export default function App({ embedded = false }: AppProps) {
               onSkipBabyPhotos={setSkipBabyPhotos}
               setStatus={setStatus}
               setLoading={setLoading}
+              setProgress={setProgress}
               loading={loading}
               annotated={annotatedFile}
               clean={cleanFile}
@@ -2028,6 +2068,8 @@ export default function App({ embedded = false }: AppProps) {
                 templateSize={templateSize}
                 outputFormat={outputFormat}
                 onOutputFormat={setOutputFormat}
+                outputSize={outputSize}
+                onOutputSize={setOutputSize}
                 placementMode={placementMode}
                 onPlacementMode={setPlacementMode}
                 forceAlphabetical={forceAlphabetical}
@@ -2120,6 +2162,12 @@ export default function App({ embedded = false }: AppProps) {
               advancedNameMatch={advancedNameMatch}
               setAdvancedNameMatch={setAdvancedNameMatch}
               allowInsecureUploads={allowInsecureUploads}
+              warnings={portraitWarnings}
+              onWarnings={setPortraitWarnings}
+              warningsOpen={portraitWarningsOpen}
+              onWarningsOpen={setPortraitWarningsOpen}
+              completedErrorCount={portraitCompletedErrorCount}
+              onCompletedErrorCount={setPortraitCompletedErrorCount}
               onMapped={setPeople}
               setStatus={setStatus}
               setLoading={setLoading}
@@ -2143,6 +2191,12 @@ export default function App({ embedded = false }: AppProps) {
             <QuotesStepStep
               defaultQuote={defaultQuote}
               onDefaultQuote={setDefaultQuote}
+              quotesWarnings={quotesWarnings}
+              onQuotesWarnings={setQuotesWarnings}
+              quotesWarningsOpen={quotesWarningsOpen}
+              onQuotesWarningsOpen={setQuotesWarningsOpen}
+              quotesCompletedErrorCount={quotesCompletedErrorCount}
+              onQuotesCompletedErrorCount={setQuotesCompletedErrorCount}
               workspaceId={workspaceId}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
@@ -2170,6 +2224,12 @@ export default function App({ embedded = false }: AppProps) {
               defaultBabyFilename={defaultBabyFilename}
               defaultQuote={defaultQuote}
               onDefaultBabyFilename={setDefaultBabyFilename}
+              babyZipWarnings={babyZipWarnings}
+              onBabyZipWarnings={setBabyZipWarnings}
+              babyZipWarningsOpen={babyZipWarningsOpen}
+              onBabyZipWarningsOpen={setBabyZipWarningsOpen}
+              babyCompletedErrorCount={babyCompletedErrorCount}
+              onBabyCompletedErrorCount={setBabyCompletedErrorCount}
               babyIngest={babyIngest}
               onBabyIngest={setBabyIngest}
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}

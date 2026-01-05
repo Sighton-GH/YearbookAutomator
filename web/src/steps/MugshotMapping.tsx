@@ -6,6 +6,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
@@ -19,6 +20,12 @@ export function MugshotMapping({
   advancedNameMatch,
   setAdvancedNameMatch,
   allowInsecureUploads,
+  warnings,
+  onWarnings,
+  warningsOpen,
+  onWarningsOpen,
+  completedErrorCount,
+  onCompletedErrorCount,
   onMapped,
   setStatus,
   setLoading,
@@ -42,6 +49,12 @@ export function MugshotMapping({
   advancedNameMatch: boolean;
   setAdvancedNameMatch: (v: boolean) => void;
   allowInsecureUploads: boolean;
+  warnings: string[];
+  onWarnings: (v: string[]) => void;
+  warningsOpen: boolean;
+  onWarningsOpen: (v: boolean) => void;
+  completedErrorCount: number | null;
+  onCompletedErrorCount: (v: number | null) => void;
   onMapped: (people: PersonRecord[]) => void;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
@@ -65,7 +78,6 @@ export function MugshotMapping({
     Record<number, { shiftCount?: number; replacement_mugshot?: string; remove?: boolean }>
   >({});
   const [adjustmentsResetNonce, setAdjustmentsResetNonce] = useState(0);
-  const [warnings, setWarnings] = useState<string[]>([]);
   const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
   const [swapMode, setSwapMode] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -76,6 +88,7 @@ export function MugshotMapping({
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const zipRef = useRef<HTMLDivElement | null>(null);
+  const warningsRef = useRef<HTMLDetailsElement | null>(null);
 
   const didInitDefaultMugshot = useRef(false);
 
@@ -143,7 +156,9 @@ export function MugshotMapping({
     setProgress(0);
     setLoading(true);
     setStatus("Mapping spreadsheet and portraits...");
-    setWarnings([]);
+    onWarnings([]);
+    onWarningsOpen(false);
+    onCompletedErrorCount(null);
 
     const opStartMs = performance.now();
     let uploadFinishedMs: number | null = null;
@@ -202,7 +217,9 @@ export function MugshotMapping({
       onMapped(resp.people);
       setPeople(resp.people);
       setOriginalPeople(resp.people.map((p) => ({ ...p })));
-      setWarnings(resp.warnings ?? []);
+      const nextWarnings = resp.warnings ?? [];
+      onWarnings(nextWarnings);
+      onCompletedErrorCount(nextWarnings.length);
 
       if (uploadFinishedMs !== null) {
         const processingSeconds = Math.max(0, (performance.now() - uploadFinishedMs) / 1000);
@@ -212,11 +229,7 @@ export function MugshotMapping({
         }
       }
 
-      if (resp.warnings?.length) {
-        setStatus(`People mapped with warnings: ${resp.warnings.join("; ")}`);
-      } else {
-        setStatus("People mapped. You can adjust later.");
-      }
+      setStatus("Portrait mapping processing completed");
       setProgress(100);
     } catch (err) {
       clearProcessingInterval();
@@ -543,7 +556,12 @@ export function MugshotMapping({
               {loading ? "Ingesting..." : "Ingest spreadsheet"}
             </button>
             {warnings.length > 0 && (
-              <details className="muted small">
+              <details
+                ref={warningsRef}
+                className="muted small"
+                open={warningsOpen}
+                onToggle={(e) => onWarningsOpen((e.currentTarget as HTMLDetailsElement).open)}
+              >
                 <summary>
                   <strong>Skipped portraits ({warnings.length})</strong>
                 </summary>
@@ -570,7 +588,15 @@ export function MugshotMapping({
                 Continue
               </button>
             </div>
-            {status && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
+            <CompletionServerMessageWithWarningsLink
+              completedErrorCount={completedErrorCount}
+              baseMessage="Portrait mapping processing completed"
+              detailsRef={warningsRef}
+              setDetailsOpen={onWarningsOpen}
+            />
+            {completedErrorCount === null && status ? (
+              <p className="muted prewrap">{prefixServerMessage(status)}</p>
+            ) : null}
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

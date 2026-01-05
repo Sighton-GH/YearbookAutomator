@@ -9,6 +9,9 @@ type RenderPreflightProps = {
   peoplePerSpread: number;
   templateSize: { width: number; height: number } | null;
 
+  outputSize: { width: number; height: number } | null;
+  onOutputSize: (v: { width: number; height: number } | null) => void;
+
   outputFormat: "png" | "pdf" | "tiff";
   onOutputFormat: (v: "png" | "pdf" | "tiff") => void;
 
@@ -32,6 +35,8 @@ export function RenderPreflight({
   people,
   peoplePerSpread,
   templateSize,
+  outputSize,
+  onOutputSize,
   outputFormat,
   onOutputFormat,
   placementMode,
@@ -46,6 +51,24 @@ export function RenderPreflight({
   previewNonce
 }: RenderPreflightProps) {
   const previewIsPng = outputFormat === "png";
+
+  const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+  const hasTemplateSize = Boolean(templateSize && templateSize.width > 0 && templateSize.height > 0);
+  const exportQualityMode: "original" | "custom" = hasTemplateSize && outputSize ? "custom" : "original";
+
+  const setCustomWidth = (rawWidth: number) => {
+    if (!templateSize) return;
+    const w = clamp(Math.round(rawWidth), 1, templateSize.width);
+    const h = clamp(Math.round((w * templateSize.height) / templateSize.width), 1, templateSize.height);
+    onOutputSize({ width: w, height: h });
+  };
+
+  const setCustomHeight = (rawHeight: number) => {
+    if (!templateSize) return;
+    const h = clamp(Math.round(rawHeight), 1, templateSize.height);
+    const w = clamp(Math.round((h * templateSize.width) / templateSize.height), 1, templateSize.width);
+    onOutputSize({ width: w, height: h });
+  };
   return (
     <>
       <div className="callout">
@@ -148,6 +171,66 @@ export function RenderPreflight({
               <option value="tiff">TIFF</option>
             </select>
             <div className="muted small">TIFF is a single flattened composite like PNG.</div>
+
+            <div style={{ height: 4 }} />
+
+            <div>
+              <strong>Export quality</strong>
+              <div className="muted small">Choose an output resolution. Max is the template’s original resolution.</div>
+            </div>
+            <select
+              value={exportQualityMode}
+              onChange={(e) => {
+                const mode = e.target.value as "original" | "custom";
+                if (mode === "original") {
+                  onOutputSize(null);
+                } else if (templateSize) {
+                  onOutputSize({ width: templateSize.width, height: templateSize.height });
+                }
+              }}
+              disabled={loading || !hasTemplateSize}
+            >
+              <option value="original">Original{templateSize ? ` (${templateSize.width} × ${templateSize.height})` : ""}</option>
+              <option value="custom">Custom resolution…</option>
+            </select>
+
+            {hasTemplateSize && exportQualityMode === "custom" && outputSize && (
+              <div className="grid two" style={{ gap: 10 }}>
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="muted small">Width (px)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={templateSize!.width}
+                    value={outputSize.width}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      if (!Number.isFinite(n)) return;
+                      setCustomWidth(n);
+                    }}
+                    disabled={loading}
+                  />
+                </label>
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="muted small">Height (px)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={templateSize!.height}
+                    value={outputSize.height}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      if (!Number.isFinite(n)) return;
+                      setCustomHeight(n);
+                    }}
+                    disabled={loading}
+                  />
+                </label>
+                <div className="muted small" style={{ gridColumn: "1 / -1" }}>
+                  Aspect ratio is locked to match the template.
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -1,42 +1,150 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { clsx } from "clsx";
 
 export function TipsBox({ tips }: { tips: string[] }) {
   const stableTips = useMemo(() => tips.filter((t) => t.trim()), [tips]);
   const [open, setOpen] = useState(true);
   const [idx, setIdx] = useState(0);
+  const [isClosing, setIsClosing] = useState(false);
+  const [prevIdx, setPrevIdx] = useState(0);
+  const autoplayTimerRef = useRef<number | null>(null);
 
+  // Auto-advance tips when open
   useEffect(() => {
-    if (!open) return;
-    if (stableTips.length <= 1) return;
-    const t = window.setInterval(() => {
+    if (!open || stableTips.length <= 1) return;
+
+    autoplayTimerRef.current = window.setInterval(() => {
       setIdx((prev) => (prev + 1) % stableTips.length);
     }, 5500);
-    return () => window.clearInterval(t);
+
+    return () => {
+      if (autoplayTimerRef.current) window.clearInterval(autoplayTimerRef.current);
+    };
   }, [open, stableTips.length]);
 
+  // Track previous index for scroll direction
   useEffect(() => {
-    if (idx >= stableTips.length) setIdx(0);
-  }, [idx, stableTips.length]);
+    if (idx !== prevIdx) {
+      setPrevIdx(idx);
+    }
+  }, [idx, prevIdx]);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    const t = window.setTimeout(() => {
+      setOpen(false);
+      setIsClosing(false);
+    }, 400);
+    return () => window.clearTimeout(t);
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+  };
+
+  const handleNext = () => {
+    if (autoplayTimerRef.current) window.clearInterval(autoplayTimerRef.current);
+    setIdx((prev) => (prev + 1) % stableTips.length);
+  };
+
+  const handlePrev = () => {
+    if (autoplayTimerRef.current) window.clearInterval(autoplayTimerRef.current);
+    setIdx((prev) => (prev - 1 + stableTips.length) % stableTips.length);
+  };
 
   if (!stableTips.length) return null;
 
-  if (!open) {
+  if (!open && !isClosing) {
     return (
-      <button type="button" className="tips-box-show" onClick={() => setOpen(true)} aria-label="Show tips">
+      <button
+        type="button"
+        className="tips-box-show"
+        onClick={handleOpen}
+        aria-label="Show tips"
+      >
         Show tips
       </button>
     );
   }
 
+  const isMovingForward = idx > prevIdx || (prevIdx === stableTips.length - 1 && idx === 0);
+  const scrollDirection = isMovingForward ? "forward" : "backward";
+
   return (
-    <div className="tips-box" role="status" aria-label="Tips">
+    <div
+      className={clsx("tips-box", isClosing && "closing")}
+      role="status"
+      aria-label="Tips"
+    >
       <div className="tips-box-header">
-        <strong>Tips</strong>
-        <button type="button" className="tips-box-close" onClick={() => setOpen(false)} aria-label="Close tips">
+        <strong className="tips-box-title">Did you know...</strong>
+        <button
+          type="button"
+          className="tips-box-close"
+          onClick={handleClose}
+          aria-label="Close tips"
+        >
           ✕
         </button>
       </div>
-      <div className="tips-box-body">{stableTips[idx] ?? ""}</div>
+
+      <div className="tips-box-container">
+        <button
+          type="button"
+          className="tips-box-nav tips-box-nav-left"
+          onClick={handlePrev}
+          aria-label="Previous tip"
+          disabled={stableTips.length <= 1}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M15 18L9 12L15 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+
+        <div
+          className={clsx(
+            "tips-box-body",
+            `scroll-${scrollDirection}`
+          )}
+          key={`tip-${idx}`}
+        >
+          {stableTips[idx] ?? ""}
+        </div>
+
+        <button
+          type="button"
+          className="tips-box-nav tips-box-nav-right"
+          onClick={handleNext}
+          aria-label="Next tip"
+          disabled={stableTips.length <= 1}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M9 18L15 12L9 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
