@@ -33,6 +33,8 @@ export function MugshotMapping({
   loading,
   people,
   setPeople,
+  originalPeople,
+  setOriginalPeople,
   status,
   progress,
   canContinue,
@@ -62,6 +64,8 @@ export function MugshotMapping({
   loading: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  originalPeople: PersonRecord[] | null;
+  setOriginalPeople: (p: PersonRecord[] | null) => void;
   status: string;
   progress: number;
   canContinue: boolean;
@@ -69,6 +73,8 @@ export function MugshotMapping({
   onReset: () => void;
   onContinue: () => void;
 }) {
+  type SwapMode = "off" | "card" | "portrait";
+
   const [sheet, setSheet] = useState<File | null>(null);
   const [zip, setZip] = useState<File | null>(null);
   const [showMissing, setShowMissing] = useState(false);
@@ -78,10 +84,10 @@ export function MugshotMapping({
     Record<number, { shiftCount?: number; replacement_mugshot?: string; remove?: boolean }>
   >({});
   const [adjustmentsResetNonce, setAdjustmentsResetNonce] = useState(0);
-  const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
-  const [swapMode, setSwapMode] = useState(false);
+  const [swapMode, setSwapMode] = useState<SwapMode>("off");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [swapsPerformed, setSwapsPerformed] = useState(false);
 
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
@@ -91,6 +97,14 @@ export function MugshotMapping({
   const warningsRef = useRef<HTMLDetailsElement | null>(null);
 
   const didInitDefaultMugshot = useRef(false);
+
+  const swapEnabled = swapMode !== "off";
+
+  useEffect(() => {
+    // Avoid leaving stale drag highlights around when switching modes.
+    setDragIdx(null);
+    setDropTarget(null);
+  }, [swapMode]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -153,6 +167,10 @@ export function MugshotMapping({
     setAdjustments({});
     setAdjustmentsResetNonce((n) => n + 1);
     setOriginalPeople(null);
+    setSwapMode("off");
+    setDragIdx(null);
+    setDropTarget(null);
+    setSwapsPerformed(false);
     setProgress(0);
     setLoading(true);
     setStatus("Mapping spreadsheet and portraits...");
@@ -253,13 +271,18 @@ export function MugshotMapping({
     setPeople(originalPeople.map((p) => ({ ...p })));
     setAdjustments({});
     setAdjustmentsResetNonce((n) => n + 1);
+    setSwapMode("off");
+    setDragIdx(null);
+    setDropTarget(null);
+    setSwapsPerformed(false);
     setStatus("Reset to original mapping");
   };
 
   const setShiftEnabled = (personIndex: number, enabled: boolean) => {
     setAdjustments((prev) => {
       const current = prev[personIndex] ?? {};
-      const nextShiftCount = enabled ? Math.max(1, Math.floor(current.shiftCount ?? 1)) : 0;
+      const currentShift = current.shiftCount ?? 1;
+      const nextShiftCount = enabled ? (currentShift === 0 ? 1 : currentShift) : 0;
       const next = { ...current, shiftCount: nextShiftCount };
       if (!next.shiftCount && !next.replacement_mugshot) {
         const { [personIndex]: _omit, ...rest } = prev;
@@ -270,7 +293,7 @@ export function MugshotMapping({
   };
 
   const setShiftCount = (personIndex: number, shiftCount: number) => {
-    const normalized = Number.isFinite(shiftCount) ? Math.max(0, Math.floor(shiftCount)) : 0;
+    const normalized = Number.isFinite(shiftCount) ? Math.floor(shiftCount) : 0;
     setAdjustments((prev) => {
       const current = prev[personIndex] ?? {};
       const next = { ...current, shiftCount: normalized };
@@ -332,16 +355,22 @@ export function MugshotMapping({
       .map(([personIndex, entry]) => ({ personIndex: Number(personIndex), entry }))
       .filter(({ personIndex }) => Number.isFinite(personIndex));
 
-    const shiftPayload: { person_index: number; action: "shift" }[] = [];
+    const shiftPayload: { person_index: number; action: "shift" | "shift_up" }[] = [];
     const removePayload: { person_index: number; action: "remove" }[] = [];
     const replacePayload: { person_index: number; action: "replace"; replacement_mugshot: string }[] = [];
 
     entries
       .sort((a, b) => a.personIndex - b.personIndex)
       .forEach(({ personIndex, entry }) => {
-        const shiftCount = Math.max(0, Math.floor(entry.shiftCount ?? 0));
-        for (let i = 0; i < shiftCount; i++) {
-          shiftPayload.push({ person_index: personIndex, action: "shift" });
+        const shiftCount = Math.floor(entry.shiftCount ?? 0);
+        if (shiftCount > 0) {
+          for (let i = 0; i < shiftCount; i++) {
+            shiftPayload.push({ person_index: personIndex, action: "shift" });
+          }
+        } else if (shiftCount < 0) {
+          for (let i = 0; i < Math.abs(shiftCount); i++) {
+            shiftPayload.push({ person_index: personIndex, action: "shift_up" });
+          }
         }
       });
 
@@ -394,8 +423,20 @@ export function MugshotMapping({
     setPeople(next);
   };
 
+  const swapPortraits = (sourceIdx: number, targetIdx: number) => {
+    if (sourceIdx === targetIdx) return;
+    if (sourceIdx < 0 || targetIdx < 0) return;
+    if (sourceIdx >= people.length || targetIdx >= people.length) return;
+    const next = [...people];
+    const a = next[sourceIdx];
+    const b = next[targetIdx];
+    next[sourceIdx] = { ...a, mugshot_filename: b.mugshot_filename };
+    next[targetIdx] = { ...b, mugshot_filename: a.mugshot_filename };
+    setPeople(next);
+  };
+
   const handleSwapDrop = (targetIdx: number, evt: React.DragEvent<HTMLDivElement>) => {
-    if (!swapMode) return;
+    if (!swapEnabled) return;
     evt.preventDefault();
     const payload = evt.dataTransfer.getData("text/plain");
     const sourceIdx = dragIdx ?? Number(payload);
@@ -404,7 +445,9 @@ export function MugshotMapping({
       setDragIdx(null);
       return;
     }
-    swapPositions(sourceIdx, targetIdx);
+    if (swapMode === "card") swapPositions(sourceIdx, targetIdx);
+    if (swapMode === "portrait") swapPortraits(sourceIdx, targetIdx);
+    setSwapsPerformed(true);
     setDropTarget(null);
     setDragIdx(null);
   };
@@ -609,40 +652,54 @@ export function MugshotMapping({
               <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
                 Apply mapping adjustments
               </button>
-              <button type="button" className="danger" onClick={resetToOriginalMapping} disabled={loading || !originalPeople}>
+              <button type="button" className="danger" onClick={resetToOriginalMapping} disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}>
                 Reset to original mapping
               </button>
-              <button type="button" className={clsx("chip", { active: swapMode })} onClick={() => setSwapMode((v) => !v)}>
-                {swapMode ? "Swap mode: on" : "Swap mode: off"}
+              <button
+                type="button"
+                className={clsx({ primary: swapMode === "card" })}
+                onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}
+              >
+                {swapMode === "card" ? "Swap Cards: On" : "Swap Cards: Off"}
+              </button>
+              <button
+                type="button"
+                className={clsx({ primary: swapMode === "portrait" })}
+                onClick={() => setSwapMode((v) => (v === "portrait" ? "off" : "portrait"))}
+              >
+                {swapMode === "portrait" ? "Swap Portraits: On" : "Swap Portraits: Off"}
               </button>
             </div>
 
-            {swapMode && <p className="muted small">Drag a person card onto another to swap positions.</p>}
+            {swapMode === "card" && <p className="muted small">Card swap: drag a card onto another to swap their ordering.</p>}
+            {swapMode === "portrait" && (
+              <p className="muted small">Portrait swap: drag a card onto another to swap which portrait is mapped to each card.</p>
+            )}
 
             <div className="people-grid">
               {people.map((p, rowIdx) => {
                 const cardClasses = clsx("people-card", {
-                  "swap-mode": swapMode,
-                  dragging: dragIdx === rowIdx,
-                  "swap-target": dropTarget === p.index && swapMode,
+                  "swap-mode": swapMode === "card",
+                  dragging: swapMode === "card" && dragIdx === rowIdx,
+                  "swap-target": swapMode === "card" && dropTarget === rowIdx,
                 });
                 return (
                   <div
                     className={cardClasses}
                     key={p.index}
-                    draggable={swapMode}
+                    draggable={swapMode === "card"}
                     onDragStart={(evt) => {
-                      if (!swapMode) return;
+                      if (swapMode !== "card") return;
                       setDragIdx(rowIdx);
                       evt.dataTransfer.effectAllowed = "move";
                       evt.dataTransfer.setData("text/plain", String(rowIdx));
                     }}
                     onDragOver={(evt) => {
-                      if (!swapMode) return;
+                      if (!swapEnabled) return;
                       evt.preventDefault();
-                      setDropTarget(p.index);
+                      setDropTarget(rowIdx);
                     }}
-                    onDragLeave={() => swapMode && setDropTarget(null)}
+                    onDragLeave={() => swapEnabled && setDropTarget(null)}
                     onDrop={(evt) => handleSwapDrop(rowIdx, evt)}
                   >
                     <div className="people-card-header">
@@ -656,13 +713,35 @@ export function MugshotMapping({
                       </div>
                       <div className="thumb-cell">
                         {p.mugshot_filename && workspaceId ? (
-                          <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
+                          <img
+                            src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
+                            alt="portrait"
+                            className={clsx("thumb", {
+                              "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
+                            })}
+                            draggable={swapMode === "portrait"}
+                            onDragStart={(evt) => {
+                              if (swapMode !== "portrait") return;
+                              setDragIdx(rowIdx);
+                              evt.dataTransfer.effectAllowed = "move";
+                              evt.dataTransfer.setData("text/plain", String(rowIdx));
+                            }}
+                          />
                         ) : defaultMugshotFilename && workspaceId ? (
                           <div className="stack" style={{ gap: 4, alignItems: "center" }}>
                             <img
                               src={assetUrl(workspaceId, "mugshot", defaultMugshotFilename)}
                               alt="default portrait"
-                              className="thumb"
+                              className={clsx("thumb", {
+                                "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
+                              })}
+                              draggable={swapMode === "portrait"}
+                              onDragStart={(evt) => {
+                                if (swapMode !== "portrait") return;
+                                setDragIdx(rowIdx);
+                                evt.dataTransfer.effectAllowed = "move";
+                                evt.dataTransfer.setData("text/plain", String(rowIdx));
+                              }}
                             />
                             <div className="muted small">(default)</div>
                           </div>
@@ -678,7 +757,7 @@ export function MugshotMapping({
                           <ToggleSwitch
                             checked={(adjustments[p.index]?.shiftCount ?? 0) > 0}
                             onChange={(v) => setShiftEnabled(p.index, v)}
-                            disabled={loading}
+                            disabled={loading || swapEnabled}
                             label="Shift"
                             className="small"
                             style={{ margin: 0 }}
@@ -688,10 +767,9 @@ export function MugshotMapping({
                             <span className="muted small">#</span>
                             <input
                               type="number"
-                              min={0}
                               step={1}
-                              value={Math.max(0, Math.floor(adjustments[p.index]?.shiftCount ?? 0))}
-                              disabled={loading || (adjustments[p.index]?.shiftCount ?? 0) <= 0}
+                              value={Math.floor(adjustments[p.index]?.shiftCount ?? 0)}
+                              disabled={loading || swapEnabled || (adjustments[p.index]?.shiftCount ?? 0) === 0}
                               onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
                               style={{ width: 72 }}
                             />
@@ -701,7 +779,7 @@ export function MugshotMapping({
                         <ToggleSwitch
                           checked={Boolean(adjustments[p.index]?.remove)}
                           onChange={(v) => setRemoveEnabled(p.index, v)}
-                          disabled={loading}
+                          disabled={loading || swapEnabled}
                           label="Reset to default portrait"
                           className="small"
                           style={{ margin: 0 }}
@@ -712,7 +790,7 @@ export function MugshotMapping({
                     <UploadDropLabel
                       key={`${p.index}-${adjustmentsResetNonce}`}
                       accept="image/*"
-                      disabled={loading || Boolean(adjustments[p.index]?.remove)}
+                      disabled={loading || swapEnabled || Boolean(adjustments[p.index]?.remove)}
                       onFile={(file) => uploadReplacement(p.index, file)}
                     >
                       <span className="muted small">Upload replacement portrait</span>

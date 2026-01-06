@@ -211,6 +211,7 @@ export default function App({ embedded = false }: AppProps) {
   const [slots, setSlots] = useState<TemplateSlots[]>([]);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
+  const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
 
   const setPeopleSorted = (next: PersonRecord[]) => {
     // Preserve the user's chosen order. Alphabetical ordering (when desired)
@@ -2175,6 +2176,8 @@ export default function App({ embedded = false }: AppProps) {
               loading={loading}
               people={people}
               setPeople={setPeople}
+              originalPeople={originalPeople}
+              setOriginalPeople={setOriginalPeople}
               status={status}
               progress={progress}
               canContinue={canContinue}

@@ -1682,6 +1682,12 @@ button:disabled {
   outline-offset: -4px;
 }
 
+.portrait-swap-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  cursor: grab;
+}
+
 .preview-toggle {
   display: flex;
   gap: 8px;

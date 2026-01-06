@@ -56,7 +56,7 @@ class SpreadsheetPreview(BaseModel):
 
 class MappingDecision(BaseModel):
     person_index: int
-    action: Literal["keep", "replace", "shift", "skip", "remove"]
+    action: Literal["keep", "replace", "shift", "shift_up", "skip", "remove"]
     replacement_mugshot: Optional[str] = None
 
 

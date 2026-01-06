@@ -1,15 +1,72 @@
 # Yearbook Grad Mugshot Automator – Copilot notes
 
-- **Map first**: Backend FastAPI entry [server/app/main.py](server/app/main.py) with routers in [server/app/routes](server/app/routes); core services in [server/app/services](server/app/services). Frontend React/Vite stepper lives in [web/src/App.tsx](web/src/App.tsx) and calls the typed client in [web/src/api.ts](web/src/api.ts). Contracts are Pydantic models in [server/app/models/schemas.py](server/app/models/schemas.py) mirrored to TS types (snake_case from backend).
-- **Licensing guard**: Middleware blocks `/api/templates|/api/mapping|/api/generation|/api/fonts|/api/workspaces`. Normal calls must send headers `X-License-Key` + `X-Device-Id` (axios interceptor). Asset `<img>/download` URLs must pass query params `license_key|license|key` and `device_id`; use helpers `assetUrl`, `babyMaskUrl`, `templateCleanUrl`, `templateAnnotatedUrl`, `generationDownloadUrl` in [web/src/api.ts](web/src/api.ts). Admin panel `/admin/licenses` (optional password `YMGA_LICENSE_ADMIN_PASSWORD`); data under [server/app/data/_licenses](server/app/data/_licenses).
-- **Workspace-first storage**: Everything lives under `server/app/data/<workspace_id>/`. Validate IDs via `validate_workspace_id` in [server/app/services/storage.py](server/app/services/storage.py) (pattern `[0-9A-Za-z_-]{3,64}`). Workspaces are wiped on startup unless `YMGA_CLEAR_WORKSPACES_ON_STARTUP=false`. Janitor thread (lifespan) reads `meta.json` and uses `YMGA_WORKSPACE_*` settings in [server/app/services/workspace_cleanup.py](server/app/services/workspace_cleanup.py).
-- **Template parsing**: `POST /api/templates/parse` → `extract_slots` in [server/app/services/template_parser.py](server/app/services/template_parser.py). Detects colored boxes via OpenCV HSV: mugshot green `#00bf63`, baby blue `#004aad`, name orange `#ff751f`, quote red `#ff3131`. Sweeps tolerance 20→32→40→48 until boxes found. Requires ≥1 name and ≥1 quote. Groups boxes top-to-bottom/left-to-right into slots, scales if clean template size differs, saves baby masks, and reloads stored templates when `workspace_id` is supplied.
-- **Spreadsheet + mapping**: `POST /api/mapping/ingest` saves roster + portrait ZIP; default numeric filenames (\d{3,4}) map to **1-based** rows. `POST /api/mapping/review` supports `keep|replace|shift|skip|remove`; shift/skip cascade downward. Face center detection via `/api/mapping/detect-face-center` uses Haar cascades.
-- **Background removal preview**: Runs in background thread ([server/app/services/background_jobs.py](server/app/services/background_jobs.py)); tracks `progress/status/message/error/result_bytes/eta_seconds`. Poll `/api/mapping/remove-background-preview-status`; fetch image via `/api/mapping/remove-background-preview-result`.
-- **Generation**: `POST /api/generation/generate` starts a background job; progress in-memory via [server/app/services/progress.py](server/app/services/progress.py) and polled at `/api/generation/status`. Requests persisted to `generation/requests/*.json` per workspace. Rendering pipeline in [server/app/services/generator.py](server/app/services/generator.py) (crops, masks, text). Placement/order helpers in [server/app/services/placement.py](server/app/services/placement.py).
-- **Fonts**: Endpoints `/api/fonts/list|upload|get`; resolution in [server/app/services/fonts.py](server/app/services/fonts.py) → uploaded fonts, then system, then Pillow defaults (DejaVuSans). Frontend font picker uses types in [web/src/types.ts](web/src/types.ts).
-- **Frontend patterns**: Stepper state in [web/src/App.tsx](web/src/App.tsx); license/device ID cached via [web/src/licensing.ts](web/src/licensing.ts). Session/workspace helpers in [web/src/session.ts](web/src/session.ts). Config import/export handled in [web/src/configFile.ts](web/src/configFile.ts) and [web/src/configImport.ts](web/src/configImport.ts); backend is unaware of configs.
-- **Storage layout**: `server/app/data/<workspace_id>/` holds `template_clean.png`, `uploads/`, `mugshots/`, `baby/`, `fonts/`, `masks/baby/`, `generation/requests/`, `output.png`.
-- **Dev commands (Windows)**: Backend `cd server && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000` (docs/health at `/docs` and `/health`). Frontend `cd web && npm install && npm run dev` (proxy in [web/vite.config.ts](web/vite.config.ts)). Build: `npm run build`. Tests: `cd server && pytest`.
-- **Testing focus**: Unit tests in [server/tests](server/tests) cover slot grouping, tolerance sweeps (synthetic BGR templates), placement order, background removal, fonts, baby matching, and generator edge cases. Use fixtures/monkeypatch to mock `BASE_DATA` and storage paths.
-- **Common failure checks**: Parsing needs clear colored boxes (min area 400 px^2). Ingest expects roster first/last name headers and numeric mugshot filenames. Generation requires parsed templates and mapped people. Licensing errors return structured 401 with `detail/reason/hint`.
+## Architecture & Data Flow
+
+- **Backend entry**: FastAPI at [server/app/main.py](server/app/main.py) with routers in [server/app/routes](server/app/routes); core services in [server/app/services](server/app/services). Lifespan context starts workspace cleanup janitor thread and optionally clears workspaces on startup.
+- **Frontend entry**: React/Vite stepper UI in [web/src/App.tsx](web/src/App.tsx) calls typed client in [web/src/api.ts](web/src/api.ts). Axios interceptor auto-injects `X-License-Key` + `X-Device-Id` headers from local storage.
+- **Contracts**: Pydantic models in [server/app/models/schemas.py](server/app/models/schemas.py) mirrored to TypeScript types (snake_case from backend). Keep schemas synchronized when adding fields.
+
+## Licensing & Security
+
+- **Middleware protection**: Routes `/api/templates|/api/mapping|/api/generation|/api/fonts|/api/workspaces` require valid license key headers (`X-License-Key`, `X-Device-Id`). Errors return structured 401 with `detail/reason/hint` fields; frontend shows hints via `describeApiError` in [web/src/configFile.ts](web/src/configFile.ts).
+- **Asset URLs**: Image downloads (`<img src>` or direct fetch) need query params `license_key|license|key` and `device_id`. Use helpers: `assetUrl`, `babyMaskUrl`, `templateCleanUrl`, `templateAnnotatedUrl`, `generationDownloadUrl` in [web/src/api.ts](web/src/api.ts).
+- **Admin panel**: `/admin/licenses` (optional password `YMGA_LICENSE_ADMIN_PASSWORD`); displays last 500 usage events. Personal keys default to 5 uses/month (`YMGA_PERSONAL_MONTHLY_LIMIT`).
+- **License storage**: Records in `server/app/data/_licenses/{licenses.json,usage.json,secret.txt}`. Secret derives keys; set `YMGA_LICENSE_SECRET` for stability across restarts. Override store with `YMGA_LICENSE_STORE_DIR` (tests use `tmp_path`).
+
+## Workspace Storage
+
+- **Layout**: Each workspace under `server/app/data/<workspace_id>/` holds: `template_clean.png`, `template_annotated.png`, `uploads/`, `mugshots/`, `baby/`, `fonts/`, `masks/baby/`, `generation/requests/*.json`, `output.{png|pdf|tiff}`, `meta.json`.
+- **Validation**: IDs must match `[0-9A-Za-z_-]{3,64}` via `validate_workspace_id` in [server/app/services/storage.py](server/app/services/storage.py). Internal folders prefixed `_` (e.g., `_licenses`) persist across workspace wipes.
+- **Cleanup**: Janitor thread in [server/app/services/workspace_cleanup.py](server/app/services/workspace_cleanup.py) deletes workspaces after TTL (default 24h from `last_seen`, or 20s after `end_requested_at`). Configure via `YMGA_WORKSPACE_{GRACE_SECONDS|TTL_SECONDS|CLEANUP_INTERVAL_SECONDS}`. Active background jobs (`status ∉ {done,error}` updated within 5m) protect workspaces from deletion.
+- **Startup wipe**: By default, all workspaces clear on server start (`YMGA_CLEAR_WORKSPACES_ON_STARTUP=true`). Disable for production.
+
+## Template Parsing (OpenCV)
+
+- **Endpoint**: `POST /api/templates/parse` → `extract_slots` in [server/app/services/template_parser.py](server/app/services/template_parser.py). Upload annotated + clean templates; backend detects colored boxes via HSV with tolerance sweeps (20→32→40→48) until boxes found.
+- **Colors**: Mugshot green `#00bf63`, baby blue `#004aad`, name orange `#ff751f`, quote red `#ff3131`. Requires ≥1 name and ≥1 quote box; baby/quote can be disabled via flags.
+- **Grouping**: Groups overlapping Y-ranges top→bottom, then left→right into `TemplateSlots` (one per student). Scales boxes if clean template differs in size. Saves baby masks as PNG with alpha channel in `masks/baby/{slot_index}.png`.
+- **Min area**: Boxes < 400 px² ignored to avoid false detections. Synthetic test images in [server/tests/test_template_parser.py](server/tests/test_template_parser.py) use BGR rectangles (cv2 convention).
+
+## Spreadsheet + Mapping
+
+- **Ingest**: `POST /api/mapping/ingest` accepts Excel/CSV roster + portrait ZIP. Numeric filenames (`\d{3,4}`) map to **1-based** rows. Requires `first_name`, `last_name` headers (case-insensitive). Returns `SpreadsheetPreview` with warnings.
+- **Review actions**: `POST /api/mapping/review` supports `keep|replace|shift|skip|remove`. Shift/skip cascade assignments downward (for missing portraits). Backend reloads people JSON after edits.
+- **Face detection**: `POST /api/mapping/detect-face-center` uses OpenCV Haar cascades (falls back to image center if no face). Used to center mugshots in slots.
+- **Background removal**: Preview jobs run in thread ([server/app/services/background_jobs.py](server/app/services/background_jobs.py)); poll `/api/mapping/remove-background-preview-status` for `{progress,status,message,error,eta_seconds}`. Fetch result image via `/api/mapping/remove-background-preview-result`. Enable verbose logging with `YMGA_REMBG_VERBOSE=1`.
+
+## Generation Pipeline
+
+- **Job flow**: `POST /api/generation/generate` starts background thread; progress tracked in-memory ([server/app/services/progress.py](server/app/services/progress.py)) and polled via `/api/generation/status`. Request JSON persisted to `generation/requests/<timestamp>.json`.
+- **Rendering**: [server/app/services/generator.py](server/app/services/generator.py) crops/masks/places images, renders text via Pillow. Placement order determined by [server/app/services/placement.py](server/app/services/placement.py) (top→bottom, left→right).
+- **Fonts**: Resolver in [server/app/services/fonts.py](server/app/services/fonts.py) checks uploaded fonts (`<workspace>/fonts/`), then system fonts, then Pillow defaults (DejaVuSans). Frontend font picker in [web/src/components/FontPick.tsx](web/src/components/FontPick.tsx) uses CSS font stacks (e.g., `"Georgia"` or `Inter, system-ui, sans-serif`).
+- **Output formats**: Supports `png|pdf|tiff` via `output_format` field. Multi-page spreads use TIFF layers or separate files (ZIP download). Usage counting controlled by `count_usage` flag (true for "Render All", false for preview).
+
+## Frontend Patterns
+
+- **State management**: Stepper state (`currentStep`, `people`, `styling`, etc.) lives in [web/src/App.tsx](web/src/App.tsx) (2284 lines). License/device ID cached via [web/src/licensing.ts](web/src/licensing.ts); workspace ID via [web/src/session.ts](web/src/session.ts).
+- **Config import/export**: [web/src/configFile.ts](web/src/configFile.ts) defines `ConfigFileV1<TSession>` schema. Backend is **unaware** of configs; [web/src/configImport.ts](web/src/configImport.ts) reconstructs workspace by uploading assets sequentially. Missing assets tracked via `computeMissingAssets`.
+- **Step components**: Individual steps in [web/src/steps/](web/src/steps/) (e.g., `TemplateParsing.tsx`, `MugshotMapping.tsx`). Shared components in [web/src/components/](web/src/components/) (ProgressBar, SlotEditor, ToolMessages).
+- **Error handling**: Use `describeApiError(err, fallback)` to extract structured error messages from 401/400 responses; shows `reason` + `hint` if available.
+
+## Testing
+
+- **Unit tests**: [server/tests](server/tests) cover slot grouping (`test_template_parser.py`), placement order (`test_placement_order.py`), background removal (`test_background_removal.py`), fonts (`test_generator_fonts.py`), baby matching (`test_baby_partial_matching.py`), and edge cases (invalid images, wrapping).
+- **Mocking storage**: Use `monkeypatch.setattr(storage_mod, "BASE_DATA", tmp_path / "data")` to isolate test workspaces. License tests monkeypatch `YMGA_LICENSE_STORE_DIR` and `YMGA_LICENSE_SECRET`.
+- **Synthetic templates**: Generate BGR images via cv2 (`np.ones(..., dtype=np.uint8) * 255`) with colored rectangles; encode to PNG via `cv2.imencode(".png", img).tobytes()`.
+- **Run tests**: `cd server && pytest` (or activate venv first: `.venv\Scripts\activate && pytest`).
+
+## Dev Workflow (Windows)
+
+1. **Backend**: `cd server && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000`. API docs at `/docs`, health at `/health`.
+2. **Frontend**: `cd web && npm install && npm run dev`. Runs at http://localhost:5173 with `/api` proxy to backend (see [web/vite.config.ts](web/vite.config.ts)).
+3. **Build**: `cd web && npm run build` → outputs to `web/dist/`.
+4. **Env vars**: Set via shell or `.env` (backend auto-loads from `server/.env` if present). Common vars: `YMGA_CLEAR_WORKSPACES_ON_STARTUP`, `YMGA_LICENSE_SECRET`, `YMGA_LICENSE_ADMIN_PASSWORD`, `YMGA_WORKSPACE_TTL_SECONDS`.
+
+## Common Pitfalls
+
+- **Parsing failures**: Template needs clear colored boxes (min 400 px²); tolerance sweeps may fail if colors are off-spec or blurred. Check `raw_debug` in response to see detected box counts.
+- **Ingest errors**: Roster must have `first_name`/`last_name` headers; portrait filenames must be numeric or match roster indices. Non-numeric names trigger warnings.
+- **Generation requires**: Parsed template + mapped people with valid mugshots. Missing data → backend returns 400.
+- **Licensing 401s**: Check browser console for missing headers; ensure `getStoredLicenseKey()` returns valid key. Admin panel shows key status/usage.
+- **Workspace wiped**: If `YMGA_CLEAR_WORKSPACES_ON_STARTUP=true` (default), uploads lost on restart. Disable for persistent testing.
+- **Font resolution**: If custom font doesn't apply, check upload succeeded (`/api/fonts/list`) and name matches CSS stack. Pillow falls back to DejaVuSans if unresolved.

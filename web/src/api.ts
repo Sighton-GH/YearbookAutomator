@@ -301,7 +301,7 @@ export async function uploadQuotesSpreadsheet(
 export async function applyMapping(
   workspaceId: string,
   people: PersonRecord[],
-  decisions: { person_index: number; action: "keep" | "replace" | "shift" | "skip" | "remove"; replacement_mugshot?: string }[]
+  decisions: { person_index: number; action: "keep" | "replace" | "shift" | "shift_up" | "skip" | "remove"; replacement_mugshot?: string }[]
 ) {
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/review", {
     workspace_id: workspaceId,

@@ -366,6 +366,14 @@ async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
             people[i].mugshot_filename = people[i - 1].mugshot_filename
         people[pos].mugshot_filename = None
 
+    def shift_up_from(pos: int):
+        # Shift mugshots upward from pos (opposite of shift_from)
+        if pos <= 0:
+            return
+        for i in range(pos, 0, -1):
+            people[i - 1].mugshot_filename = people[i].mugshot_filename
+        people[pos].mugshot_filename = None
+
     for decision in payload.decisions:
         pos = index_of(decision.person_index)
         if pos < 0:
@@ -376,6 +384,8 @@ async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
             people[pos].mugshot_filename = None
         elif decision.action in {"shift", "skip"}:
             shift_from(pos)
+        elif decision.action == "shift_up":
+            shift_up_from(pos)
         # keep does nothing
 
     return SpreadsheetPreview(workspace_id=payload.workspace_id, people=people)
