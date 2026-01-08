@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { getStoredLicenseKey, setStoredLicenseKey, validateLicenseKey } from "../licensing";
 
 export function SiteTopBar() {
   const location = useLocation();
   const inTool = location.pathname === "/tool";
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
+  const [licenseKeyInput, setLicenseKeyInput] = useState("");
+  const [licenseValidating, setLicenseValidating] = useState(false);
+  const [licenseError, setLicenseError] = useState("");
+  const [licenseSuccess, setLicenseSuccess] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -29,10 +36,86 @@ export function SiteTopBar() {
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!showLicenseModal) return;
+
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (modalRef.current && !modalRef.current.contains(target)) {
+        setShowLicenseModal(false);
+        setLicenseKeyInput("");
+        setLicenseError("");
+        setLicenseSuccess(false);
+      }
+    };
+
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowLicenseModal(false);
+        setLicenseKeyInput("");
+        setLicenseError("");
+        setLicenseSuccess(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, [showLicenseModal]);
+
   function triggerToolAction(kind: "save" | "upload") {
     if (typeof window === "undefined") return;
     window.dispatchEvent(new Event(kind === "save" ? "ymga:save-config" : "ymga:upload-config"));
     setMenuOpen(false);
+  }
+
+  function openLicenseModal() {
+    const currentKey = getStoredLicenseKey();
+    setLicenseKeyInput(currentKey || "");
+    setLicenseError("");
+    setLicenseSuccess(false);
+    setShowLicenseModal(true);
+    setMenuOpen(false);
+  }
+
+  async function handleSaveLicenseKey() {
+    const trimmed = licenseKeyInput.trim();
+    if (!trimmed) {
+      setLicenseError("Please enter a license key");
+      return;
+    }
+
+    setLicenseValidating(true);
+    setLicenseError("");
+    setLicenseSuccess(false);
+
+    try {
+      const result = await validateLicenseKey(trimmed);
+      if (result.valid) {
+        setStoredLicenseKey(trimmed);
+        setLicenseSuccess(true);
+        setLicenseError("");
+        setTimeout(() => {
+          setShowLicenseModal(false);
+          setLicenseKeyInput("");
+          setLicenseSuccess(false);
+          // Trigger a page refresh to apply the new license
+          window.location.reload();
+        }, 1500);
+      } else {
+        setLicenseError(result.reason || "Invalid license key");
+        setLicenseSuccess(false);
+      }
+    } catch (err) {
+      setLicenseError("Failed to validate license key");
+      setLicenseSuccess(false);
+    } finally {
+      setLicenseValidating(false);
+    }
   }
 
   return (
@@ -107,6 +190,17 @@ export function SiteTopBar() {
 
                 <div className="ss-menu-sep" role="separator" />
 
+                <button
+                  type="button"
+                  className="ss-menu-item"
+                  onClick={openLicenseModal}
+                  role="menuitem"
+                >
+                  Enter License Key
+                </button>
+
+                <div className="ss-menu-sep" role="separator" />
+
                 <NavLink to="/privacy" className="ss-menu-link" role="menuitem" onClick={() => setMenuOpen(false)}>
                   Privacy policy
                 </NavLink>
@@ -118,6 +212,67 @@ export function SiteTopBar() {
           </div>
         </div>
       </div>
+
+      {showLicenseModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content" ref={modalRef}>
+            <h2>Enter License Key</h2>
+            <p>Enter your license key to activate the application.</p>
+            <div style={{ marginTop: "1rem" }}>
+              <label htmlFor="license-key-input" style={{ display: "block", marginBottom: "0.5rem" }}>
+                License Key:
+              </label>
+              <input
+                id="license-key-input"
+                type="text"
+                value={licenseKeyInput}
+                onChange={(e) => setLicenseKeyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !licenseValidating) {
+                    void handleSaveLicenseKey();
+                  }
+                }}
+                placeholder="Enter your license key"
+                style={{ width: "100%", padding: "0.5rem", fontSize: "1rem" }}
+                autoFocus
+              />
+            </div>
+            {licenseError && (
+              <div style={{ marginTop: "1rem", color: "#d32f2f", fontSize: "0.9rem" }}>
+                {licenseError}
+              </div>
+            )}
+            {licenseSuccess && (
+              <div style={{ marginTop: "1rem", color: "#2e7d32", fontSize: "0.9rem" }}>
+                ✓ License key validated successfully! Reloading...
+              </div>
+            )}
+            <div style={{ marginTop: "1.5rem", display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLicenseModal(false);
+                  setLicenseKeyInput("");
+                  setLicenseError("");
+                  setLicenseSuccess(false);
+                }}
+                disabled={licenseValidating}
+                style={{ padding: "0.5rem 1rem" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLicenseKey}
+                disabled={licenseValidating || !licenseKeyInput.trim()}
+                style={{ padding: "0.5rem 1rem", fontWeight: "bold" }}
+              >
+                {licenseValidating ? "Validating..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

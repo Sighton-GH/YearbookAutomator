@@ -2,11 +2,17 @@ export type LicenseValidateResponse = {
   valid: boolean;
   license_type?: "personal" | "commercial" | null;
   expires_at?: number | null;
+  unlock_all_steps?: boolean | null;
   reason?: string | null;
 };
 
 export const LICENSE_STORAGE_KEY = "ymga_license_key";
 export const DEVICE_ID_STORAGE_KEY = "ymga_device_id";
+export const LICENSE_CAPS_STORAGE_KEY = "ymga_license_caps";
+
+export type StoredLicenseCaps = {
+  unlock_all_steps: boolean;
+};
 
 export function getStoredLicenseKey(): string | null {
   try {
@@ -17,10 +23,40 @@ export function getStoredLicenseKey(): string | null {
   }
 }
 
+export function getStoredLicenseCaps(): StoredLicenseCaps {
+  try {
+    const raw = localStorage.getItem(LICENSE_CAPS_STORAGE_KEY);
+    if (!raw) return { unlock_all_steps: false };
+    const parsed = JSON.parse(raw) as Partial<StoredLicenseCaps> | null;
+    return { unlock_all_steps: Boolean(parsed && parsed.unlock_all_steps) };
+  } catch {
+    return { unlock_all_steps: false };
+  }
+}
+
+export function setStoredLicenseCaps(caps: StoredLicenseCaps | null): void {
+  try {
+    if (!caps) localStorage.removeItem(LICENSE_CAPS_STORAGE_KEY);
+    else localStorage.setItem(LICENSE_CAPS_STORAGE_KEY, JSON.stringify({ unlock_all_steps: Boolean(caps.unlock_all_steps) }));
+  } catch {
+    // ignore
+  }
+}
+
+export function getLicenseUnlockAllStepsEnabled(): boolean {
+  const key = getStoredLicenseKey();
+  if (!key) return false;
+  return getStoredLicenseCaps().unlock_all_steps;
+}
+
 export function setStoredLicenseKey(key: string | null): void {
   try {
-    if (!key || !key.trim()) localStorage.removeItem(LICENSE_STORAGE_KEY);
-    else localStorage.setItem(LICENSE_STORAGE_KEY, key.trim());
+    if (!key || !key.trim()) {
+      localStorage.removeItem(LICENSE_STORAGE_KEY);
+      localStorage.removeItem(LICENSE_CAPS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(LICENSE_STORAGE_KEY, key.trim());
+    }
   } catch {
     // ignore
   }
@@ -65,7 +101,13 @@ export async function validateLicenseKey(key: string): Promise<LicenseValidateRe
   if (!resp.ok) {
     return { valid: false, reason: `http_${resp.status}` };
   }
-  return (await resp.json()) as LicenseValidateResponse;
+  const data = (await resp.json()) as LicenseValidateResponse;
+  if (data && data.valid) {
+    setStoredLicenseCaps({ unlock_all_steps: Boolean(data.unlock_all_steps) });
+  } else {
+    setStoredLicenseCaps({ unlock_all_steps: false });
+  }
+  return data;
 }
 
 export async function requestFreePersonalKey(): Promise<string> {

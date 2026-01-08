@@ -52,6 +52,7 @@ import {
   importBabyZip as importBabyZipRemote,
   uploadMissingAsset as uploadMissingAssetRemote,
 } from "./configImport";
+import { getLicenseUnlockAllStepsEnabled } from "./licensing";
 
 import { ToggleSwitch } from "./components/ToggleSwitch";
 import { UploadDropLabel } from "./components/UploadDropLabel";
@@ -459,6 +460,10 @@ export default function App({ embedded = false }: AppProps) {
 
   const stepReady = (stepIndex: number) => {
     if (isStepSkipped(stepIndex)) return false;
+
+    // If this license is configured (in admin) to unlock all steps, allow access.
+    if (getLicenseUnlockAllStepsEnabled()) return true;
+    
     if (stepIndex <= 0) return true;
     if (stepIndex === 1) return Boolean(workspaceId && slots.length);
     if (stepIndex === 2) return Boolean(workspaceId && slots.length);

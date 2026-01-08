@@ -1509,11 +1509,17 @@ button:disabled {
   z-index: 50;
 }
 
-.modal {
+.modal,
+.modal-content {
   width: min(900px, 100%);
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-panel);
+}
+
+.modal-content {
+  padding: 1.5rem;
+  max-width: 500px;
 }
 
 .modal.baby-editor-modal {

@@ -59,6 +59,7 @@ class LicenseValidateResponse(BaseModel):
     valid: bool
     license_type: Literal["personal", "commercial"] | None = None
     expires_at: int | None = None
+    unlock_all_steps: bool = False
     reason: str | None = None
 
 
@@ -72,6 +73,7 @@ def validate_license(req: LicenseValidateRequest, request: Request):
             valid=True,
             license_type=meta.get("license_type"),
             expires_at=meta.get("expires_at"),
+        unlock_all_steps=bool(meta.get("unlock_all_steps", False)),
         )
     return LicenseValidateResponse(valid=False, reason=str(meta.get("reason")))
 
@@ -124,6 +126,18 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
                 "</form>"
             )
 
+        unlock_form = ""
+        if rec.key:
+          desired = "0" if rec.unlock_all_steps else "1"
+          btn = "Disable" if rec.unlock_all_steps else "Enable"
+          unlock_form = (
+            "<form method='post' action='/admin/licenses/set-unlock-all' style='margin:0'>"
+            f"<input type='hidden' name='key' value='{escape(rec.key)}'/>"
+            f"<input type='hidden' name='enabled' value='{escape(desired)}'/>"
+            f"<button type='submit'>{escape(btn)}</button>"
+            "</form>"
+          )
+
         tied = bool(rec.bound_ip or rec.bound_device_id)
         bound_ip = rec.bound_ip or ""
         bound_device_id = rec.bound_device_id or ""
@@ -140,6 +154,7 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
             "<tr>"
             f"<td><code>{escape(key_display)}</code></td>"
             f"<td>{escape(rec.license_type)}</td>"
+          f"<td>{'yes' if rec.unlock_all_steps else 'no'}</td>"
             f"<td>{'yes' if tied else 'no'}</td>"
             f"<td>{escape(bound_ip) if tied else ''}</td>"
             f"<td>{escape(bound_device_id) if tied else ''}</td>"
@@ -151,7 +166,8 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
             f"<td>{escape(last_used)}</td>"
             f"<td>{'yes' if rec.revoked else 'no'}</td>"
             f"<td>{escape(rec.note or '')}</td>"
-            f"<td>{revoke_form}</td>"
+          f"<td>{revoke_form}</td>"
+          f"<td>{unlock_form}</td>"
             "</tr>"
         )
 
@@ -214,6 +230,10 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
       <input name="max_uses" placeholder="e.g. 100" />
       <label>Note (optional)</label>
       <input name="note" placeholder="customer / invoice / etc" />
+      <label style="display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;">
+        <input type="checkbox" name="unlock_all_steps" value="1" style="width:auto" />
+        Unlock all steps (bypass step gating)
+      </label>
       <div style="margin-top: 10px;">
         <button type="submit">Create</button>
       </div>
@@ -239,6 +259,7 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
         <tr>
           <th>key</th>
           <th>type</th>
+          <th>unlock all</th>
           <th>tied</th>
           <th>ip</th>
           <th>device id</th>
@@ -251,10 +272,11 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
           <th>revoked</th>
           <th>note</th>
           <th>action</th>
+          <th>unlock action</th>
         </tr>
       </thead>
       <tbody>
-        {"".join(license_rows) if license_rows else "<tr><td colspan='14'>No licenses yet</td></tr>"}
+        {"".join(license_rows) if license_rows else "<tr><td colspan='16'>No licenses yet</td></tr>"}
       </tbody>
     </table>
   </div>
@@ -291,6 +313,7 @@ def admin_create(
     expires_at: str = Form(""),
     max_uses: str = Form(""),
     note: str = Form(""),
+    unlock_all_steps: str = Form(""),
 ):
     exp: int | None = None
     expires_at = (expires_at or "").strip()
@@ -315,6 +338,7 @@ def admin_create(
         expires_at=exp,
         max_uses=maxu,
         note=(note or "").strip() or None,
+        unlock_all_steps=bool((unlock_all_steps or "").strip()),
     )
 
     html = f"""<!doctype html>
@@ -334,4 +358,15 @@ def admin_revoke(
     key: str = Form(...),
 ):
     licensing.revoke_license(key)
+    return RedirectResponse(url="/admin/licenses", status_code=303)
+
+
+@router.post("/admin/licenses/set-unlock-all")
+def admin_set_unlock_all(
+    _: Annotated[None, Depends(_require_admin)],
+    key: str = Form(...),
+    enabled: str = Form(""),
+):
+    desired = (enabled or "").strip() in {"1", "true", "yes", "on"}
+    licensing.set_license_unlock_all_steps(key, enabled=desired)
     return RedirectResponse(url="/admin/licenses", status_code=303)

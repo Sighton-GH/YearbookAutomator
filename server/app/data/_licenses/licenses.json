@@ -44,6 +44,22 @@
       "note": "free personal",
       "revoked": false,
       "uses": 0
+    },
+    {
+      "bound_device_id": null,
+      "bound_ip": null,
+      "expires_at": null,
+      "issued_at": 1767683166,
+      "key": "YMGA1-ZRBKU-HWVAI-3X5L4-URGFJ-E25HV-6OGDZ-7N443-HRAZH-BPCAB-R5VL3-3A",
+      "last_used_at": null,
+      "license_type": "commercial",
+      "max_uses": null,
+      "monthly_limit": null,
+      "monthly_uses": {},
+      "note": null,
+      "revoked": false,
+      "unlock_all_steps": true,
+      "uses": 0
     }
   ],
   "version": 2

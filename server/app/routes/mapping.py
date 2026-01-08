@@ -15,7 +15,7 @@ import mimetypes
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
-from app.services.spreadsheet import ingest_spreadsheet
+from app.services.mapping_review import apply_mapping_decisions
 from app.services.storage import save_upload, workspace_dir
 from app.services.background_removal import (
     BackgroundMode,
@@ -353,41 +353,7 @@ async def ingest(
 @router.post("/review", response_model=SpreadsheetPreview)
 async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
     people = list(payload.people)
-
-    def index_of(person_index: int) -> int:
-        for i, person in enumerate(people):
-            if person.index == person_index:
-                return i
-        return -1
-
-    def shift_from(pos: int):
-        # Insert blank mugshot from pos downward (pos uses list index)
-        for i in range(len(people) - 1, pos, -1):
-            people[i].mugshot_filename = people[i - 1].mugshot_filename
-        people[pos].mugshot_filename = None
-
-    def shift_up_from(pos: int):
-        # Shift mugshots upward from pos (opposite of shift_from)
-        if pos <= 0:
-            return
-        for i in range(pos, 0, -1):
-            people[i - 1].mugshot_filename = people[i].mugshot_filename
-        people[pos].mugshot_filename = None
-
-    for decision in payload.decisions:
-        pos = index_of(decision.person_index)
-        if pos < 0:
-            continue
-        if decision.action == "replace" and decision.replacement_mugshot:
-            people[pos].mugshot_filename = decision.replacement_mugshot
-        elif decision.action == "remove":
-            people[pos].mugshot_filename = None
-        elif decision.action in {"shift", "skip"}:
-            shift_from(pos)
-        elif decision.action == "shift_up":
-            shift_up_from(pos)
-        # keep does nothing
-
+    apply_mapping_decisions(people, list(payload.decisions))
     return SpreadsheetPreview(workspace_id=payload.workspace_id, people=people)
 
 

@@ -35,6 +35,7 @@ class LicenseRecord:
     bound_device_id: str | None
     monthly_uses: dict[str, int]
     monthly_limit: int | None
+    unlock_all_steps: bool
 
 
 _STORE_LOCK = Lock()
@@ -181,6 +182,7 @@ def create_license(
     bound_device_id: str | None = None,
     monthly_limit: int | None = None,
     note: str | None = None,
+    unlock_all_steps: bool = False,
 ) -> str:
     license_key = generate_license_key().strip().upper()
     now = int(time.time())
@@ -201,6 +203,7 @@ def create_license(
         "bound_device_id": bound_device_id,
         "monthly_limit": monthly_limit,
         "monthly_uses": {},
+        "unlock_all_steps": bool(unlock_all_steps),
     }
 
     with _STORE_LOCK:
@@ -293,9 +296,31 @@ def list_licenses() -> list[LicenseRecord]:
                     bound_device_id=rec.get("bound_device_id", None),
                     monthly_uses=(rec.get("monthly_uses", {}) or {}),
                     monthly_limit=rec.get("monthly_limit", None),
+                    unlock_all_steps=bool(rec.get("unlock_all_steps", False)),
                 )
             )
         return out
+
+
+def set_license_unlock_all_steps(license_key: str, *, enabled: bool) -> bool:
+    """Admin-only: toggle the per-license unlock_all_steps flag."""
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return False
+
+    changed = False
+    with _STORE_LOCK:
+        store = _load_store()
+        for rec in store.get("licenses", []):
+            rec_key = (rec.get("key") or "").strip().upper()
+            if rec_key and rec_key == key_norm:
+                if bool(rec.get("unlock_all_steps", False)) != bool(enabled):
+                    rec["unlock_all_steps"] = bool(enabled)
+                    changed = True
+        if changed:
+            _dump_store(store)
+    return changed
 
 
 def _matches_record(rec: dict[str, Any], *, key: str, key_hash: str) -> bool:
@@ -363,6 +388,7 @@ def validate_license(
                 "expires_at": int(expires_at) if expires_at is not None else None,
                 "uses": uses,
                 "max_uses": int(max_uses) if max_uses is not None else None,
+                "unlock_all_steps": bool(rec.get("unlock_all_steps", False)),
             }
 
     return False, {"reason": "not_found"}
@@ -459,6 +485,7 @@ def validate_and_record_use(
                 "usage_limit": usage_limit,
                 "usage_remaining": usage_remaining,
                 "usage_period": usage_period,
+                "unlock_all_steps": bool(rec.get("unlock_all_steps", False)),
             }
 
     return False, {"reason": "not_found"}

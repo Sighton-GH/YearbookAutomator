@@ -1,6 +1,51 @@
+import { useEffect, useState } from "react";
 import { withBase } from "../baseUrl";
+import { 
+  getStoredLicenseKey, 
+  setStoredLicenseKey, 
+  validateLicenseKey,
+  type LicenseValidateResponse 
+} from "../licensing";
 
 export function LicensePage() {
+  const [currentKey, setCurrentKey] = useState<string | null>(null);
+  const [keyInput, setKeyInput] = useState("");
+  const [validationResult, setValidationResult] = useState<LicenseValidateResponse | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [showManagement, setShowManagement] = useState(false);
+
+  useEffect(() => {
+    const key = getStoredLicenseKey();
+    setCurrentKey(key);
+    setKeyInput(key || "");
+    if (key) {
+      setShowManagement(true);
+      void validateCurrentKey(key);
+    }
+  }, []);
+
+  async function validateCurrentKey(key: string) {
+    setIsValidating(true);
+    try {
+      const result = await validateLicenseKey(key);
+      setValidationResult(result);
+    } catch {
+      setValidationResult({ valid: false, reason: "validation_failed" });
+    } finally {
+      setIsValidating(false);
+    }
+  }
+
+  function handleClearKey() {
+    if (confirm("Are you sure you want to remove your license key?")) {
+      setStoredLicenseKey(null);
+      setCurrentKey(null);
+      setKeyInput("");
+      setValidationResult(null);
+      setShowManagement(false);
+    }
+  }
+
   return (
     <main className="ss-page document-page">
       <section className="ss-cover simple-cover">
@@ -11,6 +56,68 @@ export function LicensePage() {
 
       <section className="ss-content">
         <div className="ss-content-inner document-content">
+          {showManagement && currentKey && (
+            <article className="document-article" style={{ marginBottom: "2rem", padding: "1.5rem", background: "var(--bg-panel)", borderRadius: "8px", border: "1px solid var(--border)" }}>
+              <h2>License Management</h2>
+              
+              <div style={{ marginTop: "1rem" }}>
+                <h3>Current License Key</h3>
+                <div style={{ 
+                  padding: "0.75rem", 
+                  background: "var(--bg-quiet)", 
+                  borderRadius: "4px", 
+                  fontFamily: "monospace",
+                  wordBreak: "break-all",
+                  marginTop: "0.5rem"
+                }}>
+                  {currentKey}
+                </div>
+                
+                {isValidating && (
+                  <p style={{ marginTop: "0.5rem", color: "var(--text-muted)" }}>Validating...</p>
+                )}
+                
+                {!isValidating && validationResult && (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    {validationResult.valid ? (
+                      <div style={{ color: "#2e7d32" }}>
+                        ✓ Valid {validationResult.license_type || "license"}
+                        {validationResult.expires_at && (
+                          <span> (expires: {new Date(validationResult.expires_at * 1000).toLocaleDateString()})</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ color: "#d32f2f" }}>
+                        ✗ Invalid license ({validationResult.reason || "unknown error"})
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <button
+                  onClick={handleClearKey}
+                  style={{ marginTop: "1rem", padding: "0.5rem 1rem", background: "#d32f2f", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  Remove License Key
+                </button>
+              </div>
+
+              <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
+                <h3>Step Unlock</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginTop: "0.5rem" }}>
+                  Unlock-all-steps is controlled by your license key (configured in the license admin panel).
+                </p>
+                <div style={{ marginTop: "0.75rem", fontSize: "0.95rem" }}>
+                  {validationResult?.valid && validationResult.unlock_all_steps ? (
+                    <span style={{ color: "#2e7d32" }}>✓ This license unlocks all steps</span>
+                  ) : (
+                    <span style={{ color: "var(--text-muted)" }}>This license uses normal step progression</span>
+                  )}
+                </div>
+              </div>
+            </article>
+          )}
+
           <article className="document-article">
             <h2>Yearbook Grad Mugshot Automator License</h2>
             <p>Copyright © 2025 Bryan</p>

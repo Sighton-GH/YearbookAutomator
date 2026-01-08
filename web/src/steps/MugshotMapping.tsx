@@ -81,7 +81,7 @@ export function MugshotMapping({
   const defaultNamingPattern = "\\d{3,4}";
   const [showAdvancedNaming, setShowAdvancedNaming] = useState(false);
   const [adjustments, setAdjustments] = useState<
-    Record<number, { shiftCount?: number; replacement_mugshot?: string; remove?: boolean }>
+    Record<number, { shiftEnabled?: boolean; shiftCount?: number; replacement_mugshot?: string; remove?: boolean }>
   >({});
   const [adjustmentsResetNonce, setAdjustmentsResetNonce] = useState(0);
   const [swapMode, setSwapMode] = useState<SwapMode>("off");
@@ -281,10 +281,11 @@ export function MugshotMapping({
   const setShiftEnabled = (personIndex: number, enabled: boolean) => {
     setAdjustments((prev) => {
       const current = prev[personIndex] ?? {};
-      const currentShift = current.shiftCount ?? 1;
-      const nextShiftCount = enabled ? (currentShift === 0 ? 1 : currentShift) : 0;
-      const next = { ...current, shiftCount: nextShiftCount };
-      if (!next.shiftCount && !next.replacement_mugshot) {
+      // If the user enables Shift and no value exists yet, default to 1.
+      // Preserve 0 (and negative values) so the input can pass through 0 while editing.
+      const nextShiftCount = enabled ? (current.shiftCount ?? 1) : (current.shiftCount ?? 0);
+      const next = { ...current, shiftEnabled: enabled, shiftCount: nextShiftCount };
+      if (!next.shiftEnabled && !next.replacement_mugshot && !next.remove) {
         const { [personIndex]: _omit, ...rest } = prev;
         return rest;
       }
@@ -297,7 +298,9 @@ export function MugshotMapping({
     setAdjustments((prev) => {
       const current = prev[personIndex] ?? {};
       const next = { ...current, shiftCount: normalized };
-      if (!next.shiftCount && !next.replacement_mugshot && !next.remove) {
+      // Do not auto-disable Shift when the user types 0; keep the row adjustment
+      // as long as Shift is enabled so the user can continue editing into negatives.
+      if (!next.shiftEnabled && !next.shiftCount && !next.replacement_mugshot && !next.remove) {
         const { [personIndex]: _omit, ...rest } = prev;
         return rest;
       }
@@ -362,6 +365,7 @@ export function MugshotMapping({
     entries
       .sort((a, b) => a.personIndex - b.personIndex)
       .forEach(({ personIndex, entry }) => {
+        if (!entry.shiftEnabled) return;
         const shiftCount = Math.floor(entry.shiftCount ?? 0);
         if (shiftCount > 0) {
           for (let i = 0; i < shiftCount; i++) {
@@ -755,7 +759,7 @@ export function MugshotMapping({
                       <div className="stack" style={{ gap: 8, width: "100%" }}>
                         <div className="inline" style={{ alignItems: "center", gap: 10 }}>
                           <ToggleSwitch
-                            checked={(adjustments[p.index]?.shiftCount ?? 0) > 0}
+                            checked={Boolean(adjustments[p.index]?.shiftEnabled)}
                             onChange={(v) => setShiftEnabled(p.index, v)}
                             disabled={loading || swapEnabled}
                             label="Shift"
@@ -769,7 +773,7 @@ export function MugshotMapping({
                               type="number"
                               step={1}
                               value={Math.floor(adjustments[p.index]?.shiftCount ?? 0)}
-                              disabled={loading || swapEnabled || (adjustments[p.index]?.shiftCount ?? 0) === 0}
+                              disabled={loading || swapEnabled || !adjustments[p.index]?.shiftEnabled}
                               onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
                               style={{ width: 72 }}
                             />
