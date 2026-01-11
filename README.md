@@ -21,13 +21,22 @@ It is built with FastAPI (Python backend) and React/Vite (frontend), and is desi
 
 ### 1. Backend (FastAPI)
 
+**Important:** Use Python 3.12 (not 3.13+) to avoid dependency compatibility issues.
+
 ```sh
 cd server
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
+
+**One-line start (after venv is set up):**
+```powershell
+cd server; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+**Note:** Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
 ### 2. Frontend (React/Vite)
 
@@ -35,6 +44,11 @@ uvicorn app.main:app --reload --port 8000
 cd web
 npm install
 npm run dev
+```
+
+**One-line start (after npm install):**
+```powershell
+cd web; npm run dev
 ```
 
 The frontend runs at http://localhost:5173 and proxies `/api` to the backend at http://127.0.0.1:8000.
@@ -203,11 +217,45 @@ If you’re trying to understand the codebase quickly, these files are the main 
 ## Developer Workflow
 
 ### Backend
-- `cd server && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000`
+**Setup (one-time):**
+```powershell
+cd server
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+**Start server:**
+```powershell
+cd server
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+**External PowerShell window:**
+```powershell
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000'
+```
 
 ### Frontend
-- `cd web && npm install && npm run dev` (Vite proxies `/api` to backend)
-- Build for production: `npm run build`
+**Setup (one-time):**
+```powershell
+cd web
+npm install
+```
+
+**Start dev server:**
+```powershell
+cd web
+npm run dev
+```
+
+Vite proxies `/api` to backend at http://127.0.0.1:8000.
+
+**Build for production:**
+```powershell
+cd web
+npm run build
+```
 
 ### Testing
 - `cd server && pytest` — Tests cover template parsing, progress tracking, and edge cases. See `server/tests/` for examples.
