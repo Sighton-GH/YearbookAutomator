@@ -28,15 +28,15 @@ cd server
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **One-line start (after venv is set up):**
 ```powershell
-cd server; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Note:** Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
+**Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
 ### 2. Frontend (React/Vite)
 
@@ -48,10 +48,10 @@ npm run dev
 
 **One-line start (after npm install):**
 ```powershell
-cd web; npm run dev
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web"; npm run dev
 ```
 
-The frontend runs at http://localhost:5173 and proxies `/api` to the backend at http://127.0.0.1:8000.
+The frontend runs at http://localhost:5173 (also accessible via Tailscale at `http://<your-tailscale-ip>:5173`) and proxies `/api` to the backend.
 
 ---
 
@@ -225,15 +225,14 @@ py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-**Start server:**
+**Start server (one-line):**
 ```powershell
-cd server
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **External PowerShell window:**
 ```powershell
-Start-Process PowerShell -ArgumentList '-NoExit','-Command','cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000'
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
 ```
 
 ### Frontend
@@ -243,13 +242,17 @@ cd web
 npm install
 ```
 
-**Start dev server:**
+**Start dev server (one-line):**
 ```powershell
-cd web
-npm run dev
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web"; npm run dev
 ```
 
-Vite proxies `/api` to backend at http://127.0.0.1:8000.
+**External PowerShell window:**
+```powershell
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web''; npm run dev'
+```
+
+Vite binds to `0.0.0.0` (accessible via Tailscale) and proxies `/api` to backend.
 
 **Build for production:**
 ```powershell
