@@ -1201,24 +1201,19 @@ button:disabled {
 
 .mapping-layout {
   display: grid;
-  gap: 16px;
-}
-
-.mapping-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
   align-items: start;
 }
 
-.mapping-top > .panel {
+.mapping-main {
   min-width: 0;
 }
 
-.mapping-top > .panel:last-child {
-  width: fit-content;
-  max-width: 360px;
-  justify-self: end;
+.mapping-sidebar {
+  display: grid;
+  gap: 16px;
+  align-content: start;
 }
 
 .mapping-actions {
@@ -1929,7 +1924,9 @@ button.small {
   .topbar { flex-direction: column; align-items: flex-start; }
   .steps { justify-content: flex-start; }
 
-  .mapping-top { grid-template-columns: 1fr; }
+  .mapping-layout { grid-template-columns: 1fr; }
+  .mapping-sidebar { order: 2; }
+  .mapping-main { order: 1; }
 
   .preview-grid { grid-template-columns: 1fr; }
   .full-preview .canvas { height: 420px; }
@@ -2594,6 +2591,21 @@ button.small {
 
 .app-return-link:hover {
   text-decoration: underline;
+}
+
+.app-footer {
+  margin-top: 32px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.app-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 /* Tool launch gate on /tool */

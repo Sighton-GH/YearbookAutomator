@@ -921,8 +921,126 @@ export function BabyPhotosStep({
   };
 
   return (
-    <div className="mapping-layout">
-      <div className="mapping-top">
+    <>
+      <div className="mapping-layout">
+        <div className="mapping-main">
+        <div className="panel">
+          {workspaceId && people.length > 0 ? (
+            <div className="stack">
+              <div className="inline">
+                <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
+                  Reset to original photos
+                </button>
+              </div>
+
+              <div className="people-grid">
+                {people.map((p, idx) => {
+                  const babyFilename = p.baby_photo_filename || defaultBabyFilename;
+                  const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
+                  const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+                  const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
+                  const babyThumbStyle: React.CSSProperties = {
+                    ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
+                    width: babyThumbDims.width,
+                    height: babyThumbDims.height,
+                    backgroundColor: babyFillColor ?? undefined,
+                  };
+
+                  return (
+                    <div className="people-card" key={p.index}>
+                      <div className="people-card-header">
+                        <div className="stack" style={{ gap: 4 }}>
+                          <div className="muted small">#{p.index}</div>
+                          <div>
+                            <strong>
+                              {p.first_name} {p.last_name}
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid two">
+                        <div className="stack" style={{ gap: 6 }}>
+                          <div className="muted small">Mugshot</div>
+                          <div className="thumb-cell">
+                            {p.mugshot_filename && workspaceId ? (
+                              <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
+                            ) : assignedDefaultMugshot && workspaceId ? (
+                              <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                                <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
+                                <div className="muted small">(default)</div>
+                              </div>
+                            ) : (
+                              <div className="muted small">(missing)</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="stack" style={{ gap: 6 }}>
+                          <div className="muted small">Baby photo</div>
+                          <div className={clsx("thumb-cell", "thumb-cell-baby", canShowImage && "has-image")}
+                            style={babyThumbStyle}
+                          >
+                            {babyFilename && workspaceId ? (
+                              <img
+                                src={assetUrl(workspaceId, "baby", babyFilename)}
+                                alt="baby"
+                                className={clsx("thumb", "thumb-baby", maskUrl && "masked")}
+                                onClick={() => {
+                                  if (!babyFilename) return;
+                                  openCropper(idx, babyFilename);
+                                }}
+                                onError={() => setBabyThumbError((prev) => ({ ...prev, [p.index]: true }))}
+                              />
+                            ) : (
+                              <div className="muted small">(missing)</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="field">
+                          <span>Quote</span>
+                          <textarea
+                            rows={2}
+                            value={quote}
+                            onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
+                            placeholder=""
+                          />
+                        </label>
+
+                        <label className="field">
+                          <span>Baby photo override</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleBabyOverride(idx, e.target.files?.[0] ?? null)}
+                            disabled={loading}
+                          />
+                        </label>
+
+                        <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                          <button type="button" onClick={() => clearBabyOverride(idx)} disabled={loading}>
+                            Clear override
+                          </button>
+                          <button type="button" onClick={() => clearBabyFromPerson(idx)} disabled={loading}>
+                            Remove baby photo
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="muted">No people loaded yet. Complete portrait mapping first.</p>
+          )}
+        </div>
+      </div>
+
+      <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
             <p className="muted">
@@ -1272,171 +1390,12 @@ export function BabyPhotosStep({
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
-      </div>
+      </aside>
+    </div>
 
-      <div className="panel">
-        {workspaceId && people.length > 0 ? (
-          <div className="stack">
-            <div className="inline">
-              <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
-                Reset to original photos
-              </button>
-            </div>
-
-            <div className="people-grid">
-              {people.map((p, idx) => {
-                const babyFilename = p.baby_photo_filename || defaultBabyFilename;
-                const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
-                const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
-                const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
-                const babyThumbStyle: React.CSSProperties = {
-                  ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
-                  width: babyThumbDims.width,
-                  height: babyThumbDims.height,
-                  backgroundColor: babyFillColor ?? undefined,
-                };
-
-                return (
-                  <div className="people-card" key={p.index}>
-                    <div className="people-card-header">
-                      <div className="stack" style={{ gap: 4 }}>
-                        <div className="muted small">#{p.index}</div>
-                        <div>
-                          <strong>
-                            {p.first_name} {p.last_name}
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid two">
-                      <div className="stack" style={{ gap: 6 }}>
-                        <div className="muted small">Mugshot</div>
-                        <div className="thumb-cell">
-                          {p.mugshot_filename && workspaceId ? (
-                            <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
-                          ) : assignedDefaultMugshot && workspaceId ? (
-                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                              <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
-                              <div className="muted small">(default)</div>
-                            </div>
-                          ) : (
-                            <div className="muted small">(missing)</div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="stack" style={{ gap: 6 }}>
-                        <div className="muted small">Baby photo</div>
-                        <div className="thumb-cell">
-                          {workspaceId && canShowImage ? (
-                            <div
-                              className={clsx("baby-thumb-editable", "baby-thumb-review", {
-                                "baby-thumb-masked": Boolean(maskUrl),
-                              })}
-                              style={babyThumbStyle}
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`Edit baby photo for ${p.first_name} ${p.last_name}`}
-                              onClick={() => openEditor(idx)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  openEditor(idx);
-                                }
-                              }}
-                            >
-                              <img
-                                src={assetUrl(workspaceId, "baby", babyFilename!)}
-                                alt="baby"
-                                className="baby-thumb-img"
-                                onError={() => setBabyThumbError((prev) => ({ ...prev, [p.index]: true }))}
-                              />
-                              <div className="baby-thumb-hover" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
-                                  <path
-                                    d="M4 17.25V20h2.75L17.81 8.94l-2.75-2.75L4 17.25Z"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinejoin="round"
-                                  />
-                                  <path
-                                    d="M14.06 6.19 16.81 8.94"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              </div>
-                            </div>
-                          ) : (
-                            <div
-                              className={clsx("baby-thumb-editable", "baby-thumb-review", "thumb-placeholder", {
-                                "baby-thumb-masked": Boolean(maskUrl),
-                              })}
-                              style={babyThumbStyle}
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`Edit baby photo for ${p.first_name} ${p.last_name}`}
-                              onClick={() => openEditor(idx)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  openEditor(idx);
-                                }
-                              }}
-                            >
-                              <img
-                                src={withBase("assets/Default_Baby_Photo_ABC_Blocks.webp")}
-                                alt=""
-                                className="baby-thumb-img"
-                                aria-hidden="true"
-                              />
-                              <div className="baby-thumb-hover" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
-                                  <path
-                                    d="M4 17.25V20h2.75L17.81 8.94l-2.75-2.75L4 17.25Z"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinejoin="round"
-                                  />
-                                  <path
-                                    d="M14.06 6.19 16.81 8.94"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="stack" style={{ gap: 6 }}>
-                      <div className="muted small">Quote</div>
-                      <div className={clsx({ muted: !p.quote })}>{quote || "(none)"}</div>
-                    </div>
-
-                    <UploadDropLabel accept="image/*" disabled={loading} onFile={(file) => handlePerPersonBaby(idx, file)}>
-                      <span>Upload/replace baby photo</span>
-                      <input type="file" accept="image/*" onChange={(e) => handlePerPersonBaby(idx, e.target.files?.[0] ?? null)} />
-                      <div className="muted small">{p.baby_photo_filename ?? "No custom photo"}</div>
-                    </UploadDropLabel>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <p className="muted">No people loaded yet. Complete portrait mapping first.</p>
-        )}
-      </div>
-
-      {workspaceId && editingIdx !== null && editingSrc && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit baby photo">
-          <div className="modal baby-editor-modal">
+    {workspaceId && editingIdx !== null && editingSrc && (
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit baby photo">
+        <div className="modal baby-editor-modal">
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Edit baby photo</strong>
@@ -1614,12 +1573,12 @@ export function BabyPhotosStep({
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
+    )}
 
-      {showApplyWarning && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm apply baby photo edits">
-          <div className="modal" style={{ width: "min(560px, 100%)" }}>
+    {showApplyWarning && (
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm apply baby photo edits">
+        <div className="modal" style={{ width: "min(560px, 100%)" }}>
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Apply changes?</strong>
@@ -1648,12 +1607,12 @@ export function BabyPhotosStep({
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
+    )}
 
-      {showDiscardWarning && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Discard baby photo edits">
-          <div className="modal" style={{ width: "min(560px, 100%)" }}>
+    {showDiscardWarning && (
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Discard baby photo edits">
+        <div className="modal" style={{ width: "min(560px, 100%)" }}>
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Discard changes?</strong>
@@ -1674,8 +1633,8 @@ export function BabyPhotosStep({
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+      </div>
+    )}
+    </>
   );
 }

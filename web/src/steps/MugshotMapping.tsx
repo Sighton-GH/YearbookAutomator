@@ -550,7 +550,167 @@ export function MugshotMapping({
 
   return (
     <div className="mapping-layout">
-      <div className="mapping-top">
+      <div className="mapping-main">
+        <div className="panel">
+          {workspaceId && people.length > 0 ? (
+            <div className="stack">
+              <div className="inline">
+                <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
+                  Apply mapping adjustments
+                </button>
+                <button type="button" className="danger" onClick={resetToOriginalMapping} disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}>
+                  Reset to original mapping
+                </button>
+                <button
+                  type="button"
+                  className={clsx({ primary: swapMode === "card" })}
+                  onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}
+                >
+                  {swapMode === "card" ? "Swap Cards: On" : "Swap Cards: Off"}
+                </button>
+                <button
+                  type="button"
+                  className={clsx({ primary: swapMode === "portrait" })}
+                  onClick={() => setSwapMode((v) => (v === "portrait" ? "off" : "portrait"))}
+                >
+                  {swapMode === "portrait" ? "Swap Portraits: On" : "Swap Portraits: Off"}
+                </button>
+              </div>
+
+              {swapMode === "card" && <p className="muted small">Card swap: drag a card onto another to swap their ordering.</p>}
+              {swapMode === "portrait" && (
+                <p className="muted small">Portrait swap: drag a card onto another to swap which portrait is mapped to each card.</p>
+              )}
+
+              <div className="people-grid">
+                {people.map((p, rowIdx) => {
+                  const isLocked = Boolean(lockedPeople[p.index]);
+                  const assignedDefault = defaultMugshotAssignments[p.index];
+                  const cardClasses = clsx("people-card", {
+                    "swap-mode": swapMode === "card",
+                    dragging: swapMode === "card" && dragIdx === rowIdx,
+                    "swap-target": swapMode === "card" && dropTarget === rowIdx,
+                  });
+                  return (
+                    <div
+                      className={cardClasses}
+                      key={p.index}
+                      draggable={swapMode === "card"}
+                      onDragStart={(evt) => {
+                        if (swapMode !== "card") return;
+                        setDragIdx(rowIdx);
+                        evt.dataTransfer.effectAllowed = "move";
+                        evt.dataTransfer.setData("text/plain", String(rowIdx));
+                      }}
+                      onDragOver={(evt) => {
+                        if (!swapEnabled) return;
+                        evt.preventDefault();
+                        if (dropTarget !== rowIdx) setDropTarget(rowIdx);
+                      }}
+                      onDragLeave={() => {
+                        if (!swapEnabled) return;
+                        if (dropTarget === rowIdx) setDropTarget(null);
+                      }}
+                      onDrop={(evt) => handleSwapDrop(rowIdx, evt)}
+                    >
+                      <div className="people-card-header">
+                        <div className="stack" style={{ gap: 4 }}>
+                          <div className="muted small">#{p.index}</div>
+                          <div>
+                            <strong>
+                              {p.first_name} {p.last_name}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="thumb-stack">
+                          {p.mugshot_filename ? (
+                            <img
+                              src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
+                              alt="portrait"
+                              className="thumb"
+                            />
+                          ) : assignedDefault ? (
+                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                              <img src={assetUrl(workspaceId, "mugshot", assignedDefault)} alt="default portrait" className="thumb" />
+                              <div className="muted small">(default)</div>
+                            </div>
+                          ) : (
+                            <div className="muted small">(missing mugshot)</div>
+                          )}
+                          {swapMode === "portrait" ? (
+                            <div className="drag-overlay">
+                              {swapEnabled ? "Drag to swap" : ""}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="field">
+                          <span>Portrait file</span>
+                          <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                            <div className="muted small">
+                              {p.mugshot_filename || assignedDefault || "(missing)"}
+                            </div>
+                            {assignedDefault && !p.mugshot_filename && <span className="muted small">default</span>}
+                          </div>
+                        </label>
+
+                        <div className="grid two">
+                          <ToggleSwitch
+                            checked={Boolean(adjustments[p.index]?.shiftEnabled)}
+                            onChange={(checked) => setShiftEnabled(p.index, checked)}
+                            label="Shift down"
+                          />
+                          <label className="field">
+                            <span>Shift count</span>
+                            <input
+                              type="number"
+                              value={adjustments[p.index]?.shiftCount ?? 0}
+                              onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
+                              disabled={!adjustments[p.index]?.shiftEnabled}
+                            />
+                          </label>
+                        </div>
+
+                        <label className="field">
+                          <span>Replacement portrait</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => uploadReplacement(p.index, e.target.files?.[0] ?? null)}
+                            disabled={loading}
+                          />
+                        </label>
+
+                        <ToggleSwitch
+                          checked={Boolean(adjustments[p.index]?.remove)}
+                          onChange={(checked) => setRemoveEnabled(p.index, checked)}
+                          label="Remove portrait"
+                        />
+
+                        <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                          <button type="button" onClick={() => toggleLock(p.index)}>
+                            {isLocked ? "Unlock" : "Lock"}
+                          </button>
+                          <button type="button" className="danger" onClick={() => removePerson(p.index)}>
+                            Remove person
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="muted">No people loaded yet. Ingest the spreadsheet and portraits first.</p>
+          )}
+        </div>
+      </div>
+
+      <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
             <p className="muted">
@@ -763,198 +923,7 @@ export function MugshotMapping({
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
-      </div>
-
-      <div className="panel">
-        {workspaceId && people.length > 0 ? (
-          <div className="stack">
-            <div className="inline">
-              <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
-                Apply mapping adjustments
-              </button>
-              <button type="button" className="danger" onClick={resetToOriginalMapping} disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}>
-                Reset to original mapping
-              </button>
-              <button
-                type="button"
-                className={clsx({ primary: swapMode === "card" })}
-                onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}
-              >
-                {swapMode === "card" ? "Swap Cards: On" : "Swap Cards: Off"}
-              </button>
-              <button
-                type="button"
-                className={clsx({ primary: swapMode === "portrait" })}
-                onClick={() => setSwapMode((v) => (v === "portrait" ? "off" : "portrait"))}
-              >
-                {swapMode === "portrait" ? "Swap Portraits: On" : "Swap Portraits: Off"}
-              </button>
-            </div>
-
-            {swapMode === "card" && <p className="muted small">Card swap: drag a card onto another to swap their ordering.</p>}
-            {swapMode === "portrait" && (
-              <p className="muted small">Portrait swap: drag a card onto another to swap which portrait is mapped to each card.</p>
-            )}
-
-            <div className="people-grid">
-              {people.map((p, rowIdx) => {
-                const isLocked = Boolean(lockedPeople[p.index]);
-                const assignedDefault = defaultMugshotAssignments[p.index];
-                const cardClasses = clsx("people-card", {
-                  "swap-mode": swapMode === "card",
-                  dragging: swapMode === "card" && dragIdx === rowIdx,
-                  "swap-target": swapMode === "card" && dropTarget === rowIdx,
-                });
-                return (
-                  <div
-                    className={cardClasses}
-                    key={p.index}
-                    draggable={swapMode === "card"}
-                    onDragStart={(evt) => {
-                      if (swapMode !== "card") return;
-                      setDragIdx(rowIdx);
-                      evt.dataTransfer.effectAllowed = "move";
-                      evt.dataTransfer.setData("text/plain", String(rowIdx));
-                    }}
-                    onDragOver={(evt) => {
-                      if (!swapEnabled) return;
-                      evt.preventDefault();
-                      setDropTarget(rowIdx);
-                    }}
-                    onDragLeave={() => swapEnabled && setDropTarget(null)}
-                    onDrop={(evt) => handleSwapDrop(rowIdx, evt)}
-                  >
-                    <div className="people-card-header">
-                      <div className="stack" style={{ gap: 4 }}>
-                        <div className="muted small">#{p.index}</div>
-                        <div>
-                          <strong>
-                            {p.first_name} {p.last_name}
-                          </strong>
-                        </div>
-                      </div>
-                      <div className="people-card-header-actions">
-                        <button
-                          type="button"
-                          className={clsx("lock-toggle", isLocked && "locked")}
-                          onClick={() => toggleLock(p.index)}
-                          disabled={loading}
-                          title={isLocked ? "Unlock portrait" : "Lock portrait"}
-                          aria-pressed={isLocked}
-                        >
-                          {isLocked ? "🔒" : "🔓"}
-                        </button>
-                      </div>
-                      <div className="thumb-cell">
-                        {p.mugshot_filename && workspaceId ? (
-                          <img
-                            src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                            alt="portrait"
-                            className={clsx("thumb", {
-                              "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
-                            })}
-                            draggable={swapMode === "portrait" && !isLocked}
-                            onDragStart={(evt) => {
-                              if (swapMode !== "portrait") return;
-                              if (isLocked) return;
-                              setDragIdx(rowIdx);
-                              evt.dataTransfer.effectAllowed = "move";
-                              evt.dataTransfer.setData("text/plain", String(rowIdx));
-                            }}
-                          />
-                        ) : assignedDefault && workspaceId ? (
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                            <img
-                              src={assetUrl(workspaceId, "mugshot", assignedDefault)}
-                              alt="default portrait"
-                              className={clsx("thumb", {
-                                "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
-                              })}
-                              draggable={swapMode === "portrait" && !isLocked}
-                              onDragStart={(evt) => {
-                                if (swapMode !== "portrait") return;
-                                if (isLocked) return;
-                                setDragIdx(rowIdx);
-                                evt.dataTransfer.effectAllowed = "move";
-                                evt.dataTransfer.setData("text/plain", String(rowIdx));
-                              }}
-                            />
-                            <div className="muted small">(default)</div>
-                          </div>
-                        ) : (
-                          <div className="muted small">(missing)</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="people-card-actions" style={{ alignItems: "center", gap: 10 }}>
-                      <div className="stack" style={{ gap: 8, width: "100%" }}>
-                        <div className="inline" style={{ alignItems: "center", gap: 10 }}>
-                          <ToggleSwitch
-                            checked={Boolean(adjustments[p.index]?.shiftEnabled)}
-                            onChange={(v) => setShiftEnabled(p.index, v)}
-                            disabled={loading || swapEnabled || isLocked}
-                            label="Shift"
-                            className="small"
-                            style={{ margin: 0 }}
-                          />
-
-                          <label className="inline" style={{ alignItems: "center", gap: 8, margin: 0 }}>
-                            <span className="muted small">#</span>
-                            <input
-                              type="number"
-                              step={1}
-                              value={Math.floor(adjustments[p.index]?.shiftCount ?? 0)}
-                              disabled={loading || swapEnabled || isLocked || !adjustments[p.index]?.shiftEnabled}
-                              onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
-                              style={{ width: 72 }}
-                            />
-                          </label>
-                        </div>
-
-                        <ToggleSwitch
-                          checked={Boolean(adjustments[p.index]?.remove)}
-                          onChange={(v) => setRemoveEnabled(p.index, v)}
-                          disabled={loading || swapEnabled || isLocked}
-                          label="Reset to default portrait"
-                          className="small"
-                          style={{ margin: 0 }}
-                        />
-
-                        <button
-                          type="button"
-                          className="danger small"
-                          onClick={() => removePerson(p.index)}
-                          disabled={loading || swapEnabled}
-                        >
-                          Remove person
-                        </button>
-                      </div>
-                    </div>
-
-                    <UploadDropLabel
-                      key={`${p.index}-${adjustmentsResetNonce}`}
-                      accept="image/*"
-                      disabled={loading || swapEnabled || Boolean(adjustments[p.index]?.remove) || isLocked}
-                      onFile={(file) => uploadReplacement(p.index, file)}
-                    >
-                      <span className="muted small">Upload replacement portrait</span>
-                      <input type="file" accept="image/*" onChange={(e) => uploadReplacement(p.index, e.target.files?.[0] ?? null)} />
-                      <div className="muted small">{adjustments[p.index]?.replacement_mugshot ?? "No replacement"}</div>
-                    </UploadDropLabel>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button onClick={applyDecisions} disabled={loading}>
-              Apply mapping adjustments
-            </button>
-          </div>
-        ) : (
-          <p className="muted">No people loaded yet. Ingest a spreadsheet and portraits ZIP above.</p>
-        )}
-      </div>
+      </aside>
     </div>
   );
 }

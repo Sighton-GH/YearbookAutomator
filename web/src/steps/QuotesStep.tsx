@@ -224,7 +224,67 @@ export function QuotesStep({
 
   return (
     <div className="mapping-layout">
-      <div className="mapping-top">
+      <div className="mapping-main">
+        <div className="panel">
+          {workspaceId && people.length > 0 ? (
+            <div className="people-grid">
+              {people.map((p, idx) => {
+                const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
+                const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote;
+                const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+                return (
+                  <div className="people-card" key={p.index}>
+                    <div className="people-card-header">
+                      <div className="stack" style={{ gap: 4 }}>
+                        <div className="muted small">#{p.index}</div>
+                        <div>
+                          <strong>
+                            {p.first_name} {p.last_name}
+                          </strong>
+                        </div>
+                      </div>
+                      <div className="thumb-stack">
+                        {p.mugshot_filename ? (
+                          <img
+                            src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
+                            alt="portrait"
+                            className="thumb"
+                          />
+                        ) : assignedDefaultMugshot ? (
+                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                            <img
+                              src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
+                              alt="default portrait"
+                              className="thumb"
+                            />
+                            <div className="muted small">(default)</div>
+                          </div>
+                        ) : (
+                          <div className="muted small">(missing mugshot)</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="field">
+                      <span>Quote</span>
+                      <textarea
+                        rows={2}
+                        value={displayQuote}
+                        onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
+                        placeholder=""
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="muted">No people loaded yet. Complete portrait mapping first.</p>
+          )}
+        </div>
+      </div>
+
+      <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
             <p className="muted">
@@ -367,65 +427,7 @@ export function QuotesStep({
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
-      </div>
-
-      <div className="panel">
-        {workspaceId && people.length > 0 ? (
-          <div className="people-grid">
-            {people.map((p, idx) => {
-              const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
-              const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote;
-              const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
-              return (
-              <div className="people-card" key={p.index}>
-                <div className="people-card-header">
-                  <div className="stack" style={{ gap: 4 }}>
-                    <div className="muted small">#{p.index}</div>
-                    <div>
-                      <strong>
-                        {p.first_name} {p.last_name}
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="thumb-stack">
-                    {p.mugshot_filename ? (
-                      <img
-                        src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                        alt="portrait"
-                        className="thumb"
-                      />
-                    ) : assignedDefaultMugshot ? (
-                      <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                        <img
-                          src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
-                          alt="default portrait"
-                          className="thumb"
-                        />
-                        <div className="muted small">(default)</div>
-                      </div>
-                    ) : (
-                      <div className="muted small">(missing mugshot)</div>
-                    )}
-                  </div>
-                </div>
-
-                <label className="field">
-                  <span>Quote</span>
-                  <textarea
-                    rows={2}
-                    value={displayQuote}
-                    onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
-                    placeholder=""
-                  />
-                </label>
-              </div>
-            );
-            })}
-          </div>
-        ) : (
-          <p className="muted">No people loaded yet. Complete portrait mapping first.</p>
-        )}
-      </div>
+      </aside>
     </div>
   );
 }

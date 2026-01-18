@@ -51,6 +51,9 @@ export function ToolAppPage() {
       ) : (
         <App embedded />
       )}
+      <footer className="app-footer">
+        <div className="app-footer-inner">Sighton Innovations</div>
+      </footer>
     </div>
   );
 }
