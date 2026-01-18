@@ -610,23 +610,26 @@ export function MugshotMapping({
                       person={p}
                       workspaceId={workspaceId}
                       className={cardClasses}
-                      draggable={swapMode === "card"}
+                      draggable={swapMode === "card" && !isLocked}
                       onDragStart={(evt) => {
-                        if (swapMode !== "card") return;
+                        if (swapMode !== "card" || isLocked) return;
                         setDragIdx(rowIdx);
                         evt.dataTransfer.effectAllowed = "move";
                         evt.dataTransfer.setData("text/plain", String(rowIdx));
                       }}
                       onDragOver={(evt) => {
-                        if (!swapEnabled) return;
+                        if (!swapEnabled || isLocked) return;
                         evt.preventDefault();
                         if (dropTarget !== rowIdx) setDropTarget(rowIdx);
                       }}
                       onDragLeave={() => {
-                        if (!swapEnabled) return;
+                        if (!swapEnabled || isLocked) return;
                         if (dropTarget === rowIdx) setDropTarget(null);
                       }}
-                      onDrop={(evt) => handleSwapDrop(rowIdx, evt)}
+                      onDrop={(evt) => {
+                        if (isLocked) return;
+                        handleSwapDrop(rowIdx, evt);
+                      }}
                       mugshot={{
                         label: "Portrait",
                         kind: "mugshot",
@@ -653,7 +656,7 @@ export function MugshotMapping({
                           : undefined,
                         renderMode: "baby-editor",
                         onClick: () => {
-                          if (!babyFilename) return;
+                          if (!babyFilename || isLocked) return;
                           babyEditorRef.current?.openEditor(rowIdx);
                         },
                       }}
@@ -666,6 +669,7 @@ export function MugshotMapping({
                           checked={Boolean(adjustments[p.index]?.shiftEnabled)}
                           onChange={(checked) => setShiftEnabled(p.index, checked)}
                           label="Shift down"
+                          disabled={isLocked}
                         />
                         <label className="field">
                           <span>Shift count</span>
@@ -673,7 +677,7 @@ export function MugshotMapping({
                             type="number"
                             value={adjustments[p.index]?.shiftCount ?? 0}
                             onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
-                            disabled={!adjustments[p.index]?.shiftEnabled}
+                            disabled={isLocked || !adjustments[p.index]?.shiftEnabled}
                           />
                         </label>
                       </div>
@@ -684,14 +688,14 @@ export function MugshotMapping({
                           type="file"
                           accept="image/*"
                           onChange={(e) => uploadReplacement(p.index, e.target.files?.[0] ?? null)}
-                          disabled={loading}
+                          disabled={loading || isLocked}
                         />
                       </label>
 
                       <div className="inline" style={{ gap: 8, alignItems: "center" }}>
                         <button
                           type="button"
-                          className="icon-btn"
+                          className="icon-btn lock-toggle-btn"
                           onClick={() => toggleLock(p.index)}
                           aria-label={isLocked ? "Unlock person" : "Lock person"}
                           title={isLocked ? "Unlock" : "Lock"}
@@ -710,12 +714,19 @@ export function MugshotMapping({
                             </svg>
                           )}
                         </button>
+                        <InfoPopover
+                          content="Locking a person protects their portrait/row from edits and swaps, but they will still be included in the final result."
+                          ariaLabel="Lock person description"
+                          position="below"
+                          className="lock-info-popover"
+                        />
                         <button
                           type="button"
                           className="icon-btn danger"
                           onClick={() => setConfirmAction({ kind: "remove-person", personIndex: p.index })}
                           aria-label="Remove person"
                           title="Remove person"
+                          disabled={isLocked}
                         >
                           <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M4 7h16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
@@ -729,6 +740,7 @@ export function MugshotMapping({
                           onClick={() => setConfirmAction({ kind: "remove-portrait", personIndex: p.index })}
                           aria-label="Remove portrait"
                           title="Remove portrait"
+                          disabled={isLocked}
                         >
                           <span className="icon-stack" aria-hidden="true">
                             <svg className="icon-svg" viewBox="0 0 24 24">

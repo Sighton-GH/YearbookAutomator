@@ -420,14 +420,14 @@
   background: var(--bg-panel);
   display: grid;
   gap: 10px;
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
 }
 
 .page.page-wide .people-card {
   padding: 12px;
   gap: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .page.page-wide .people-card-header {
@@ -475,19 +475,62 @@
 }
 
 .people-card.people-card-locked {
-  opacity: 0.6 !important;
-  filter: grayscale(1) !important;
   background: #f3f4f6 !important;
   border-color: #cbd5e1 !important;
 }
 
-.people-card.people-card-locked * {
+.people-card.people-card-locked :not(.lock-toggle-btn):not(.lock-toggle-btn *) {
   color: #6b7280 !important;
+}
+
+.people-card.people-card-locked .lock-toggle-btn {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #16a34a !important;
+  filter: none !important;
+  opacity: 1 !important;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.05) inset,
+    0 0 0 2px rgba(22, 163, 74, 0.35);
+}
+
+.people-card.people-card-locked .lock-toggle-btn * {
+  color: inherit !important;
 }
 
 .people-card.people-card-locked .thumb,
 .people-card.people-card-locked .baby-thumb-img {
   filter: grayscale(1) brightness(0.85) !important;
+}
+
+.lock-info-popover {
+  margin-left: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 0;
+  align-self: flex-end;
+  transform: translate(-6px, 6px);
+  z-index: 2;
+}
+
+.lock-info-popover .info-popover-btn {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px;
+  min-height: 16px;
+  aspect-ratio: 1 / 1;
+  font-size: 10px;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 1;
+  box-sizing: border-box;
+  background: #ffffff;
+  border-color: #16a34a;
+  color: #16a34a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
 }
 
 .people-card-body {

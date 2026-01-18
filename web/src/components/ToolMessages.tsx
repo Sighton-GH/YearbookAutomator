@@ -87,7 +87,10 @@ export function ToolMessages({
   const beginClose = (id: string, opts?: { dismissAfter?: boolean }) => {
     const isOpen = Boolean(openById[id] ?? true);
     const isClosing = Boolean(closingById[id]);
-    if (!isOpen || isClosing) return;
+    if (!isOpen || isClosing) {
+      if (opts?.dismissAfter && onDismiss) onDismiss(id);
+      return;
+    }
 
     setClosingById((prev) => ({ ...prev, [id]: true }));
     const t = window.setTimeout(() => {
