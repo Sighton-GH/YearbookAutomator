@@ -1265,7 +1265,7 @@ button:disabled {
 .page.page-wide .people-card {
   padding: 12px;
   gap: 10px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .page.page-wide .people-card-header {
@@ -1298,7 +1298,7 @@ button:disabled {
 
 .people-card-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   align-items: flex-start;
   min-width: 0;
@@ -1312,8 +1312,22 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.people-card-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .people-card-header .thumb-cell {
   flex: 0 0 auto;
+}
+
+.people-card-thumbs {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: flex-start;
 }
 
 .people-card-actions {
@@ -1330,6 +1344,14 @@ button:disabled {
 .people-card .upload input[type="file"] {
   width: 100%;
   max-width: 100%;
+}
+
+.people-card textarea,
+.people-card input[type="number"],
+.people-card input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .people-card .upload .muted.small {
@@ -1707,6 +1729,54 @@ button.small {
   gap: 6px;
   min-width: 0;
   justify-content: center;
+  max-width: 100%;
+  position: relative;
+  width: 96px;
+  height: auto;
+  min-height: 96px;
+}
+
+.thumb-stack-inner {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  max-width: 100%;
+}
+
+.thumb-filename {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.thumb-empty {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: transparent;
+}
+
+.thumb-cell-baby {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #e6f4ea;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.thumb-cell-baby .thumb {
+  border: none;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .thumb-stack {
@@ -1714,6 +1784,25 @@ button.small {
   gap: 8px;
   justify-items: end;
   align-content: start;
+  max-width: 100%;
+}
+
+.thumb-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.55);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px;
+  pointer-events: none;
+}
+
+.people-card-file {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .baby-quote {

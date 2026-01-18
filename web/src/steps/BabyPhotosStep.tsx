@@ -18,6 +18,7 @@ import {
 } from "../api";
 import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
+import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
@@ -941,90 +942,55 @@ export function BabyPhotosStep({
                   };
 
                   return (
-                    <div className="people-card" key={p.index}>
-                      <div className="people-card-header">
-                        <div className="stack" style={{ gap: 4 }}>
-                          <div className="muted small">#{p.index}</div>
-                          <div>
-                            <strong>
-                              {p.first_name} {p.last_name}
-                            </strong>
-                          </div>
-                        </div>
+                    <PeopleCard
+                      key={p.index}
+                      person={p}
+                      workspaceId={workspaceId}
+                      mugshot={{
+                        label: "Portrait",
+                        kind: "mugshot",
+                        filename: p.mugshot_filename,
+                        defaultFilename: assignedDefaultMugshot ?? null,
+                        showDefaultLabel: true,
+                      }}
+                      baby={{
+                        label: "Baby",
+                        kind: "baby",
+                        filename: babyFilename,
+                        canShowImage: canShowImage,
+                        wrapperClassName: "thumb-cell-baby",
+                        className: maskUrl ? "baby-thumb-masked" : undefined,
+                        style: babyThumbStyle,
+                        showMissingLabel: false,
+                        onClick: () => {
+                          if (!babyFilename) return;
+                          openCropper(idx, babyFilename);
+                        },
+                        onError: () => setBabyThumbError((prev) => ({ ...prev, [p.index]: true })),
+                      }}
+                      quoteValue={quote}
+                      onQuoteChange={(value) => updatePerson(idx, (prev) => ({ ...prev, quote: value }))}
+                      showQuote={false}
+                    >
+                      <label className="field">
+                        <span>Baby photo override</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleBabyOverride(idx, e.target.files?.[0] ?? null)}
+                          disabled={loading}
+                        />
+                      </label>
 
-                        <div className="thumb-stack">
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                            <div className="muted small">Mugshot</div>
-                            <div className="thumb-cell">
-                              {p.mugshot_filename && workspaceId ? (
-                                <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
-                              ) : assignedDefaultMugshot && workspaceId ? (
-                                <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                                  <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
-                                  <div className="muted small">(default)</div>
-                                </div>
-                              ) : (
-                                <div className="muted small">(missing)</div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                            <div className="muted small">Baby</div>
-                            <div
-                              className={clsx("thumb-cell", "thumb-cell-baby", canShowImage && "has-image")}
-                              style={babyThumbStyle}
-                            >
-                              {babyFilename && workspaceId ? (
-                                <img
-                                  src={assetUrl(workspaceId, "baby", babyFilename)}
-                                  alt="baby"
-                                  className={clsx("thumb", "thumb-baby", maskUrl && "masked")}
-                                  onClick={() => {
-                                    if (!babyFilename) return;
-                                    openCropper(idx, babyFilename);
-                                  }}
-                                  onError={() => setBabyThumbError((prev) => ({ ...prev, [p.index]: true }))}
-                                />
-                              ) : (
-                                <div className="muted small">(missing)</div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                      <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                        <button type="button" onClick={() => clearBabyOverride(idx)} disabled={loading}>
+                          Clear override
+                        </button>
+                        <button type="button" onClick={() => clearBabyFromPerson(idx)} disabled={loading}>
+                          Remove baby photo
+                        </button>
                       </div>
-
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="field">
-                          <span>Quote</span>
-                          <textarea
-                            rows={2}
-                            value={quote}
-                            onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
-                            placeholder=""
-                          />
-                        </label>
-
-                        <label className="field">
-                          <span>Baby photo override</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleBabyOverride(idx, e.target.files?.[0] ?? null)}
-                            disabled={loading}
-                          />
-                        </label>
-
-                        <div className="inline" style={{ gap: 8, alignItems: "center" }}>
-                          <button type="button" onClick={() => clearBabyOverride(idx)} disabled={loading}>
-                            Clear override
-                          </button>
-                          <button type="button" onClick={() => clearBabyFromPerson(idx)} disabled={loading}>
-                            Remove baby photo
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    </PeopleCard>
                   );
                 })}
               </div>

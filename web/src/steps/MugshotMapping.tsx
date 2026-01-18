@@ -1,9 +1,10 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { applyMapping, assetUrl, ingestSpreadsheet, uploadImage, type PersonRecord } from "../api";
+import { applyMapping, assetUrl, babyMaskUrl, ingestSpreadsheet, uploadImage, type Box, type PersonRecord } from "../api";
 import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
+import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
@@ -18,6 +19,7 @@ export function MugshotMapping({
   onDefaultMugshotRandomize,
   defaultMugshotAssignments,
   defaultBabyFilename,
+  babyMaskBox,
   defaultQuoteAssignments,
   defaultQuoteFallback,
   lockedPeople,
@@ -57,6 +59,7 @@ export function MugshotMapping({
   onDefaultMugshotRandomize: (v: boolean) => void;
   defaultMugshotAssignments: Record<number, string>;
   defaultBabyFilename: string | null;
+  babyMaskBox: Box | null;
   defaultQuoteAssignments: Record<number, string>;
   defaultQuoteFallback: string;
   lockedPeople: Record<number, true>;
@@ -160,6 +163,15 @@ export function MugshotMapping({
   const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
   };
+
+  const maskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
+  };
+  const cropAspect = babyMaskBox ? babyMaskBox.width / Math.max(1, babyMaskBox.height) : 1;
+  const babyThumbDims = thumbSizeForAspect(96, cropAspect);
 
   const handleIngest = async () => {
     // Make sure the user can see status/progress updates.
@@ -577,9 +589,11 @@ export function MugshotMapping({
                     "swap-target": swapMode === "card" && dropTarget === rowIdx,
                   });
                   return (
-                    <div
-                      className={cardClasses}
+                    <PeopleCard
                       key={p.index}
+                      person={p}
+                      workspaceId={workspaceId}
+                      className={cardClasses}
                       draggable={swapMode === "card"}
                       onDragStart={(evt) => {
                         if (swapMode !== "card") return;
@@ -597,119 +611,75 @@ export function MugshotMapping({
                         if (dropTarget === rowIdx) setDropTarget(null);
                       }}
                       onDrop={(evt) => handleSwapDrop(rowIdx, evt)}
+                      mugshot={{
+                        label: "Portrait",
+                        kind: "mugshot",
+                        filename: p.mugshot_filename,
+                        defaultFilename: assignedDefault ?? null,
+                        showDefaultLabel: true,
+                        overlayLabel: swapMode === "portrait" && swapEnabled ? "Drag to swap" : null,
+                      }}
+                      baby={{
+                        label: "Baby",
+                        kind: "baby",
+                        filename: babyFilename,
+                        showMissingLabel: false,
+                        wrapperClassName: "thumb-cell-baby",
+                        className: maskUrl ? "baby-thumb-masked" : undefined,
+                        style: maskUrl
+                          ? ({
+                              ["--baby-mask" as never]: `url(${maskUrl})`,
+                              width: babyThumbDims.width,
+                              height: babyThumbDims.height,
+                            } as React.CSSProperties)
+                          : undefined,
+                      }}
+                      quoteValue={displayQuote}
+                      onQuoteChange={(value) => updatePerson(rowIdx, (prev) => ({ ...prev, quote: value }))}
+                      showQuote={false}
                     >
-                      <div className="people-card-header">
-                        <div className="stack" style={{ gap: 4 }}>
-                          <div className="muted small">#{p.index}</div>
-                          <div>
-                            <strong>
-                              {p.first_name} {p.last_name}
-                            </strong>
-                          </div>
-                        </div>
-
-                        <div className="thumb-stack">
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                            <div className="muted small">Mugshot</div>
-                            {p.mugshot_filename ? (
-                              <img
-                                src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                                alt="portrait"
-                                className="thumb"
-                              />
-                            ) : assignedDefault ? (
-                              <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                                <img src={assetUrl(workspaceId, "mugshot", assignedDefault)} alt="default portrait" className="thumb" />
-                                <div className="muted small">(default)</div>
-                              </div>
-                            ) : (
-                              <div className="muted small">(missing)</div>
-                            )}
-                            {swapMode === "portrait" ? (
-                              <div className="drag-overlay">
-                                {swapEnabled ? "Drag to swap" : ""}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                            <div className="muted small">Baby</div>
-                            {babyFilename ? (
-                              <img
-                                src={assetUrl(workspaceId, "baby", babyFilename)}
-                                alt="baby"
-                                className="thumb thumb-baby"
-                              />
-                            ) : (
-                              <div className="muted small">(missing)</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="field">
-                          <span>Quote</span>
-                          <textarea
-                            rows={2}
-                            value={displayQuote}
-                            onChange={(e) => updatePerson(rowIdx, (prev) => ({ ...prev, quote: e.target.value }))}
-                            placeholder=""
-                          />
-                        </label>
-
-                        <label className="field">
-                          <span>Portrait file</span>
-                          <div className="inline" style={{ gap: 8, alignItems: "center" }}>
-                            <div className="muted small">
-                              {p.mugshot_filename || assignedDefault || "(missing)"}
-                            </div>
-                            {assignedDefault && !p.mugshot_filename && <span className="muted small">default</span>}
-                          </div>
-                        </label>
-
-                        <div className="grid two">
-                          <ToggleSwitch
-                            checked={Boolean(adjustments[p.index]?.shiftEnabled)}
-                            onChange={(checked) => setShiftEnabled(p.index, checked)}
-                            label="Shift down"
-                          />
-                          <label className="field">
-                            <span>Shift count</span>
-                            <input
-                              type="number"
-                              value={adjustments[p.index]?.shiftCount ?? 0}
-                              onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
-                              disabled={!adjustments[p.index]?.shiftEnabled}
-                            />
-                          </label>
-                        </div>
-
-                        <label className="field">
-                          <span>Replacement portrait</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => uploadReplacement(p.index, e.target.files?.[0] ?? null)}
-                            disabled={loading}
-                          />
-                        </label>
-
+                      <div className="grid two">
                         <ToggleSwitch
-                          checked={Boolean(adjustments[p.index]?.remove)}
-                          onChange={(checked) => setRemoveEnabled(p.index, checked)}
-                          label="Remove portrait"
+                          checked={Boolean(adjustments[p.index]?.shiftEnabled)}
+                          onChange={(checked) => setShiftEnabled(p.index, checked)}
+                          label="Shift down"
                         />
-
-                        <div className="inline" style={{ gap: 8, alignItems: "center" }}>
-                          <button type="button" onClick={() => toggleLock(p.index)}>
-                            {isLocked ? "Unlock" : "Lock"}
-                          </button>
-                          <button type="button" className="danger" onClick={() => removePerson(p.index)}>
-                            Remove person
-                          </button>
-                        </div>
+                        <label className="field">
+                          <span>Shift count</span>
+                          <input
+                            type="number"
+                            value={adjustments[p.index]?.shiftCount ?? 0}
+                            onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
+                            disabled={!adjustments[p.index]?.shiftEnabled}
+                          />
+                        </label>
                       </div>
-                    </div>
+
+                      <label className="field">
+                        <span>Replacement portrait</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => uploadReplacement(p.index, e.target.files?.[0] ?? null)}
+                          disabled={loading}
+                        />
+                      </label>
+
+                      <ToggleSwitch
+                        checked={Boolean(adjustments[p.index]?.remove)}
+                        onChange={(checked) => setRemoveEnabled(p.index, checked)}
+                        label="Remove portrait"
+                      />
+
+                      <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                        <button type="button" onClick={() => toggleLock(p.index)}>
+                          {isLocked ? "Unlock" : "Lock"}
+                        </button>
+                        <button type="button" className="danger" onClick={() => removePerson(p.index)}>
+                          Remove person
+                        </button>
+                      </div>
+                    </PeopleCard>
                   );
                 })}
               </div>

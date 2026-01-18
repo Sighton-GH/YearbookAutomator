@@ -1,10 +1,11 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
-import { assetUrl, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
+import { babyMaskUrl, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
 import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
@@ -16,6 +17,7 @@ export function QuotesStep({
   defaultQuoteAssignments,
   defaultMugshotAssignments,
   defaultBabyFilename,
+  babyMaskBox,
   quotesWarnings,
   onQuotesWarnings,
   quotesWarningsOpen,
@@ -44,6 +46,7 @@ export function QuotesStep({
   defaultQuoteAssignments: Record<number, string>;
   defaultMugshotAssignments: Record<number, string>;
   defaultBabyFilename: string | null;
+  babyMaskBox: Box | null;
   quotesWarnings: string[];
   onQuotesWarnings: (v: string[]) => void;
   quotesWarningsOpen: boolean;
@@ -90,6 +93,15 @@ export function QuotesStep({
     didScrollForProgressRef.current = true;
     scrollPastTopBar();
   }, [loading, progress]);
+
+  const maskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
+  };
+  const cropAspect = babyMaskBox ? babyMaskBox.width / Math.max(1, babyMaskBox.height) : 1;
+  const babyThumbDims = thumbSizeForAspect(96, cropAspect);
 
   const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
@@ -236,63 +248,35 @@ export function QuotesStep({
                 const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
                 const babyFilename = p.baby_photo_filename || defaultBabyFilename;
                 return (
-                  <div className="people-card" key={p.index}>
-                    <div className="people-card-header">
-                      <div className="stack" style={{ gap: 4 }}>
-                        <div className="muted small">#{p.index}</div>
-                        <div>
-                          <strong>
-                            {p.first_name} {p.last_name}
-                          </strong>
-                        </div>
-                      </div>
-                      <div className="thumb-stack">
-                        <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                          <div className="muted small">Mugshot</div>
-                          {p.mugshot_filename ? (
-                            <img
-                              src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                              alt="portrait"
-                              className="thumb"
-                            />
-                          ) : assignedDefaultMugshot ? (
-                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                              <img
-                                src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
-                                alt="default portrait"
-                                className="thumb"
-                              />
-                              <div className="muted small">(default)</div>
-                            </div>
-                          ) : (
-                            <div className="muted small">(missing)</div>
-                          )}
-                        </div>
-                        <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                          <div className="muted small">Baby</div>
-                          {babyFilename ? (
-                            <img
-                              src={assetUrl(workspaceId, "baby", babyFilename)}
-                              alt="baby"
-                              className="thumb thumb-baby"
-                            />
-                          ) : (
-                            <div className="muted small">(missing)</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <label className="field">
-                      <span>Quote</span>
-                      <textarea
-                        rows={2}
-                        value={displayQuote}
-                        onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
-                        placeholder=""
-                      />
-                    </label>
-                  </div>
+                  <PeopleCard
+                    key={p.index}
+                    person={p}
+                    workspaceId={workspaceId}
+                    mugshot={{
+                      label: "Portrait",
+                      kind: "mugshot",
+                      filename: p.mugshot_filename,
+                      defaultFilename: assignedDefaultMugshot ?? null,
+                      showDefaultLabel: true,
+                    }}
+                    baby={{
+                      label: "Baby",
+                      kind: "baby",
+                      filename: babyFilename,
+                      showMissingLabel: false,
+                      wrapperClassName: "thumb-cell-baby",
+                      className: maskUrl ? "baby-thumb-masked" : undefined,
+                      style: maskUrl
+                        ? ({
+                            ["--baby-mask" as never]: `url(${maskUrl})`,
+                            width: babyThumbDims.width,
+                            height: babyThumbDims.height,
+                          } as React.CSSProperties)
+                        : undefined,
+                    }}
+                    quoteValue={displayQuote}
+                    onQuoteChange={(value) => updatePerson(idx, (prev) => ({ ...prev, quote: value }))}
+                  />
                 );
               })}
             </div>

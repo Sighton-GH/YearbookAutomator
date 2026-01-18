@@ -2315,6 +2315,7 @@ export default function App({ embedded = false }: AppProps) {
             <h2>{steps[activeStep]}</h2>
             <MugshotMappingStep
               workspaceId={workspaceId}
+                babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               defaultMugshotFilenames={defaultMugshotFilenames}
               onDefaultMugshotFilenames={setDefaultMugshotFilenames}
               defaultMugshotRandomize={defaultMugshotRandomize}
@@ -2367,6 +2368,7 @@ export default function App({ embedded = false }: AppProps) {
               defaultQuoteAssignments={defaultQuoteAssignments}
               defaultMugshotAssignments={defaultMugshotAssignments}
               defaultBabyFilename={defaultBabyFilename}
+              babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}
               quotesWarningsOpen={quotesWarningsOpen}
