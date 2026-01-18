@@ -1,0 +1,16 @@
+:root {
+  color: #0f172a;
+  background-color: #f7fdf9;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  --accent: #16a34a;
+  --accent-strong: #15803d;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --muted: #64748b;
+  --border: #d1e3d4;
+  --bg-panel: #ffffff;
+  --bg-quiet: #eef7ef;
+  --bg-warn: #fff7d6;
+  --border-warn: #f3d28c;
+}
