@@ -888,6 +888,11 @@ button:disabled {
   border-color: var(--border-warn);
 }
 
+.callout.success {
+  background: #ecfdf3;
+  border-color: #4ade80;
+}
+
 .warn-icon {
   display: inline-block;
   margin-right: 6px;
@@ -1027,6 +1032,11 @@ button:disabled {
 }
 
 /* Tips box (Tool page) */
+.tool-tips-center {
+  display: flex;
+  justify-content: center;
+}
+
 .tips-box {
   margin-top: 22px;
   background: var(--bg-panel);
@@ -2539,4 +2549,78 @@ button.small {
   .pricing-card.featured:hover {
     transform: translateY(-4px);
   }
+}
+
+/* Full-page tool shell (/app) */
+.app-shell {
+  min-height: 100vh;
+  background: #f7fdf9;
+}
+
+.app-return-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 18px;
+}
+
+.app-return-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-title {
+  font-weight: 700;
+}
+
+.app-loading {
+  max-width: 1200px;
+  margin: 18px auto 0;
+  padding: 0 24px;
+  color: var(--muted);
+}
+
+.app-return-link {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-return-link:hover {
+  text-decoration: underline;
+}
+
+/* Tool launch gate on /tool */
+.tool-launch {
+  padding: 28px 20px 64px;
+  display: flex;
+  justify-content: center;
+}
+
+.tool-launch-card {
+  width: 100%;
+  max-width: 760px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 16px;
+}
+
+.tool-launch-actions {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tool-launch-btn {
+  width: 100%;
 }

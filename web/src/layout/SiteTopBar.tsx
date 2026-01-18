@@ -4,7 +4,7 @@ import { getStoredLicenseKey, setStoredLicenseKey, validateLicenseKey } from "..
 
 export function SiteTopBar() {
   const location = useLocation();
-  const inTool = location.pathname === "/tool";
+  const inTool = location.pathname === "/app";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [showLicenseModal, setShowLicenseModal] = useState(false);

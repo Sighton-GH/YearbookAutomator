@@ -1110,9 +1110,9 @@ export default function App({ embedded = false }: AppProps) {
 
       // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
       if (saved && !(workspaceId || templateId || people.length || slots.length)) {
-        // Allow deep-linking: if /tool?step=N is present, prefer that over the saved step.
+        // Allow deep-linking: if /app?step=N is present, prefer that over the saved step.
         const urlStep =
-          typeof window !== "undefined" && window.location.pathname === "/tool"
+          typeof window !== "undefined" && window.location.pathname === "/app"
             ? parseStepFromSearch(window.location.search)
             : null;
 
@@ -1198,10 +1198,10 @@ export default function App({ embedded = false }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // URL -> state: allow /tool?step=N to jump to a step (and restore after navigating back).
+  // URL -> state: allow /app?step=N to jump to a step (and restore after navigating back).
   useEffect(() => {
     if (!didRestoreSession) return;
-    if (location.pathname !== "/tool") return;
+    if (location.pathname !== "/app") return;
 
     const urlStep = parseStepFromSearch(location.search);
     if (urlStep == null) return;
@@ -1211,7 +1211,7 @@ export default function App({ embedded = false }: AppProps) {
 
   // State -> URL: keep ?step= in sync (without spamming history).
   useEffect(() => {
-    if (location.pathname !== "/tool") return;
+    if (location.pathname !== "/app") return;
     const current = parseStepFromSearch(location.search);
     if (current === activeStep) return;
 
@@ -1816,12 +1816,12 @@ export default function App({ embedded = false }: AppProps) {
     if (typeof window === "undefined") return;
 
     const onSave = () => {
-      if (window.location.pathname !== "/tool") return;
+      if (window.location.pathname !== "/app") return;
       saveConfigActionRef.current?.();
     };
 
     const onUpload = () => {
-      if (window.location.pathname !== "/tool") return;
+      if (window.location.pathname !== "/app") return;
       uploadConfigActionRef.current?.();
     };
 
