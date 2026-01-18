@@ -341,6 +341,19 @@
   align-items: start;
 }
 
+.mapping-layout.mapping-layout-empty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mapping-layout.mapping-layout-empty .mapping-sidebar {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.mapping-layout.mapping-layout-empty .mapping-main {
+  order: 2;
+}
+
 .mapping-main {
   min-width: 0;
 }
@@ -349,6 +362,11 @@
   display: grid;
   gap: 16px;
   align-content: start;
+}
+
+.mapping-sidebar.mapping-sidebar-collapse {
+  animation: mappingSidebarCollapse 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: right center;
 }
 
 .mapping-sidebar-header {
@@ -406,6 +424,52 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
+}
+
+.people-grid.people-grid-enter .people-card {
+  animation: peopleCardIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.people-grid.people-grid-enter .people-card:nth-child(1) { animation-delay: 0ms; }
+.people-grid.people-grid-enter .people-card:nth-child(2) { animation-delay: 40ms; }
+.people-grid.people-grid-enter .people-card:nth-child(3) { animation-delay: 80ms; }
+.people-grid.people-grid-enter .people-card:nth-child(4) { animation-delay: 120ms; }
+.people-grid.people-grid-enter .people-card:nth-child(5) { animation-delay: 160ms; }
+.people-grid.people-grid-enter .people-card:nth-child(6) { animation-delay: 200ms; }
+.people-grid.people-grid-enter .people-card:nth-child(7) { animation-delay: 240ms; }
+.people-grid.people-grid-enter .people-card:nth-child(8) { animation-delay: 280ms; }
+.people-grid.people-grid-enter .people-card:nth-child(9) { animation-delay: 320ms; }
+.people-grid.people-grid-enter .people-card:nth-child(10) { animation-delay: 360ms; }
+.people-grid.people-grid-enter .people-card:nth-child(11) { animation-delay: 400ms; }
+.people-grid.people-grid-enter .people-card:nth-child(12) { animation-delay: 440ms; }
+
+@keyframes peopleCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mappingSidebarCollapse {
+  from {
+    opacity: 0.6;
+    transform: translateX(-80px) scaleX(1.2);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mapping-sidebar.mapping-sidebar-collapse,
+  .people-grid.people-grid-enter .people-card {
+    animation: none;
+  }
 }
 
 .page.page-wide .people-grid {

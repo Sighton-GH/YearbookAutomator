@@ -118,6 +118,9 @@ export function MugshotMapping({
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [swapsPerformed, setSwapsPerformed] = useState(false);
   const [defaultDragIdx, setDefaultDragIdx] = useState<number | null>(null);
+  const [animatePeopleIn, setAnimatePeopleIn] = useState(false);
+  const [animateSidebarCollapse, setAnimateSidebarCollapse] = useState(false);
+  const prevPeopleCountRef = useRef(people.length);
 
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
@@ -144,6 +147,21 @@ export function MugshotMapping({
     setDragIdx(null);
     setDropTarget(null);
   }, [swapMode]);
+
+  useEffect(() => {
+    const prevCount = prevPeopleCountRef.current;
+    if (prevCount === 0 && people.length > 0) {
+      setAnimatePeopleIn(true);
+      setAnimateSidebarCollapse(true);
+      const timer = window.setTimeout(() => {
+        setAnimatePeopleIn(false);
+        setAnimateSidebarCollapse(false);
+      }, 700);
+      prevPeopleCountRef.current = people.length;
+      return () => window.clearTimeout(timer);
+    }
+    prevPeopleCountRef.current = people.length;
+  }, [people.length]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -585,13 +603,15 @@ export function MugshotMapping({
     setDragIdx(null);
   };
 
+  const hasPeople = people.length > 0;
+
   return (
-    <div className="mapping-layout">
+    <div className={clsx("mapping-layout", !hasPeople && "mapping-layout-empty")}>
       <div className="mapping-main">
         <div className="panel">
           {workspaceId && people.length > 0 ? (
             <div className="stack">
-              <div className="people-grid">
+              <div className={clsx("people-grid", animatePeopleIn && "people-grid-enter")}>
                 {people.map((p, rowIdx) => {
                   const isLocked = Boolean(lockedPeople[p.index]);
                   const assignedDefault = defaultMugshotAssignments[p.index];
@@ -766,7 +786,7 @@ export function MugshotMapping({
         </div>
       </div>
 
-      <aside className="mapping-sidebar">
+      <aside className={clsx("mapping-sidebar", animateSidebarCollapse && "mapping-sidebar-collapse")}>
         <div className="panel">
           <div className="stack">
             <div className="mapping-sidebar-header">
