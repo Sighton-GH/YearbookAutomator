@@ -1,8 +1,10 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { applyMapping, assetUrl, babyMaskUrl, ingestSpreadsheet, uploadImage, type Box, type PersonRecord } from "../api";
+import { applyMapping, assetUrl, babyMaskUrl, ingestSpreadsheet, uploadImage, type BackgroundMode, type Box, type PersonRecord } from "../api";
 import { withBase } from "../baseUrl";
+import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyPhotoEditor";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ProgressBar } from "../components/ProgressBar";
 import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
@@ -10,6 +12,7 @@ import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { formatServerMessage } from "../configFile";
+import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function MugshotMapping({
@@ -20,6 +23,9 @@ export function MugshotMapping({
   onDefaultMugshotRandomize,
   defaultMugshotAssignments,
   defaultBabyFilename,
+  babyBackgroundColor,
+  babyBackgroundMode,
+  onBabyEditHistoryAdd,
   babyMaskBox,
   defaultQuoteAssignments,
   defaultQuoteFallback,
@@ -60,6 +66,9 @@ export function MugshotMapping({
   onDefaultMugshotRandomize: (v: boolean) => void;
   defaultMugshotAssignments: Record<number, string>;
   defaultBabyFilename: string | null;
+  babyBackgroundColor: string;
+  babyBackgroundMode: BackgroundMode;
+  onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
   defaultQuoteAssignments: Record<number, string>;
   defaultQuoteFallback: string;
@@ -116,8 +125,17 @@ export function MugshotMapping({
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const zipRef = useRef<HTMLDivElement | null>(null);
   const warningsRef = useRef<HTMLDetailsElement | null>(null);
+  const babyEditorRef = useRef<BabyPhotoEditorHandle>(null);
 
   const didInitDefaultMugshot = useRef(false);
+  const [confirmAction, setConfirmAction] = useState<
+    | { kind: "remove-person"; personIndex: number }
+    | { kind: "remove-portrait"; personIndex: number }
+    | { kind: "reset-mapping" }
+    | { kind: "apply-mapping" }
+    | { kind: "reset-all" }
+    | null
+  >(null);
 
   const swapEnabled = swapMode !== "off";
 
@@ -297,10 +315,6 @@ export function MugshotMapping({
   };
 
   const resetToOriginalMapping = () => {
-    if (typeof window !== "undefined") {
-      const ok = window.confirm("Reset all mapping changes back to the original ingest result?");
-      if (!ok) return;
-    }
     if (!originalPeople) {
       setStatus("No original mapping to reset to");
       return;
@@ -588,6 +602,7 @@ export function MugshotMapping({
                     "swap-mode": swapMode === "card",
                     dragging: swapMode === "card" && dragIdx === rowIdx,
                     "swap-target": swapMode === "card" && dropTarget === rowIdx,
+                    "people-card-locked": isLocked,
                   });
                   return (
                     <PeopleCard
@@ -625,15 +640,22 @@ export function MugshotMapping({
                         kind: "baby",
                         filename: babyFilename,
                         showMissingLabel: false,
-                        wrapperClassName: "thumb-cell-baby",
+                        wrapperClassName: "thumb-cell-baby thumb-cell-baby-editor",
                         className: maskUrl ? "baby-thumb-masked" : undefined,
                         style: maskUrl
                           ? ({
                               ["--baby-mask" as never]: `url(${maskUrl})`,
                               width: babyThumbDims.width,
                               height: babyThumbDims.height,
+                              minWidth: babyThumbDims.width,
+                              minHeight: babyThumbDims.height,
                             } as React.CSSProperties)
                           : undefined,
+                        renderMode: "baby-editor",
+                        onClick: () => {
+                          if (!babyFilename) return;
+                          babyEditorRef.current?.openEditor(rowIdx);
+                        },
                       }}
                       quoteValue={displayQuote}
                       onQuoteChange={(value) => updatePerson(rowIdx, (prev) => ({ ...prev, quote: value }))}
@@ -666,18 +688,59 @@ export function MugshotMapping({
                         />
                       </label>
 
-                      <ToggleSwitch
-                        checked={Boolean(adjustments[p.index]?.remove)}
-                        onChange={(checked) => setRemoveEnabled(p.index, checked)}
-                        label="Remove portrait"
-                      />
-
                       <div className="inline" style={{ gap: 8, alignItems: "center" }}>
-                        <button type="button" onClick={() => toggleLock(p.index)}>
-                          {isLocked ? "Unlock" : "Lock"}
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => toggleLock(p.index)}
+                          aria-label={isLocked ? "Unlock person" : "Lock person"}
+                          title={isLocked ? "Unlock" : "Lock"}
+                        >
+                          {isLocked ? (
+                            <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M7 10V8a5 5 0 0 1 10 0" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                              <rect x="5" y="10" width="14" height="10" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="2.25" />
+                              <path d="M12 14v2" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+                            </svg>
+                          ) : (
+                            <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M7 10V7a5 5 0 0 1 9 0" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                              <rect x="5" y="10" width="14" height="10" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="2.25" />
+                              <path d="M12 14v2" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+                            </svg>
+                          )}
                         </button>
-                        <button type="button" className="danger" onClick={() => removePerson(p.index)}>
-                          Remove person
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          onClick={() => setConfirmAction({ kind: "remove-person", personIndex: p.index })}
+                          aria-label="Remove person"
+                          title="Remove person"
+                        >
+                          <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+                            <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M6 7l1 13a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9l1-13" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          onClick={() => setConfirmAction({ kind: "remove-portrait", personIndex: p.index })}
+                          aria-label="Remove portrait"
+                          title="Remove portrait"
+                        >
+                          <span className="icon-stack" aria-hidden="true">
+                            <svg className="icon-svg" viewBox="0 0 24 24">
+                              <path d="M4 7h16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+                              <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M6 7l1 13a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9l1-13" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <svg className="icon-corner" viewBox="0 0 24 24">
+                              <rect x="4" y="6" width="16" height="12" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="2" />
+                              <path d="M8 14l3-3 2 2 3-3 4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </span>
                         </button>
                       </div>
                     </PeopleCard>
@@ -706,13 +769,17 @@ export function MugshotMapping({
             </div>
             <div className="stack" style={{ gap: 8 }}>
               <div className="stack sidebar-actions-full">
-                <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
+                <button
+                  className="primary"
+                  onClick={() => setConfirmAction({ kind: "apply-mapping" })}
+                  disabled={loading || !people.length}
+                >
                   Apply mapping adjustments
                 </button>
                 <button
                   type="button"
                   className="danger"
-                  onClick={resetToOriginalMapping}
+                  onClick={() => setConfirmAction({ kind: "reset-mapping" })}
                   disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
                 >
                   Reset to original mapping
@@ -930,7 +997,12 @@ export function MugshotMapping({
               <button onClick={onBack} disabled={loading}>
                 Back
               </button>
-              <button type="button" className="danger" onClick={onReset} disabled={loading}>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setConfirmAction({ kind: "reset-all" })}
+                disabled={loading}
+              >
                 Reset all
               </button>
               <button className="primary" onClick={onContinue} disabled={!canContinue || loading}>
@@ -950,6 +1022,78 @@ export function MugshotMapping({
           </div>
         </div>
       </aside>
+
+      <BabyPhotoEditor
+        ref={babyEditorRef}
+        workspaceId={workspaceId}
+        people={people}
+        setPeople={setPeople}
+        defaultBabyFilename={defaultBabyFilename}
+        babyMaskBox={babyMaskBox}
+        babyBackgroundColor={babyBackgroundColor}
+        babyBackgroundMode={babyBackgroundMode}
+        allowInsecureUploads={allowInsecureUploads}
+        setStatus={setStatus}
+        onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        title={
+          confirmAction?.kind === "remove-person"
+            ? "Remove person?"
+            : confirmAction?.kind === "remove-portrait"
+              ? "Remove portrait?"
+            : confirmAction?.kind === "apply-mapping"
+              ? "Apply mapping changes?"
+              : confirmAction?.kind === "reset-mapping"
+                ? "Reset mapping?"
+                : "Reset everything?"
+        }
+        message={
+          confirmAction?.kind === "remove-person"
+            ? "This will remove the person from the mapping list."
+            : confirmAction?.kind === "remove-portrait"
+              ? "This will clear the portrait for this person."
+            : confirmAction?.kind === "apply-mapping"
+              ? "Apply the current shift/replace/remove adjustments to the mapping?"
+              : confirmAction?.kind === "reset-mapping"
+                ? "This will revert mapping changes back to the original ingest result."
+                : "This will clear the workspace and all current progress."
+        }
+        confirmLabel={
+          confirmAction?.kind === "remove-person"
+            ? "Remove"
+            : confirmAction?.kind === "remove-portrait"
+              ? "Remove"
+            : confirmAction?.kind === "apply-mapping"
+              ? "Apply"
+              : "Reset"
+        }
+        cancelLabel="Cancel"
+        destructive={
+          confirmAction?.kind === "remove-person" ||
+          confirmAction?.kind === "remove-portrait" ||
+          confirmAction?.kind === "reset-mapping" ||
+          confirmAction?.kind === "reset-all"
+        }
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (!confirmAction) return;
+          if (confirmAction.kind === "remove-person") {
+            removePerson(confirmAction.personIndex);
+          } else if (confirmAction.kind === "remove-portrait") {
+            setRemoveEnabled(confirmAction.personIndex, true);
+          } else if (confirmAction.kind === "apply-mapping") {
+            void applyDecisions();
+          } else if (confirmAction.kind === "reset-mapping") {
+            resetToOriginalMapping();
+          } else if (confirmAction.kind === "reset-all") {
+            onReset();
+          }
+          setConfirmAction(null);
+        }}
+      />
     </div>
   );
 }

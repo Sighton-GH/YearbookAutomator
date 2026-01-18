@@ -17,6 +17,7 @@ export type PeopleCardThumb = {
   overlayLabel?: string | null;
   onClick?: () => void;
   onError?: () => void;
+  renderMode?: "default" | "baby-editor";
 };
 
 export function PeopleCard({
@@ -65,6 +66,43 @@ export function PeopleCard({
     const defaultSuffix = isDefault && thumb.showDefaultLabel ? " (default)" : "";
     const filenameLabel = labelText ? `${labelText}${defaultSuffix}` : "";
 
+    const renderBabyEditorThumb = () => {
+      if (!hasImage) return null;
+      const isClickable = Boolean(thumb.onClick);
+      return (
+        <div
+          className={clsx(
+            "baby-thumb-editable",
+            !isClickable && "baby-thumb-readonly",
+            thumb.className
+          )}
+          style={thumb.style}
+          role={isClickable ? "button" : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onClick={thumb.onClick}
+          onKeyDown={(e) => {
+            if (!isClickable) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              thumb.onClick?.();
+            }
+          }}
+        >
+          <img
+            src={assetUrl(workspaceId!, thumb.kind, finalFilename!)}
+            alt={thumb.label.toLowerCase()}
+            className="baby-thumb-img"
+            onError={thumb.onError}
+          />
+          {isClickable ? (
+            <div className="baby-thumb-hover" aria-hidden="true">
+              <span>✎</span>
+            </div>
+          ) : null}
+        </div>
+      );
+    };
+
     return (
       <div className="stack" style={{ gap: 4, alignItems: "center" }}>
         <div className="muted small">{thumb.label}</div>
@@ -72,7 +110,9 @@ export function PeopleCard({
           className={clsx("thumb-cell", thumb.wrapperClassName, hasImage && "has-image")}
           style={thumb.style}
         >
-          {hasImage ? (
+          {thumb.renderMode === "baby-editor" ? (
+            hasImage ? renderBabyEditorThumb() : (showEmptyBox ? <div className="thumb-empty" /> : null)
+          ) : hasImage ? (
             <img
               src={assetUrl(workspaceId!, thumb.kind, finalFilename!)}
               alt={thumb.label.toLowerCase()}

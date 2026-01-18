@@ -474,6 +474,22 @@
   overflow-wrap: anywhere;
 }
 
+.people-card.people-card-locked {
+  opacity: 0.6 !important;
+  filter: grayscale(1) !important;
+  background: #f3f4f6 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.people-card.people-card-locked * {
+  color: #6b7280 !important;
+}
+
+.people-card.people-card-locked .thumb,
+.people-card.people-card-locked .baby-thumb-img {
+  filter: grayscale(1) brightness(0.85) !important;
+}
+
 .people-card-body {
   display: grid;
   gap: 8px;
@@ -489,7 +505,7 @@
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 10px;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .people-card-actions {
@@ -658,8 +674,8 @@
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
   border-radius: 0;
 }
 
@@ -738,6 +754,7 @@
 
 .thumb-filename {
   max-width: 100%;
+  min-height: 2.6em;
   overflow-wrap: anywhere;
   text-align: center;
   display: -webkit-box;
@@ -762,6 +779,15 @@
   padding: 0;
   display: grid;
   place-items: center;
+  min-height: 0;
+  min-width: 0;
+  width: auto;
+  height: auto;
+}
+
+.thumb-cell-baby-editor {
+  border: none;
+  background: transparent;
 }
 
 .thumb-cell-baby .thumb {
@@ -778,6 +804,55 @@
   justify-items: end;
   align-content: start;
   max-width: 100%;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: inherit;
+}
+
+.icon-btn:hover {
+  background: var(--bg-quiet);
+}
+
+.icon-btn.danger {
+  border-color: rgba(220, 38, 38, 0.45);
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.icon-btn.danger:hover {
+  background: rgba(220, 38, 38, 0.7);
+  color: #ffffff;
+}
+
+.icon-svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.icon-stack {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+}
+
+.icon-stack .icon-corner {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
 }
 
 .thumb-overlay {

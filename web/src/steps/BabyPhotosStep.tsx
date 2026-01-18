@@ -23,6 +23,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch";
 import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
@@ -137,6 +138,7 @@ export function BabyPhotosStep({
   const [babyBgPickBusy, setBabyBgPickBusy] = useState(false);
   const babyBgHexInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ kind: "reset" | "delete" | "reset-photos"; idx?: number } | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
@@ -657,10 +659,6 @@ export function BabyPhotosStep({
   };
 
   const resetToOriginalPhotos = () => {
-    if (typeof window !== "undefined") {
-      const ok = window.confirm("Reset all baby photos back to the original result?");
-      if (!ok) return;
-    }
     if (!originalBabyPeople) {
       setStatus("No original baby photos to reset to");
       return;
@@ -714,6 +712,31 @@ export function BabyPhotosStep({
       previewUrlRef.current = null;
     }
     setStatus("Reset to original");
+  };
+
+  const clearBabyOverride = (idx: number) => {
+    const person = people[idx];
+    if (!person) return;
+    let nextFilename: string | null = null;
+    if (originalBabyPeople) {
+      const original = originalBabyPeople.find((p) => p.index === person.index);
+      nextFilename = original?.baby_photo_filename ?? null;
+    }
+    if (!nextFilename) {
+      setStatus("No original baby photo to reset to");
+      return;
+    }
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: nextFilename }));
+    setBabyThumbError((prev) => ({ ...prev, [person.index]: false }));
+    setStatus(`Reset baby photo for ${person.first_name}`);
+  };
+
+  const clearBabyFromPerson = (idx: number) => {
+    const person = people[idx];
+    if (!person) return;
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: null }));
+    setBabyThumbError((prev) => ({ ...prev, [person.index]: false }));
+    setStatus(`Removed baby photo for ${person.first_name}`);
   };
 
   const handlePerPersonBaby = async (idx: number, file: File | null) => {
@@ -939,6 +962,8 @@ export function BabyPhotosStep({
                     ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
                     width: babyThumbDims.width,
                     height: babyThumbDims.height,
+                    minWidth: babyThumbDims.width,
+                    minHeight: babyThumbDims.height,
                     backgroundColor: babyFillColor ?? undefined,
                   };
 
@@ -959,13 +984,14 @@ export function BabyPhotosStep({
                         kind: "baby",
                         filename: babyFilename,
                         canShowImage: canShowImage,
-                        wrapperClassName: "thumb-cell-baby",
+                        wrapperClassName: "thumb-cell-baby thumb-cell-baby-editor",
                         className: maskUrl ? "baby-thumb-masked" : undefined,
                         style: babyThumbStyle,
+                        renderMode: "baby-editor",
                         showMissingLabel: false,
                         onClick: () => {
                           if (!babyFilename) return;
-                          openCropper(idx, babyFilename);
+                          openEditor(idx);
                         },
                         onError: () => setBabyThumbError((prev) => ({ ...prev, [p.index]: true })),
                       }}
@@ -984,11 +1010,43 @@ export function BabyPhotosStep({
                       </label>
 
                       <div className="inline" style={{ gap: 8, alignItems: "center" }}>
-                        <button type="button" onClick={() => clearBabyOverride(idx)} disabled={loading}>
-                          Clear override
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => setConfirmAction({ kind: "reset", idx })}
+                          disabled={loading}
+                          aria-label="Reset baby photo to original"
+                          title="Reset baby photo"
+                        >
+                          <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 3-6.7" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M3 4v5h5" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
                         </button>
-                        <button type="button" onClick={() => clearBabyFromPerson(idx)} disabled={loading}>
-                          Remove baby photo
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          onClick={() => setConfirmAction({ kind: "delete", idx })}
+                          disabled={loading}
+                          aria-label="Remove baby photo"
+                          title="Remove baby photo"
+                        >
+                          <span className="icon-stack" aria-hidden="true">
+                            <svg className="icon-svg" viewBox="0 0 24 24">
+                              <path d="M4 7h16" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+                              <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M6 7l1 13a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9l1-13" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <svg className="icon-corner" viewBox="0 0 24 24">
+                              <path d="M10 2h4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M9 4h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M10 6h4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M9 7h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M9 7v2l-2 3v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7l-2-3V7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M9 13h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M9 16h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            </svg>
+                          </span>
                         </button>
                       </div>
                     </PeopleCard>
@@ -1015,7 +1073,12 @@ export function BabyPhotosStep({
                 position="below"
               />
             </div>
-            <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => setConfirmAction({ kind: "reset-photos" })}
+                        disabled={loading || !originalBabyPeople}
+                      >
               Reset to original photos
             </button>
 
@@ -1364,6 +1427,39 @@ export function BabyPhotosStep({
         </div>
       </aside>
     </div>
+
+    <ConfirmDialog
+      open={Boolean(confirmAction)}
+      title={
+        confirmAction?.kind === "delete"
+          ? "Remove baby photo?"
+          : confirmAction?.kind === "reset-photos"
+            ? "Reset all baby photos?"
+            : "Reset baby photo?"
+      }
+      message={
+        confirmAction?.kind === "delete"
+          ? "This will clear the baby photo for this person. You can add one again later."
+          : confirmAction?.kind === "reset-photos"
+            ? "This will revert all baby photos back to the original matched results."
+            : "This will revert the baby photo back to the original matched image."
+      }
+      confirmLabel={confirmAction?.kind === "delete" ? "Remove" : "Reset"}
+      cancelLabel="Cancel"
+      destructive={confirmAction?.kind === "delete" || confirmAction?.kind === "reset-photos"}
+      onCancel={() => setConfirmAction(null)}
+      onConfirm={() => {
+        if (!confirmAction) return;
+        if (confirmAction.kind === "delete" && typeof confirmAction.idx === "number") {
+          clearBabyFromPerson(confirmAction.idx);
+        } else if (confirmAction.kind === "reset" && typeof confirmAction.idx === "number") {
+          clearBabyOverride(confirmAction.idx);
+        } else if (confirmAction.kind === "reset-photos") {
+          resetToOriginalPhotos();
+        }
+        setConfirmAction(null);
+      }}
+    />
 
     {workspaceId && editingIdx !== null && editingSrc && (
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit baby photo">

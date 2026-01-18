@@ -6,8 +6,10 @@ import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
-import { babyMaskUrl, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
+import { babyMaskUrl, type BackgroundMode, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
+import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyPhotoEditor";
 import { formatServerMessage } from "../configFile";
+import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function QuotesStep({
@@ -18,6 +20,9 @@ export function QuotesStep({
   defaultQuoteAssignments,
   defaultMugshotAssignments,
   defaultBabyFilename,
+  babyBackgroundColor,
+  babyBackgroundMode,
+  onBabyEditHistoryAdd,
   babyMaskBox,
   quotesWarnings,
   onQuotesWarnings,
@@ -47,6 +52,9 @@ export function QuotesStep({
   defaultQuoteAssignments: Record<number, string>;
   defaultMugshotAssignments: Record<number, string>;
   defaultBabyFilename: string | null;
+  babyBackgroundColor: string;
+  babyBackgroundMode: BackgroundMode;
+  onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
   quotesWarnings: string[];
   onQuotesWarnings: (v: string[]) => void;
@@ -76,6 +84,7 @@ export function QuotesStep({
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const warningsRef = useRef<HTMLDetailsElement | null>(null);
+  const babyEditorRef = useRef<BabyPhotoEditorHandle>(null);
 
   const quotesProcessingEstimateSecondsRef = useRef<number>(6);
   const didScrollForProgressRef = useRef(false);
@@ -265,15 +274,22 @@ export function QuotesStep({
                       kind: "baby",
                       filename: babyFilename,
                       showMissingLabel: false,
-                      wrapperClassName: "thumb-cell-baby",
+                      wrapperClassName: "thumb-cell-baby thumb-cell-baby-editor",
                       className: maskUrl ? "baby-thumb-masked" : undefined,
                       style: maskUrl
                         ? ({
                             ["--baby-mask" as never]: `url(${maskUrl})`,
                             width: babyThumbDims.width,
                             height: babyThumbDims.height,
+                            minWidth: babyThumbDims.width,
+                            minHeight: babyThumbDims.height,
                           } as React.CSSProperties)
                         : undefined,
+                      renderMode: "baby-editor",
+                      onClick: () => {
+                        if (!babyFilename) return;
+                        babyEditorRef.current?.openEditor(idx);
+                      },
                     }}
                     quoteValue={displayQuote}
                     onQuoteChange={(value) => updatePerson(idx, (prev) => ({ ...prev, quote: value }))}
@@ -438,6 +454,20 @@ export function QuotesStep({
           </div>
         </div>
       </aside>
+
+      <BabyPhotoEditor
+        ref={babyEditorRef}
+        workspaceId={workspaceId}
+        people={people}
+        setPeople={setPeople}
+        defaultBabyFilename={defaultBabyFilename}
+        babyMaskBox={babyMaskBox}
+        babyBackgroundColor={babyBackgroundColor}
+        babyBackgroundMode={babyBackgroundMode}
+        allowInsecureUploads={allowInsecureUploads}
+        setStatus={setStatus}
+        onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+      />
     </div>
   );
 }

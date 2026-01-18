@@ -31,6 +31,14 @@ export function ReviewStep({
   onSwapPositions: (a: number, b: number) => void;
 }) {
   const maskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
+  const cropAspect = babyMaskBox ? babyMaskBox.width / Math.max(1, babyMaskBox.height) : 1;
+
+  const thumbSizeForAspect = (maxSize: number, aspect: number) => {
+    if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
+    if (aspect >= 1) return { width: maxSize, height: Math.max(1, Math.round(maxSize / aspect)) };
+    return { width: Math.max(1, Math.round(maxSize * aspect)), height: maxSize };
+  };
+  const babyThumbDims = thumbSizeForAspect(96, cropAspect);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
@@ -75,7 +83,13 @@ export function ReviewStep({
           const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
           const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
           const babyThumbStyle: React.CSSProperties | undefined = maskUrl
-            ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties)
+            ? ({
+                ["--baby-mask" as never]: `url(${maskUrl})`,
+                width: babyThumbDims.width,
+                height: babyThumbDims.height,
+                minWidth: babyThumbDims.width,
+                minHeight: babyThumbDims.height,
+              } as React.CSSProperties)
             : undefined;
 
           const cardClasses = clsx("people-card", {

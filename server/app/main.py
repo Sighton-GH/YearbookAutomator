@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+import time
 import os
 from threading import Event, Thread
 
@@ -21,6 +22,16 @@ from app.services.licensing import (
 
 
 logger = logging.getLogger("ymga.licensing")
+access_logger = logging.getLogger("ymga.access")
+if not access_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+    access_logger.addHandler(_handler)
+access_logger.setLevel(logging.INFO)
+access_logger.propagate = False
+
+# Disable uvicorn's default access logs to avoid duplicate lines.
+logging.getLogger("uvicorn.access").disabled = True
 
 
 def _license_hint(reason: str | None) -> str | None:
@@ -97,6 +108,31 @@ _LICENSE_PROTECTED_PREFIXES = (
     "/api/fonts",
     "/api/workspaces",
 )
+
+
+@app.middleware("http")
+async def access_log(request: Request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - start) * 1000
+        access_logger.exception(
+            "%s %s -> 500 (%.1f ms)",
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+    duration_ms = (time.perf_counter() - start) * 1000
+    access_logger.info(
+        "%s %s -> %s (%.1f ms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 @app.middleware("http")

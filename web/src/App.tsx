@@ -62,6 +62,7 @@ import { SlotEditor } from "./components/SlotEditor";
 import { TemplatePreview } from "./components/TemplatePreview";
 import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
@@ -341,6 +342,7 @@ export default function App({ embedded = false }: AppProps) {
   const [importBabyDone, setImportBabyDone] = useState(false);
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
@@ -425,13 +427,12 @@ export default function App({ embedded = false }: AppProps) {
   };
 
   const confirmResetAll = () => {
-    if (typeof window === "undefined") return true;
-    return window.confirm("Reset everything in this workspace? This will clear parsed template, people, and settings.");
+    setShowResetConfirm(true);
+    return false;
   };
 
   const requestResetAll = () => {
     if (!confirmResetAll()) return;
-    handleReset();
   };
 
   // Quotes/baby photos can be disabled entirely; in that case we skip parsing those slots
@@ -1845,6 +1846,19 @@ export default function App({ embedded = false }: AppProps) {
 
   return (
     <>
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="Reset everything?"
+        message="This will clear parsed template, people, and settings for this workspace."
+        confirmLabel="Reset"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={() => setShowResetConfirm(false)}
+        onConfirm={() => {
+          setShowResetConfirm(false);
+          handleReset();
+        }}
+      />
       {showConfigModal && (
         <div
           className="modal-backdrop"
@@ -2356,6 +2370,9 @@ export default function App({ embedded = false }: AppProps) {
               onDefaultMugshotRandomize={setDefaultMugshotRandomize}
               defaultMugshotAssignments={defaultMugshotAssignments}
               defaultBabyFilename={defaultBabyFilename}
+              babyBackgroundColor={babyBackgroundColor}
+              babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
+              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               defaultQuoteAssignments={defaultQuoteAssignments}
               defaultQuoteFallback={defaultQuoteFallback}
               lockedPeople={lockedPeople}
@@ -2401,6 +2418,9 @@ export default function App({ embedded = false }: AppProps) {
               defaultQuoteAssignments={defaultQuoteAssignments}
               defaultMugshotAssignments={defaultMugshotAssignments}
               defaultBabyFilename={defaultBabyFilename}
+              babyBackgroundColor={babyBackgroundColor}
+              babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
+              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}
