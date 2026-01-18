@@ -63,6 +63,7 @@ import { TemplatePreview } from "./components/TemplatePreview";
 import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { TipsBox } from "./components/TipsBox";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
@@ -106,6 +107,14 @@ const stepDescriptions: Partial<Record<number, string>> = {
   6: "Preview one page, confirm people, then render all.",
   7: "Results from the latest render.",
 };
+
+const stepTips = [
+  "Server deletes all data after 8 hours to protect privacy.",
+  "If template parsing fails, try raising the color tolerance or lowering min-area in Custom options.",
+  "Non-matching portrait filenames are skipped—check warnings to see which files weren't used.",
+  "Missing quotes are allowed; configure a default quote as a fallback for students without entries.",
+  "Save a config file occasionally so you can restore work after a refresh or long session.",
+];
 
 type AppProps = {
   embedded?: boolean;
@@ -2355,6 +2364,11 @@ export default function App({ embedded = false }: AppProps) {
             </div>
           )}
           {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
+          {activeStep <= 4 && (
+            <div className="tool-tips-center">
+              <TipsBox tips={stepTips} />
+            </div>
+          )}
           {activeStep !== 6 && activeStep !== 7 && loading && progress > 0 && <ProgressBar progress={progress} />}
           </section>
         )}

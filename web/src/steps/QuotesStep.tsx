@@ -8,9 +8,16 @@ import { ProgressBar } from "../components/ProgressBar";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { babyMaskUrl, type BackgroundMode, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
 import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyPhotoEditor";
+import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+
+const sidebarTips = [
+  "Server deletes all data after 8 hours to protect privacy.",
+  "Missing quotes are allowed; configure a default quote as a fallback for students without entries.",
+  "Advanced name matching helps align quotes to the correct student when names vary.",
+];
 
 export function QuotesStep({
   defaultQuotes,
@@ -450,6 +457,9 @@ export function QuotesStep({
             {quotesCompletedErrorCount === null && status ? (
               <p className="muted prewrap">{prefixServerMessage(status)}</p>
             ) : null}
+            <div className="tool-tips-center">
+              <TipsBox tips={sidebarTips} />
+            </div>
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

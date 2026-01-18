@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 
 export function TipsBox({ tips }: { tips: string[] }) {
-  const stableTips = useMemo(() => tips.filter((t) => t.trim()), [tips]);
+  const stableTips = useMemo(() => {
+    const cleaned = tips.filter((t) => t.trim());
+    if (cleaned.length <= 1) return cleaned;
+    const shuffled = [...cleaned];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, [tips]);
   const [open, setOpen] = useState(true);
   const [idx, setIdx] = useState(0);
   const [isClosing, setIsClosing] = useState(false);

@@ -24,10 +24,17 @@ import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+
+const sidebarTips = [
+  "Server deletes all data after 8 hours to protect privacy.",
+  "Use background removal for cleaner cutouts, then set a fill color for the template mask.",
+  "Center on face improves crops when baby photos are off-center.",
+];
 
 export function BabyPhotosStep({
   workspaceId,
@@ -1422,6 +1429,9 @@ export function BabyPhotosStep({
             {babyCompletedErrorCount === null && status ? (
               <p className="muted prewrap">{prefixServerMessage(status)}</p>
             ) : null}
+            <div className="tool-tips-center">
+              <TipsBox tips={sidebarTips} />
+            </div>
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>

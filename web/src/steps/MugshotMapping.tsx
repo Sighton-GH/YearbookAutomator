@@ -11,9 +11,16 @@ import { ToggleSwitch } from "../components/ToggleSwitch";
 import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
+import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+
+const sidebarTips = [
+  "Server deletes all data after 8 hours to protect privacy.",
+  "Non-matching portrait filenames are skipped—check warnings to see which files weren't used.",
+  "Use the filename regex to match row numbers (rows are 1-based, header is ignored).",
+];
 
 export function MugshotMapping({
   workspaceId,
@@ -1050,6 +1057,9 @@ export function MugshotMapping({
             {completedErrorCount === null && status ? (
               <p className="muted prewrap">{prefixServerMessage(status)}</p>
             ) : null}
+            <div className="tool-tips-center">
+              <TipsBox tips={sidebarTips} />
+            </div>
             {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
