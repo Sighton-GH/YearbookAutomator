@@ -3,10 +3,16 @@ import { Navigate } from "react-router-dom";
 import App from "../App";
 import { withBase } from "../baseUrl";
 import { getStoredLicenseKey, validateLicenseKey } from "../licensing";
+import { ToggleSwitch } from "../components/ToggleSwitch";
 
 export function ToolAppPage() {
   const [checking, setChecking] = useState(true);
   const [valid, setValid] = useState(false);
+  const [appTheme, setAppTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem("ymga-app-theme") === "dark" ? "dark" : "light";
+  });
+  const isDark = appTheme === "dark";
 
   const triggerConfigAction = (kind: "export" | "import") => {
     if (typeof window === "undefined") return;
@@ -41,10 +47,15 @@ export function ToolAppPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("ymga-app-theme", isDark ? "dark" : "light");
+  }, [isDark]);
+
   if (!checking && !valid) return <Navigate to="/tool" replace />;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isDark ? " dark" : ""}`}>
       <div className="app-return-bar">
         <div className="app-return-inner">
           <div className="app-title-row">
@@ -69,6 +80,12 @@ export function ToolAppPage() {
             </div>
           </div>
           <div className="app-return-actions">
+            <ToggleSwitch
+              className="app-theme-toggle-switch"
+              checked={isDark}
+              onChange={(next) => setAppTheme(next ? "dark" : "light")}
+              label="Dark mode"
+            />
             <a className="app-return-link" href={withBase("/")}>Back to main website</a>
           </div>
         </div>

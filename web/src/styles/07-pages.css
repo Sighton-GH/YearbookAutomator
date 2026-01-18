@@ -610,7 +610,23 @@
 /* Full-page tool shell (/app) */
 .app-shell {
   min-height: 100vh;
-  background: #f7fdf9;
+  --text: #0f172a;
+  --bg-app: #f7fdf9;
+  color: var(--text);
+  background: var(--bg-app);
+}
+
+.app-shell.dark {
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #22a06b;
+  --accent-strong: #1b8458;
+  --border: #1f2937;
+  --bg-panel: #0f172a;
+  --bg-quiet: #111827;
+  --bg-warn: #2a1f0a;
+  --border-warn: #5a3b13;
+  --bg-app: #0b1220;
 }
 
 .app-return-bar {
@@ -636,6 +652,88 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.app-theme-toggle-switch .switch-text {
+  font-size: 13px;
+}
+
+.app-shell.dark button:not(.primary):not(.danger) {
+  color: var(--text);
+}
+
+.app-shell.dark .tool-action-btn,
+.app-shell.dark .app-file-action {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-shell.dark .app-file-action:hover {
+  background: var(--bg-quiet);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell.dark .step {
+  color: var(--text);
+}
+
+.app-shell.dark .preview .canvas {
+  background: linear-gradient(135deg, #0b1220 0%, #162233 100%);
+  color: var(--muted);
+}
+
+.app-shell.dark .callout {
+  background: var(--bg-quiet);
+}
+
+.app-shell.dark .people-card.people-card-locked {
+  background: #0b1524 !important;
+  border-color: var(--border) !important;
+}
+
+.app-shell.dark .people-card.people-card-locked :not(.lock-toggle-btn):not(.lock-toggle-btn *) {
+  color: var(--muted) !important;
+}
+
+.app-shell.dark .people-card.people-card-locked .lock-toggle-btn {
+  color: var(--text) !important;
+  background: var(--bg-panel) !important;
+  border-color: var(--accent) !important;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.4) inset,
+    0 0 0 2px rgba(34, 160, 107, 0.35);
+}
+
+.app-shell.dark .lock-info-popover .info-popover-btn {
+  background: var(--bg-panel);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.app-shell.dark .table-head {
+  background: #0f1b2d;
+}
+
+.app-shell.dark .table-row:nth-child(odd) {
+  background: #0b1524;
+}
+
+.app-shell.dark .table-row.active {
+  background: rgba(34, 160, 107, 0.16);
+}
+
+.app-shell.dark .table-row input[type="number"],
+.app-shell.dark .table-row textarea {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell.dark .template-thumb,
+.app-shell.dark .template-pick {
+  background: var(--bg-quiet);
 }
 
 .app-title {
