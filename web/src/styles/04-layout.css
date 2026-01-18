@@ -16,12 +16,40 @@
   margin-bottom: 16px;
 }
 
+.tool-topbar {
+  margin-bottom: 8px;
+}
+
+.topbar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.topbar-actions {
+  align-self: center;
+}
+
 .topbar-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.tool-steps-bar {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-steps-bar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .steps {

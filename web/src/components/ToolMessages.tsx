@@ -161,22 +161,37 @@ export function ToolMessages({
             <span className="tool-message-summary-text">
               <strong className="tool-message-title">{m.title}</strong>
             </span>
-            {m.kind === "warning" ? (
+            <span className="tool-message-controls">
+              {m.kind === "warning" ? (
+                <button
+                  type="button"
+                  className={clsx("tool-message-toggle", openById[m.id] !== false && !closingById[m.id] && "open")}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleMessage(m.id, { dismissAfter: Boolean(m.dismissible && onDismiss) });
+                  }}
+                  aria-label={Boolean(openById[m.id] !== false) ? "Collapse warning" : "Expand warning"}
+                >
+                  <svg className="tool-message-toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="button"
-                className={clsx("tool-message-toggle", openById[m.id] !== false && !closingById[m.id] && "open")}
+                className="tool-message-close"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  toggleMessage(m.id, { dismissAfter: Boolean(m.dismissible && onDismiss) });
+                  beginClose(m.id, { dismissAfter: Boolean(onDismiss) });
                 }}
-                aria-label={Boolean(openById[m.id] !== false) ? "Collapse warning" : "Expand warning"}
+                aria-label="Dismiss message"
+                title="Dismiss"
               >
-                <svg className="tool-message-toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                ×
               </button>
-            ) : null}
+            </span>
           </summary>
 
           {(m.body || m.actions) && (

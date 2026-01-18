@@ -8,6 +8,11 @@ export function ToolAppPage() {
   const [checking, setChecking] = useState(true);
   const [valid, setValid] = useState(false);
 
+  const triggerConfigAction = (kind: "export" | "import") => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new Event(kind === "export" ? "ymga:save-config" : "ymga:upload-config"));
+  };
+
   useEffect(() => {
     let active = true;
     const key = getStoredLicenseKey();
@@ -42,8 +47,30 @@ export function ToolAppPage() {
     <div className="app-shell">
       <div className="app-return-bar">
         <div className="app-return-inner">
-          <span className="app-title">Custom Yearbook Spread Automator</span>
-          <a className="app-return-link" href={withBase("/")}>Back to main website</a>
+          <div className="app-title-row">
+            <span className="app-title">Custom Yearbook Spread Automator</span>
+            <div className="app-file-actions" aria-label="Configuration">
+              <button
+                type="button"
+                className="app-file-action"
+                onClick={() => triggerConfigAction("export")}
+                disabled={checking}
+              >
+                Export
+              </button>
+              <button
+                type="button"
+                className="app-file-action"
+                onClick={() => triggerConfigAction("import")}
+                disabled={checking}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+          <div className="app-return-actions">
+            <a className="app-return-link" href={withBase("/")}>Back to main website</a>
+          </div>
         </div>
       </div>
       {checking ? (

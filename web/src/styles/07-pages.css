@@ -626,13 +626,60 @@
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
+.app-return-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .app-title {
   font-weight: 700;
+  line-height: 1.1;
+  display: inline-block;
+}
+
+.app-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-file-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.app-file-action {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.app-file-action:hover {
+  background: var(--bg-quiet);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-file-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .app-loading {

@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import type { Box, RawParseDebug, TemplateSlots } from "../api";
+import { InfoPopover } from "../components/InfoPopover";
 import { TemplatePreview } from "../components/TemplatePreview";
 import { SlotEditor } from "../components/SlotEditor";
 import { groupSlotsByProximity } from "../utils/slots";
@@ -45,8 +46,14 @@ export function ParsingReview({
     <section className="panel preview full-preview">
       <div className="section-header">
         <div className="stack">
-          <h3>Parsing review</h3>
-          <p className="muted">Review detected slots. Drag to tweak boxes, regroup, then continue.</p>
+          <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+            <h3>Parsing review</h3>
+            <InfoPopover
+              content="Review detected slots. Drag to tweak boxes, regroup, then continue."
+              ariaLabel="Parsing review description"
+              position="below"
+            />
+          </div>
         </div>
         <div className="section-actions">
           <button onClick={onBack}>Back</button>

@@ -55,8 +55,6 @@ export function StylingStep({
 }) {
   return (
     <div className="stack">
-      <p className="muted">Name and quote can be styled independently. Default size is 40pt. Font size bounds: 1–100.</p>
-
       <FontPick
         label="Name styling"
         fontFamily={nameFontFamily}

@@ -262,6 +262,12 @@ input[type="color"].color-swatch::-webkit-color-swatch {
   gap: 2px;
 }
 
+.switch-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 button {
   border: none;
   border-radius: 10px;

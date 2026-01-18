@@ -6,6 +6,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
+import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { formatServerMessage } from "../configFile";
@@ -693,8 +694,18 @@ export function MugshotMapping({
       <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
+            <div className="mapping-sidebar-header">
+              <h3 className="mapping-sidebar-title">Portraits</h3>
+              <InfoPopover
+                content={
+                  "Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this step matches portraits by digits first (example: 001.jpg → row 1) using the filename pattern, with rows starting at 1 (header row is ignored). With Prioritize names (enabled by default), the app will first assign any files whose filenames contain a student's first + last name, then fill the remaining rows by digits (numbered files may shift down if a name match took that row). Non-matching files are skipped and listed in warnings."
+                }
+                ariaLabel="Portraits step description"
+                position="below"
+              />
+            </div>
             <div className="stack" style={{ gap: 8 }}>
-              <div className="inline" style={{ flexWrap: "wrap" }}>
+              <div className="stack sidebar-actions-full">
                 <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
                   Apply mapping adjustments
                 </button>
@@ -708,7 +719,7 @@ export function MugshotMapping({
                 </button>
               </div>
 
-              <div className="inline" style={{ flexWrap: "wrap" }}>
+              <div className="sidebar-swap-row">
                 <button
                   type="button"
                   className={clsx({ primary: swapMode === "card" })}
@@ -731,13 +742,6 @@ export function MugshotMapping({
               )}
             </div>
 
-            <p className="muted">
-              Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this step matches portraits by
-              digits first (example: 001.jpg → row 1) using the filename pattern, with rows starting at 1 (header row is
-              ignored). With <strong>Prioritize names</strong> (enabled by default), the app will first assign any files
-              whose filenames contain a student's first + last name, then fill the remaining rows by digits (numbered
-              files may shift down if a name match took that row). Non-matching files are skipped and listed in warnings.
-            </p>
             <div ref={sheetRef}>
               <div className="upload-title">Spreadsheet</div>
               {showMissing && !sheet ? (
@@ -800,17 +804,19 @@ export function MugshotMapping({
 
             {showAdvancedNaming && (
               <label className="field">
-                <span>Filename pattern (regex)</span>
+                <span className="inline" style={{ alignItems: "center", gap: 6 }}>
+                  <span>Filename pattern (regex)</span>
+                  <InfoPopover
+                    content="Default matches 3–4 digit stems (e.g., 001.jpg). Use ^ and $ for exact matches; non-matching files are skipped."
+                    ariaLabel="Filename pattern description"
+                  />
+                </span>
                 <input
                   type="text"
                   value={namingPattern}
                   onChange={(e) => setNamingPattern(e.target.value)}
                   placeholder={defaultNamingPattern}
                 />
-                <span className="muted small">
-                  Default matches 3–4 digit stems (e.g., 001.jpg). Use ^ and $ for exact matches; non-matching files are
-                  skipped.
-                </span>
               </label>
             )}
 
@@ -822,8 +828,10 @@ export function MugshotMapping({
             />
 
             <div className="stack" style={{ gap: 6 }}>
-              <strong>Default portraits (optional)</strong>
-              <div className="muted small">Used when a student has no portrait. Reorder to create a pattern.</div>
+              <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                <strong>Default portraits (optional)</strong>
+                <InfoPopover content="Used when a student has no portrait. Reorder to create a pattern." ariaLabel="Default portraits description" />
+              </div>
               {workspaceId && defaultMugshotFilenames.length > 0 ? (
                 <div className="default-portrait-grid">
                   {defaultMugshotFilenames.map((filename, idx) => (

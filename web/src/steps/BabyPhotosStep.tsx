@@ -20,6 +20,7 @@ import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
+import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
 import { formatServerMessage } from "../configFile";
@@ -1004,15 +1005,19 @@ export function BabyPhotosStep({
       <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
+            <div className="mapping-sidebar-header">
+              <h3 className="mapping-sidebar-title">Baby photos</h3>
+              <InfoPopover
+                content={
+                  "Upload baby photos in two ways: (1) a ZIP to automatically match photos to students by filename, and (2) a default baby photo used when a student is missing one. Click Process to apply your selections. After processing, you can override per person (and click a thumbnail to crop to the template cutout)."
+                }
+                ariaLabel="Baby photos step description"
+                position="below"
+              />
+            </div>
             <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
               Reset to original photos
             </button>
-
-            <p className="muted">
-              Upload baby photos in two ways: (1) a ZIP to automatically match photos to students by filename, and (2) a default
-              baby photo used when a student is missing one. Click <strong>Process</strong> to apply your selections. After processing, you can
-              override per person (and click a thumbnail to crop to the template cutout).
-            </p>
 
             <div ref={babyZipRef}>
               <div className="upload-title">Baby photo ZIP</div>
@@ -1073,8 +1078,10 @@ export function BabyPhotosStep({
             />
 
             <div className={clsx("stack")} style={{ gap: 6 }}>
-              <strong>Default baby photo</strong>
-              <div className="muted small">Used when a student is missing a baby photo.</div>
+              <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                <strong>Default baby photo</strong>
+                <InfoPopover content="Used when a student is missing a baby photo." ariaLabel="Default baby photo description" />
+              </div>
 
               {workspaceId && defaultBabyFilename ? (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>

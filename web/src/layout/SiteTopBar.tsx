@@ -67,12 +67,6 @@ export function SiteTopBar() {
     };
   }, [showLicenseModal]);
 
-  function triggerToolAction(kind: "save" | "upload") {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(new Event(kind === "save" ? "ymga:save-config" : "ymga:upload-config"));
-    setMenuOpen(false);
-  }
-
   function openLicenseModal() {
     const currentKey = getStoredLicenseKey();
     setLicenseKeyInput(currentKey || "");
@@ -169,27 +163,6 @@ export function SiteTopBar() {
 
             {menuOpen && (
               <div className="popover below ss-menu" role="menu" aria-label="Menu">
-                <button
-                  type="button"
-                  className="ss-menu-item"
-                  onClick={() => triggerToolAction("save")}
-                  disabled={!inTool}
-                  role="menuitem"
-                >
-                  Save config
-                </button>
-                <button
-                  type="button"
-                  className="ss-menu-item"
-                  onClick={() => triggerToolAction("upload")}
-                  disabled={!inTool}
-                  role="menuitem"
-                >
-                  Upload config
-                </button>
-
-                <div className="ss-menu-sep" role="separator" />
-
                 <button
                   type="button"
                   className="ss-menu-item"

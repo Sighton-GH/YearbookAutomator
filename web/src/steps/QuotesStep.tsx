@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { PeopleCard } from "../components/PeopleCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
@@ -289,11 +290,16 @@ export function QuotesStep({
       <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
-            <p className="muted">
-              Upload a quotes spreadsheet (.xlsx or .csv) and click <strong>Process</strong>. The app matches spreadsheet rows to students by name
-              and sets each person's quote (missing quotes are allowed). If a row has a <strong>quote</strong> column, it prefers that; otherwise it
-              picks the most quote-like cell and ignores obvious non-quotes like emails/URLs.
-            </p>
+            <div className="mapping-sidebar-header">
+              <h3 className="mapping-sidebar-title">Quotes</h3>
+              <InfoPopover
+                content={
+                  "Upload a quotes spreadsheet (.xlsx or .csv) and click Process. The app matches spreadsheet rows to students by name and sets each person's quote (missing quotes are allowed). If a row has a quote column, it prefers that; otherwise it picks the most quote-like cell and ignores obvious non-quotes like emails/URLs."
+                }
+                ariaLabel="Quotes step description"
+                position="below"
+              />
+            </div>
 
             <div ref={sheetRef}>
               <div className="upload-title">Quotes spreadsheet (.xlsx or .csv)</div>
@@ -329,8 +335,10 @@ export function QuotesStep({
             />
 
             <div className="stack" style={{ gap: 8 }}>
-              <strong>Default quotes</strong>
-              <div className="muted small">Used when a student has no quote. Reorder to define the pattern.</div>
+              <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                <strong>Default quotes</strong>
+                <InfoPopover content="Used when a student has no quote. Reorder to define the pattern." ariaLabel="Default quotes description" />
+              </div>
 
               {defaultQuotes.length > 0 && (
                 <div className="stack" style={{ gap: 8 }}>

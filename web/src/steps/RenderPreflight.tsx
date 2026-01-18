@@ -1,6 +1,7 @@
 import React from "react";
 
 import { generationDownloadUrl } from "../api";
+import { InfoPopover } from "../components/InfoPopover";
 import type { PersonRecord } from "../api";
 import type { PlacementMode } from "../types";
 
@@ -104,9 +105,9 @@ export function RenderPreflight({
       <div className="grid two">
         <div className="callout">
           <div className="stack" style={{ gap: 8 }}>
-            <div>
+            <div className="inline" style={{ alignItems: "center", gap: 6 }}>
               <strong>Placement</strong>
-              <div className="muted small">Choose how students are filled into a two-page spread.</div>
+              <InfoPopover content="Choose how students are filled into a two-page spread." ariaLabel="Placement description" />
             </div>
             <div className="stack" style={{ gap: 8 }}>
               <label className="inline" style={{ alignItems: "flex-start", gap: 10 }}>
@@ -119,8 +120,10 @@ export function RenderPreflight({
                   disabled={loading}
                 />
                 <div className="stack" style={{ gap: 2 }}>
-                  <div>Fill both pages simultaneously</div>
-                  <div className="muted small">Uses the template’s reading order across the full spread.</div>
+                  <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                    <div>Fill both pages simultaneously</div>
+                    <InfoPopover content="Uses the template’s reading order across the full spread." ariaLabel="Simultaneous placement description" />
+                  </div>
                 </div>
               </label>
 
@@ -134,8 +137,10 @@ export function RenderPreflight({
                   disabled={loading}
                 />
                 <div className="stack" style={{ gap: 2 }}>
-                  <div>Fill left page, then right page</div>
-                  <div className="muted small">Fills the left page in reading order, then the right page in reading order.</div>
+                  <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                    <div>Fill left page, then right page</div>
+                    <InfoPopover content="Fills the left page in reading order, then the right page in reading order." ariaLabel="Left then right placement description" />
+                  </div>
                 </div>
               </label>
 
@@ -147,8 +152,10 @@ export function RenderPreflight({
                   disabled={loading}
                 />
                 <div className="stack" style={{ gap: 2 }}>
-                  <div>Force alphabetical (by last name)</div>
-                  <div className="muted small">Sorts the generation order by last name before filling slots.</div>
+                  <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                    <div>Force alphabetical (by last name)</div>
+                    <InfoPopover content="Sorts the generation order by last name before filling slots." ariaLabel="Alphabetical placement description" />
+                  </div>
                 </div>
               </label>
             </div>
@@ -157,9 +164,9 @@ export function RenderPreflight({
 
         <div className="callout">
           <div className="stack" style={{ gap: 8 }}>
-            <div>
+            <div className="inline" style={{ alignItems: "center", gap: 6 }}>
               <strong>Export format</strong>
-              <div className="muted small">Affects preview and Render all. Default: PNG</div>
+              <InfoPopover content="Affects preview and Render all. Default: PNG. TIFF is a single flattened composite like PNG." ariaLabel="Export format description" />
             </div>
             <select
               value={outputFormat}
@@ -170,13 +177,11 @@ export function RenderPreflight({
               <option value="pdf">PDF</option>
               <option value="tiff">TIFF</option>
             </select>
-            <div className="muted small">TIFF is a single flattened composite like PNG.</div>
-
             <div style={{ height: 4 }} />
 
-            <div>
+            <div className="inline" style={{ alignItems: "center", gap: 6 }}>
               <strong>Export quality</strong>
-              <div className="muted small">Choose an output resolution. Max is the template’s original resolution.</div>
+              <InfoPopover content="Choose an output resolution. Max is the template’s original resolution. Aspect ratio is locked to match the template." ariaLabel="Export quality description" />
             </div>
             <select
               value={exportQualityMode}
@@ -226,9 +231,6 @@ export function RenderPreflight({
                     disabled={loading}
                   />
                 </label>
-                <div className="muted small" style={{ gridColumn: "1 / -1" }}>
-                  Aspect ratio is locked to match the template.
-                </div>
               </div>
             )}
           </div>
@@ -237,9 +239,9 @@ export function RenderPreflight({
 
       <div className="callout">
         <div className="stack" style={{ gap: 10 }}>
-          <div>
+          <div className="inline" style={{ alignItems: "center", gap: 6 }}>
             <strong>Preview render (1 page)</strong>
-            <div className="muted small">Uses the first page worth of people/slots as a quick test.</div>
+            <InfoPopover content="Uses the first page worth of people/slots as a quick test." ariaLabel="Preview render description" />
           </div>
           <div className="inline">
             <button className="primary" disabled={loading || !canContinue} onClick={handleRenderPreview}>

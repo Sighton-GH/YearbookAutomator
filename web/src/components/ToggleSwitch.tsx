@@ -1,5 +1,6 @@
 import type React from "react";
 import { clsx } from "clsx";
+import { InfoPopover } from "./InfoPopover";
 
 export function ToggleSwitch({
   checked,
@@ -25,8 +26,10 @@ export function ToggleSwitch({
         <span className="switch-thumb" />
       </span>
       <span className="switch-text">
-        <span>{label}</span>
-        {description ? <div className="muted small">{description}</div> : null}
+        <span className="switch-label-row">
+          <span>{label}</span>
+          {description ? <InfoPopover content={description} ariaLabel="Toggle description" /> : null}
+        </span>
       </span>
     </label>
   );

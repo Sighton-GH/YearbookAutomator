@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { UploadDropLabel } from "../components/UploadDropLabel";
+import { InfoPopover } from "../components/InfoPopover";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { parseTemplate, type RawParseDebug, type TemplateSlots } from "../api";
 import { formatEtaSeconds } from "../utils/ui";
@@ -68,6 +69,7 @@ export function TemplateParsing({
   onRawDebug?: (debug: RawParseDebug | null) => void;
 }) {
   const [showMissing, setShowMissing] = useState(false);
+  const [showCustomOptions, setShowCustomOptions] = useState(false);
   const annotatedRef = useRef<HTMLDivElement | null>(null);
   const cleanRef = useRef<HTMLDivElement | null>(null);
   const parseProcessingEstimateSecondsRef = useRef(4);
@@ -220,9 +222,6 @@ export function TemplateParsing({
 
   return (
     <div className="stack">
-      <p className="muted">
-        Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.
-      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "12px" }}>
         <div ref={annotatedRef}>
           <div className="upload-title">Annotated template (.png)</div>
@@ -283,7 +282,10 @@ export function TemplateParsing({
         </div>
       </div>
       <label className="field">
-        <span>People per spread (max slots to keep)</span>
+        <span className="inline" style={{ alignItems: "center", gap: 6 }}>
+          <span>People per spread (max slots to keep)</span>
+          <InfoPopover content="Slots beyond this count will be dropped during grouping." ariaLabel="People per spread description" />
+        </span>
         <input
           type="number"
           min={1}
@@ -291,19 +293,22 @@ export function TemplateParsing({
           value={peoplePerSpread}
           onChange={(e) => setPeoplePerSpread(Math.max(1, Number(e.target.value) || 1))}
         />
-        <span className="muted small">Slots beyond this count will be dropped during grouping.</span>
       </label>
 
-      <details>
-        <summary>
-          <strong>Custom options</strong>
-        </summary>
-        <div className="stack" style={{ gap: 12, marginTop: 8 }}>
-          <p className="muted small">
-            Optional tweaks for templates that don’t parse cleanly with defaults. Use these to hide steps you don’t need,
-            adjust detection sensitivity, or override the slot colours. Leave colour overrides blank to use the automatic
-            defaults.
-          </p>
+      <div className="stack" style={{ gap: 8 }}>
+        <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+          <button type="button" onClick={() => setShowCustomOptions((v) => !v)}>
+            {showCustomOptions ? "Hide custom options" : "Show custom options"}
+          </button>
+          <InfoPopover
+            content="Optional tweaks for templates that don’t parse cleanly with defaults. Use these to hide steps you don’t need, adjust detection sensitivity, or override the slot colours. Leave colour overrides blank to use the automatic defaults."
+            ariaLabel="Custom options description"
+            position="below"
+          />
+        </div>
+
+        {showCustomOptions ? (
+          <div className="stack" style={{ gap: 12 }}>
           <ToggleSwitch
             checked={skipQuotes}
             onChange={onSkipQuotes}
@@ -438,8 +443,9 @@ export function TemplateParsing({
             />
             <span className="muted small">Higher numbers ignore tiny false positives; defaults to 800.</span>
           </label>
-        </div>
-      </details>
+          </div>
+        ) : null}
+      </div>
       <button className="primary" onClick={handleParse}>
         Parse template
       </button>

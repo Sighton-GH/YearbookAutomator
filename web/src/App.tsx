@@ -60,6 +60,7 @@ import { FontPick } from "./components/FontPick";
 import { ProgressBar } from "./components/ProgressBar";
 import { SlotEditor } from "./components/SlotEditor";
 import { TemplatePreview } from "./components/TemplatePreview";
+import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
@@ -97,6 +98,13 @@ const steps = [
   "Review",
   "Results",
 ];
+
+const stepDescriptions: Partial<Record<number, string>> = {
+  0: "Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.",
+  5: "Name and quote can be styled independently. Default size is 40pt. Font size bounds: 1–100.",
+  6: "Preview one page, confirm people, then render all.",
+  7: "Results from the latest render.",
+};
 
 type AppProps = {
   embedded?: boolean;
@@ -1793,12 +1801,12 @@ export default function App({ embedded = false }: AppProps) {
   );
 
   const configActions = (
-    <div className="tool-actions tool-actions-header" aria-label="Configuration">
+    <div className="tool-actions topbar-actions" aria-label="Configuration">
       <button type="button" className="tool-action-btn" onClick={handleSaveConfig} disabled={loading}>
-        💾 <span>Save</span>
+        <span>Export</span>
       </button>
       <button type="button" className="tool-action-btn" onClick={openConfigImport} disabled={loading}>
-        ⤴ <span>Upload</span>
+        <span>Import</span>
       </button>
     </div>
   );
@@ -2063,24 +2071,50 @@ export default function App({ embedded = false }: AppProps) {
       )}
 
       {embedded ? (
-        <section className="ss-steps">
-          <div className="ss-steps-inner tool-steps-header">
-            {stepsNav}
+        <>
+          <div className="page tool-messages-row">
+            <ToolMessages
+              messages={toolMessages}
+              onDismiss={(id) => {
+                setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+                if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+              }}
+            />
           </div>
-        </section>
-      ) : (
-        <div className="page">
-          <header className="topbar">
-            <div>
-              <h1>Custom Yearbook Spread Automator</h1>
-              <p className="muted">Developed by Sighton Innovations — local-first, ready to host later.</p>
-            </div>
-            <div className="topbar-right">
-              {configActions}
+          <section className="ss-steps">
+            <div className="ss-steps-inner tool-steps-header">
               {stepsNav}
             </div>
-          </header>
-        </div>
+          </section>
+        </>
+      ) : (
+        <>
+          <div className="page">
+            <header className="topbar tool-topbar">
+              <div>
+                <div className="topbar-title-row">
+                  <h1>Custom Yearbook Spread Automator</h1>
+                  {configActions}
+                </div>
+                <p className="muted">Developed by Sighton Innovations — local-first, ready to host later.</p>
+              </div>
+            </header>
+          </div>
+          <div className="page tool-messages-row">
+            <ToolMessages
+              messages={toolMessages}
+              onDismiss={(id) => {
+                setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+                if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+              }}
+            />
+          </div>
+          <section className="tool-steps-bar" aria-label="Tool steps">
+            <div className="tool-steps-bar-inner">
+              {stepsNav}
+            </div>
+          </section>
+        </>
       )}
 
       <div
@@ -2088,14 +2122,6 @@ export default function App({ embedded = false }: AppProps) {
           "page-wide": activeStep === 2 || activeStep === 3 || activeStep === 4,
         })}
       >
-
-      <ToolMessages
-        messages={toolMessages}
-        onDismiss={(id) => {
-          setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
-          if (id === "save-config-reminder") setShowSaveConfigReminder(false);
-        }}
-      />
 
       <main
         className={clsx("layout", {
@@ -2115,12 +2141,16 @@ export default function App({ embedded = false }: AppProps) {
           {activeStep === 6 || activeStep === 7 ? (
             <div className="section-header">
               <div className="stack" style={{ gap: 4 }}>
-                <h2>{steps[activeStep]}</h2>
-                {activeStep === 6 ? (
-                  <p className="muted">Preview one page, confirm people, then render all.</p>
-                ) : (
-                  <p className="muted">Results from the latest render.</p>
-                )}
+                <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                  <h2>{steps[activeStep]}</h2>
+                  {stepDescriptions[activeStep] ? (
+                    <InfoPopover
+                      content={stepDescriptions[activeStep]}
+                      ariaLabel={`${steps[activeStep]} description`}
+                      position="below"
+                    />
+                  ) : null}
+                </div>
                 {activeStep === 6 && (
                   <div className="stack" style={{ gap: 6 }}>
                     {status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
@@ -2140,7 +2170,12 @@ export default function App({ embedded = false }: AppProps) {
               </div>
             </div>
           ) : (
-            <h2>{steps[activeStep]}</h2>
+            <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+              <h2>{steps[activeStep]}</h2>
+              {stepDescriptions[activeStep] ? (
+                <InfoPopover content={stepDescriptions[activeStep]} ariaLabel={`${steps[activeStep]} description`} />
+              ) : null}
+            </div>
           )}
           {activeStep === 0 && (
             <TemplateParsingStep
@@ -2312,7 +2347,6 @@ export default function App({ embedded = false }: AppProps) {
 
         {activeStep === 2 && (
           <section className="mapping-step">
-            <h2>{steps[activeStep]}</h2>
             <MugshotMappingStep
               workspaceId={workspaceId}
                 babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
@@ -2359,7 +2393,6 @@ export default function App({ embedded = false }: AppProps) {
 
         {activeStep === 3 && (
           <section className="mapping-step">
-            <h2>{steps[activeStep]}</h2>
             <QuotesStepStep
               defaultQuotes={defaultQuotes}
               onDefaultQuotes={setDefaultQuotes}
@@ -2395,7 +2428,6 @@ export default function App({ embedded = false }: AppProps) {
 
         {activeStep === 4 && (
           <section className="mapping-step">
-            <h2>{steps[activeStep]}</h2>
             <BabyPhotosStepStep
               workspaceId={workspaceId}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
