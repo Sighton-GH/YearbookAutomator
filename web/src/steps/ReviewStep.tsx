@@ -8,7 +8,9 @@ export function ReviewStep({
   workspaceId,
   babyMaskBox,
   defaultBabyFilename,
-  defaultQuote,
+  defaultQuoteFallback,
+  defaultQuoteAssignments,
+  defaultMugshotAssignments,
   swapMode,
   swapDisabled,
   onToggleSwapMode,
@@ -19,7 +21,9 @@ export function ReviewStep({
   workspaceId: string | null;
   babyMaskBox: Box | null;
   defaultBabyFilename: string | null;
-  defaultQuote: string;
+  defaultQuoteFallback: string;
+  defaultQuoteAssignments: Record<number, string>;
+  defaultMugshotAssignments: Record<number, string>;
   swapMode: boolean;
   swapDisabled: boolean;
   onToggleSwapMode: () => void;
@@ -68,7 +72,8 @@ export function ReviewStep({
           const spreadNumber = Math.floor(rowIdx / perSpread) + 1;
           const slotNumber = positionInSpread + 1;
           const babyFilename = p.baby_photo_filename || defaultBabyFilename;
-          const quote = (p.quote ?? defaultQuote ?? "").trim();
+          const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
+          const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
           const babyThumbStyle: React.CSSProperties | undefined = maskUrl
             ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties)
             : undefined;
@@ -120,6 +125,15 @@ export function ReviewStep({
                         alt="portrait"
                         className="thumb"
                       />
+                    ) : assignedDefaultMugshot && workspaceId ? (
+                      <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                        <img
+                          src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
+                          alt="default portrait"
+                          className="thumb"
+                        />
+                        <div className="muted small">(default)</div>
+                      </div>
                     ) : (
                       <div className="muted small">(missing)</div>
                     )}

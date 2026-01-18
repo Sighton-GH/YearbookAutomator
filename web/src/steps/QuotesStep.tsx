@@ -9,8 +9,12 @@ import { formatServerMessage } from "../configFile";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
 
 export function QuotesStep({
-  defaultQuote,
-  onDefaultQuote,
+  defaultQuotes,
+  onDefaultQuotes,
+  defaultQuotesRandomize,
+  onDefaultQuotesRandomize,
+  defaultQuoteAssignments,
+  defaultMugshotAssignments,
   quotesWarnings,
   onQuotesWarnings,
   quotesWarningsOpen,
@@ -32,8 +36,12 @@ export function QuotesStep({
   onReset,
   onContinue,
 }: {
-  defaultQuote: string;
-  onDefaultQuote: (v: string) => void;
+  defaultQuotes: string[];
+  onDefaultQuotes: React.Dispatch<React.SetStateAction<string[]>>;
+  defaultQuotesRandomize: boolean;
+  onDefaultQuotesRandomize: (v: boolean) => void;
+  defaultQuoteAssignments: Record<number, string>;
+  defaultMugshotAssignments: Record<number, string>;
   quotesWarnings: string[];
   onQuotesWarnings: (v: string[]) => void;
   quotesWarningsOpen: boolean;
@@ -58,6 +66,7 @@ export function QuotesStep({
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [quotesSheet, setQuotesSheet] = useState<File | null>(null);
   const [showMissing, setShowMissing] = useState(false);
+  const [newQuoteDraft, setNewQuoteDraft] = useState("");
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const warningsRef = useRef<HTMLDetailsElement | null>(null);
@@ -82,6 +91,39 @@ export function QuotesStep({
 
   const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
+  };
+
+  const addDefaultQuote = () => {
+    const trimmed = newQuoteDraft.trim();
+    if (!trimmed) return;
+    onDefaultQuotes((prev) => [...prev, trimmed]);
+    setNewQuoteDraft("");
+  };
+
+  const updateDefaultQuoteAt = (idx: number, value: string) => {
+    onDefaultQuotes((prev) => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  };
+
+  const moveDefaultQuote = (from: number, to: number) => {
+    onDefaultQuotes((prev) => {
+      if (from < 0 || from >= prev.length) return prev;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const removeDefaultQuote = (idx: number) => {
+    onDefaultQuotes((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   const handleProcessQuotes = async () => {
@@ -224,14 +266,54 @@ export function QuotesStep({
               description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
             />
 
-            <div className="stack" style={{ gap: 6 }}>
-              <strong>Default quote</strong>
-              <div className="muted small">Used when a student has no quote.</div>
-              <textarea
-                value={defaultQuote}
-                onChange={(e) => onDefaultQuote(e.target.value)}
-                placeholder="Enter a default quote"
-                rows={2}
+            <div className="stack" style={{ gap: 8 }}>
+              <strong>Default quotes</strong>
+              <div className="muted small">Used when a student has no quote. Reorder to define the pattern.</div>
+
+              {defaultQuotes.length > 0 && (
+                <div className="stack" style={{ gap: 8 }}>
+                  {defaultQuotes.map((q, idx) => (
+                    <div key={`default-quote-${idx}`} className="default-quote-row">
+                      <textarea
+                        rows={2}
+                        value={q}
+                        onChange={(e) => updateDefaultQuoteAt(idx, e.target.value)}
+                        placeholder="Default quote"
+                      />
+                      <div className="default-quote-actions">
+                        <button type="button" onClick={() => moveDefaultQuote(idx, idx - 1)} disabled={idx === 0}>
+                          ↑
+                        </button>
+                        <button type="button" onClick={() => moveDefaultQuote(idx, idx + 1)} disabled={idx === defaultQuotes.length - 1}>
+                          ↓
+                        </button>
+                        <button type="button" className="danger" onClick={() => removeDefaultQuote(idx)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="inline" style={{ gap: 8, alignItems: "center" }}>
+                <input
+                  type="text"
+                  value={newQuoteDraft}
+                  onChange={(e) => setNewQuoteDraft(e.target.value)}
+                  placeholder="Add another default quote"
+                  style={{ flex: 1 }}
+                />
+                <button type="button" onClick={addDefaultQuote}>
+                  Add
+                </button>
+              </div>
+
+              <ToggleSwitch
+                checked={defaultQuotesRandomize}
+                onChange={onDefaultQuotesRandomize}
+                label="Randomize default quotes"
+                description="When on, missing quotes use a random default from the list."
               />
             </div>
 
@@ -290,7 +372,11 @@ export function QuotesStep({
       <div className="panel">
         {workspaceId && people.length > 0 ? (
           <div className="people-grid">
-            {people.map((p, idx) => (
+            {people.map((p, idx) => {
+              const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
+              const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote;
+              const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+              return (
               <div className="people-card" key={p.index}>
                 <div className="people-card-header">
                   <div className="stack" style={{ gap: 4 }}>
@@ -308,6 +394,15 @@ export function QuotesStep({
                         alt="portrait"
                         className="thumb"
                       />
+                    ) : assignedDefaultMugshot ? (
+                      <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                        <img
+                          src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
+                          alt="default portrait"
+                          className="thumb"
+                        />
+                        <div className="muted small">(default)</div>
+                      </div>
                     ) : (
                       <div className="muted small">(missing mugshot)</div>
                     )}
@@ -318,13 +413,14 @@ export function QuotesStep({
                   <span>Quote</span>
                   <textarea
                     rows={2}
-                    value={p.quote ?? ""}
+                    value={displayQuote}
                     onChange={(e) => updatePerson(idx, (prev) => ({ ...prev, quote: e.target.value }))}
-                    placeholder="Quote"
+                    placeholder=""
                   />
                 </label>
               </div>
-            ))}
+            );
+            })}
           </div>
         ) : (
           <p className="muted">No people loaded yet. Complete portrait mapping first.</p>

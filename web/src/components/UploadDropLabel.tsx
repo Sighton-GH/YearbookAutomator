@@ -7,12 +7,16 @@ export function UploadDropLabel({
   disabled,
   className,
   onFile,
+  onFiles,
+  multiple,
   children,
 }: {
   accept?: string;
   disabled?: boolean;
   className?: string;
-  onFile: (file: File) => void;
+  onFile?: (file: File) => void;
+  onFiles?: (files: File[]) => void;
+  multiple?: boolean;
   children: ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -62,7 +66,20 @@ export function UploadDropLabel({
     if (disabled) return;
 
     const files = filesFromDataTransfer(e.dataTransfer);
-    const firstAccepted = files.find((f) => matchesAccept(f, accept));
+    const accepted = files.filter((f) => matchesAccept(f, accept));
+    if (!accepted.length) return;
+
+    if (multiple && onFiles) {
+      const dispatched = accepted[0] ? setInputFileAndDispatch(accepted[0]) : false;
+      if (!dispatched) {
+        setHasFile(true);
+        setFileName(accepted.length > 1 ? `${accepted.length} files selected` : accepted[0]?.name ?? "");
+        onFiles(accepted);
+      }
+      return;
+    }
+
+    const firstAccepted = accepted[0];
     if (!firstAccepted) return;
 
     // Prefer updating the underlying file input so the UI shows the filename
@@ -86,12 +103,24 @@ export function UploadDropLabel({
           injected = true;
 
           const existingOnChange = props?.onChange as ((e: any) => void) | undefined;
-          const wrappedOnChange = (e: any) => {
+            const wrappedOnChange = (e: any) => {
             const files = e?.target?.files as FileList | undefined;
             const nextHasFile = Boolean(files && files.length > 0);
             setHasFile(nextHasFile);
-            setFileName(nextHasFile ? files?.[0]?.name ?? "" : "");
+              setFileName(
+                nextHasFile
+                  ? (multiple && files && files.length > 1 ? `${files.length} files selected` : files?.[0]?.name ?? "")
+                  : ""
+              );
             existingOnChange?.(e);
+              if (!existingOnChange && files && files.length > 0) {
+                const nextFiles = Array.from(files).filter((f) => matchesAccept(f, accept));
+                if (multiple && onFiles) {
+                  onFiles(nextFiles);
+                } else if (onFile && nextFiles[0]) {
+                  onFile(nextFiles[0]);
+                }
+              }
           };
 
           const mergedClassName = clsx(props?.className, "upload-native-input");
@@ -100,6 +129,7 @@ export function UploadDropLabel({
             onChange: wrappedOnChange,
             className: mergedClassName,
             disabled: mergedDisabled,
+            multiple: Boolean(multiple || props?.multiple),
           });
 
           out.push(

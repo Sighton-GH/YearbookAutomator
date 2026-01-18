@@ -221,7 +221,9 @@ export default function App({ embedded = false }: AppProps) {
   };
 
   const [slotAssignments, setSlotAssignments] = useState<Record<number, number>>({});
-  const [defaultQuote, setDefaultQuote] = useState("404 quote not found");
+  const [defaultQuotes, setDefaultQuotes] = useState<string[]>(["404 quote not found"]);
+  const [defaultQuotesRandomize, setDefaultQuotesRandomize] = useState(false);
+  const [defaultQuotesSeed, setDefaultQuotesSeed] = useState(0);
   const [quotesWarnings, setQuotesWarnings] = useState<string[]>([]);
   const [quotesWarningsOpen, setQuotesWarningsOpen] = useState(false);
   const [quotesCompletedErrorCount, setQuotesCompletedErrorCount] = useState<number | null>(null);
@@ -242,7 +244,10 @@ export default function App({ embedded = false }: AppProps) {
   const [babyEditHistory, setBabyEditHistory] = useState<NonNullable<PersistedSessionV1["babyEditHistory"]>>([]);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
   const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
-  const [defaultMugshotFilename, setDefaultMugshotFilename] = useState<string | null>(null);
+  const [defaultMugshotFilenames, setDefaultMugshotFilenames] = useState<string[]>([]);
+  const [defaultMugshotRandomize, setDefaultMugshotRandomize] = useState(false);
+  const [defaultMugshotSeed, setDefaultMugshotSeed] = useState(0);
+  const [lockedPeople, setLockedPeople] = useState<Record<number, true>>({});
   const [nameFontFamily, setNameFontFamily] = useState("Inter, system-ui, sans-serif");
   const [nameFontWeight, setNameFontWeight] = useState<FontWeight>("normal");
   const [nameFontSize, setNameFontSize] = useState<number>(40);
@@ -358,7 +363,7 @@ export default function App({ embedded = false }: AppProps) {
 
   const ensureDefaultMugshotEagle = async (): Promise<string | null> => {
     if (!workspaceId) return null;
-    if (defaultMugshotFilename) return defaultMugshotFilename;
+    if (defaultMugshotFilenames.length > 0) return defaultMugshotFilenames[0] ?? null;
 
     if (!defaultMugshotUploadInFlight.current) {
       defaultMugshotUploadInFlight.current = (async () => {
@@ -399,7 +404,7 @@ export default function App({ embedded = false }: AppProps) {
         });
         const file = new File([blob], "default_eagle.png", { type: "image/png" });
         const filename = await uploadImage(workspaceId, "mugshot", file);
-        setDefaultMugshotFilename(filename);
+        setDefaultMugshotFilenames((prev) => (prev.includes(filename) ? prev : [...prev, filename]));
         return filename;
       })();
     }
@@ -524,7 +529,9 @@ export default function App({ embedded = false }: AppProps) {
     setAllowInsecureUploads(false);
     setPeople([]);
     setSlotAssignments({});
-    setDefaultQuote("404 quote not found");
+    setDefaultQuotes(["404 quote not found"]);
+    setDefaultQuotesRandomize(false);
+    setDefaultQuotesSeed(0);
     setDefaultBabyFilename(null);
     setBabyIngest({
       advancedNameMatch: true,
@@ -536,7 +543,10 @@ export default function App({ embedded = false }: AppProps) {
     setBabyEditHistory([]);
     setBabyBackgroundColor("");
     setCenterBabyOnFace(false);
-    setDefaultMugshotFilename(null);
+    setDefaultMugshotFilenames([]);
+    setDefaultMugshotRandomize(false);
+    setDefaultMugshotSeed(0);
+    setLockedPeople({});
     setNameFontFamily("Inter, system-ui, sans-serif");
     setNameFontWeight("normal");
     setNameFontSize(40);
@@ -596,13 +606,22 @@ export default function App({ embedded = false }: AppProps) {
       slotAssignments,
       placementMode,
       forceAlphabetical,
-      defaultQuote,
+      defaultQuote: defaultQuotes[0] ?? "404 quote not found",
+      defaultQuotes,
+      defaultQuotesRandomize,
+      defaultQuotesSeed,
       defaultBabyFilename,
       babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
       babyBackgroundColor,
       centerBabyOnFace,
-      defaultMugshotFilename,
+      defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
+      defaultMugshotFilenames,
+      defaultMugshotRandomize,
+      defaultMugshotSeed,
+      lockedPeople: Object.keys(lockedPeople)
+        .map((k) => Number(k))
+        .filter((n) => Number.isFinite(n)),
       nameFontFamily,
       nameFontWeight,
       nameFontSize,
@@ -674,7 +693,13 @@ export default function App({ embedded = false }: AppProps) {
     setSlotAssignments(session.slotAssignments ?? {});
     setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
     setForceAlphabetical(Boolean(session.forceAlphabetical));
-    setDefaultQuote(session.defaultQuote ?? "404 quote not found");
+    const nextDefaultQuotes =
+      Array.isArray(session.defaultQuotes) && session.defaultQuotes.length > 0
+        ? session.defaultQuotes
+        : (session.defaultQuote ? [session.defaultQuote] : ["404 quote not found"]);
+    setDefaultQuotes(nextDefaultQuotes);
+    setDefaultQuotesRandomize(Boolean(session.defaultQuotesRandomize));
+    setDefaultQuotesSeed(typeof session.defaultQuotesSeed === "number" ? session.defaultQuotesSeed : 0);
     setDefaultBabyFilename(session.defaultBabyFilename ?? null);
     setBabyIngest({
       advancedNameMatch: Boolean(session.babyIngest?.advancedNameMatch ?? true),
@@ -686,7 +711,19 @@ export default function App({ embedded = false }: AppProps) {
     setBabyEditHistory((session.babyEditHistory ?? []) as any);
     setBabyBackgroundColor(session.babyBackgroundColor ?? "");
     setCenterBabyOnFace(Boolean(session.centerBabyOnFace));
-    setDefaultMugshotFilename(session.defaultMugshotFilename ?? null);
+    const nextDefaultMugshots =
+      Array.isArray(session.defaultMugshotFilenames) && session.defaultMugshotFilenames.length > 0
+        ? session.defaultMugshotFilenames
+        : (session.defaultMugshotFilename ? [session.defaultMugshotFilename] : []);
+    setDefaultMugshotFilenames(nextDefaultMugshots);
+    setDefaultMugshotRandomize(Boolean(session.defaultMugshotRandomize));
+    setDefaultMugshotSeed(typeof session.defaultMugshotSeed === "number" ? session.defaultMugshotSeed : 0);
+    setLockedPeople(
+      (session.lockedPeople ?? []).reduce((acc, n) => {
+        if (Number.isFinite(n)) acc[Number(n)] = true;
+        return acc;
+      }, {} as Record<number, true>)
+    );
     setNameFontFamily(session.nameFontFamily ?? "Inter, system-ui, sans-serif");
     setNameFontWeight((session.nameFontWeight as FontWeight) ?? "normal");
     setNameFontSize(typeof session.nameFontSize === "number" ? session.nameFontSize : 40);
@@ -726,9 +763,20 @@ export default function App({ embedded = false }: AppProps) {
       const f = String(session.defaultBabyFilename);
       if (!(await exists("baby", f))) session.defaultBabyFilename = null;
     }
-    if (session.defaultMugshotFilename) {
-      const f = String(session.defaultMugshotFilename);
-      if (!(await exists("mugshot", f))) session.defaultMugshotFilename = null;
+    const mugshots = Array.isArray(session.defaultMugshotFilenames)
+      ? session.defaultMugshotFilenames
+      : (session.defaultMugshotFilename ? [String(session.defaultMugshotFilename)] : []);
+    if (mugshots.length) {
+      const filtered: string[] = [];
+      for (const f of mugshots) {
+        // eslint-disable-next-line no-await-in-loop
+        if (await exists("mugshot", String(f))) filtered.push(String(f));
+      }
+      session.defaultMugshotFilenames = filtered;
+      session.defaultMugshotFilename = filtered[0] ?? null;
+    } else {
+      session.defaultMugshotFilename = null;
+      session.defaultMugshotFilenames = [];
     }
   };
 
@@ -1088,7 +1136,13 @@ export default function App({ embedded = false }: AppProps) {
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
         setForceAlphabetical(Boolean(saved.forceAlphabetical));
-        setDefaultQuote(saved.defaultQuote ?? "404 quote not found");
+        const savedDefaultQuotes =
+          Array.isArray(saved.defaultQuotes) && saved.defaultQuotes.length > 0
+            ? saved.defaultQuotes
+            : (saved.defaultQuote ? [saved.defaultQuote] : ["404 quote not found"]);
+        setDefaultQuotes(savedDefaultQuotes);
+        setDefaultQuotesRandomize(Boolean(saved.defaultQuotesRandomize));
+        setDefaultQuotesSeed(typeof saved.defaultQuotesSeed === "number" ? saved.defaultQuotesSeed : 0);
         setDefaultBabyFilename(saved.defaultBabyFilename ?? null);
         setBabyIngest({
           advancedNameMatch: Boolean(saved.babyIngest?.advancedNameMatch ?? true),
@@ -1100,7 +1154,19 @@ export default function App({ embedded = false }: AppProps) {
         setBabyEditHistory((saved.babyEditHistory ?? []) as any);
         setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
-        setDefaultMugshotFilename(saved.defaultMugshotFilename ?? null);
+        const savedDefaultMugshots =
+          Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
+            ? saved.defaultMugshotFilenames
+            : (saved.defaultMugshotFilename ? [saved.defaultMugshotFilename] : []);
+        setDefaultMugshotFilenames(savedDefaultMugshots);
+        setDefaultMugshotRandomize(Boolean(saved.defaultMugshotRandomize));
+        setDefaultMugshotSeed(typeof saved.defaultMugshotSeed === "number" ? saved.defaultMugshotSeed : 0);
+        setLockedPeople(
+          (saved.lockedPeople ?? []).reduce((acc, n) => {
+            if (Number.isFinite(n)) acc[Number(n)] = true;
+            return acc;
+          }, {} as Record<number, true>)
+        );
         setNameFontFamily(saved.nameFontFamily ?? "Inter, system-ui, sans-serif");
         setNameFontWeight((saved.nameFontWeight as FontWeight) ?? "normal");
         setNameFontSize(typeof saved.nameFontSize === "number" ? saved.nameFontSize : 40);
@@ -1182,11 +1248,20 @@ export default function App({ embedded = false }: AppProps) {
       slotAssignments,
       placementMode,
       forceAlphabetical,
-      defaultQuote,
+      defaultQuote: defaultQuotes[0] ?? "404 quote not found",
+      defaultQuotes,
+      defaultQuotesRandomize,
+      defaultQuotesSeed,
       defaultBabyFilename,
       babyBackgroundColor,
       centerBabyOnFace,
-      defaultMugshotFilename,
+      defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
+      defaultMugshotFilenames,
+      defaultMugshotRandomize,
+      defaultMugshotSeed,
+      lockedPeople: Object.keys(lockedPeople)
+        .map((k) => Number(k))
+        .filter((n) => Number.isFinite(n)),
       nameFontFamily,
       nameFontWeight,
       nameFontSize,
@@ -1223,11 +1298,16 @@ export default function App({ embedded = false }: AppProps) {
     slotAssignments,
     placementMode,
     forceAlphabetical,
-    defaultQuote,
+    defaultQuotes,
+    defaultQuotesRandomize,
+    defaultQuotesSeed,
     defaultBabyFilename,
     babyBackgroundColor,
     centerBabyOnFace,
-    defaultMugshotFilename,
+    defaultMugshotFilenames,
+    defaultMugshotRandomize,
+    defaultMugshotSeed,
+    lockedPeople,
     nameFontFamily,
     nameFontWeight,
     nameFontSize,
@@ -1370,6 +1450,59 @@ export default function App({ embedded = false }: AppProps) {
     if (forceAlphabetical) setSwapMode(false);
   }, [forceAlphabetical]);
 
+  const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
+
+  const makeRng = (seed: number) => {
+    let t = seed || 1;
+    return () => {
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ (t >>> 15), t | 1);
+      r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  const defaultMugshotAssignments = useMemo(() => {
+    if (!defaultMugshotFilenames.length) return {} as Record<number, string>;
+    const missing = people.filter((p) => !p.mugshot_filename);
+    const out: Record<number, string> = {};
+    let patternIdx = 0;
+    const rng = makeRng(defaultMugshotSeed || 1);
+    for (const p of missing) {
+      const choice = defaultMugshotRandomize
+        ? defaultMugshotFilenames[Math.floor(rng() * defaultMugshotFilenames.length)]
+        : defaultMugshotFilenames[patternIdx++ % defaultMugshotFilenames.length];
+      if (choice) out[p.index] = choice;
+    }
+    return out;
+  }, [people, defaultMugshotFilenames, defaultMugshotRandomize, defaultMugshotSeed]);
+
+  const defaultQuoteAssignments = useMemo(() => {
+    if (!defaultQuotes.length) return {} as Record<number, string>;
+    const out: Record<number, string> = {};
+    let patternIdx = 0;
+    const rng = makeRng(defaultQuotesSeed || 1);
+    for (const p of people) {
+      const hasQuote = Boolean((p.quote ?? "").trim());
+      if (hasQuote) continue;
+      const choice = defaultQuotesRandomize
+        ? defaultQuotes[Math.floor(rng() * defaultQuotes.length)]
+        : defaultQuotes[patternIdx++ % defaultQuotes.length];
+      if (choice) out[p.index] = choice;
+    }
+    return out;
+  }, [people, defaultQuotes, defaultQuotesRandomize, defaultQuotesSeed]);
+
+  useEffect(() => {
+    if (!defaultMugshotRandomize) return;
+    setDefaultMugshotSeed(Date.now());
+  }, [defaultMugshotRandomize, defaultMugshotFilenames.length]);
+
+  useEffect(() => {
+    if (!defaultQuotesRandomize) return;
+    setDefaultQuotesSeed(Date.now());
+  }, [defaultQuotesRandomize, defaultQuotes.length]);
+
   const getPeopleForGeneration = (list: PersonRecord[]) => {
     return forceAlphabetical ? [...list].sort(comparePeopleByLastName) : list;
   };
@@ -1411,11 +1544,27 @@ export default function App({ embedded = false }: AppProps) {
       const ensuredDefaultMugshot = await ensureDefaultMugshotEagle();
       const ensuredDefaultBaby = skipBabyPhotos ? undefined : ((await ensureDefaultBabyAbcBlocks()) ?? undefined);
       const peopleInput = opts.peopleOverride ?? people;
-      const peopleToSend = peopleInput.map((p) => ({
-        ...p,
-        quote: skipQuotes ? null : p.quote,
-        baby_photo_filename: skipBabyPhotos ? null : p.baby_photo_filename,
-      }));
+      const fallbackDefaults = defaultMugshotFilenames.length
+        ? defaultMugshotFilenames
+        : (ensuredDefaultMugshot ? [ensuredDefaultMugshot] : []);
+      let fallbackIdx = 0;
+      const peopleToSend = peopleInput.map((p) => {
+        const hasQuote = Boolean((p.quote ?? "").trim());
+        const quoteValue = skipQuotes
+          ? null
+          : (hasQuote ? p.quote : (defaultQuoteAssignments[p.index] ?? defaultQuoteFallback));
+        let mugshotValue = p.mugshot_filename ?? null;
+        if (!mugshotValue) {
+          mugshotValue = defaultMugshotAssignments[p.index] ?? fallbackDefaults[fallbackIdx % Math.max(1, fallbackDefaults.length)] ?? null;
+          fallbackIdx += 1;
+        }
+        return {
+          ...p,
+          mugshot_filename: mugshotValue,
+          quote: quoteValue,
+          baby_photo_filename: skipBabyPhotos ? null : p.baby_photo_filename,
+        };
+      });
       const gen = await generateSpread({
         workspace_id: workspaceId,
         template_id: templateId,
@@ -1430,8 +1579,8 @@ export default function App({ embedded = false }: AppProps) {
         force_alphabetical: forceAlphabetical,
         slot_assignments: slotAssignments,
         output_filename: opts.outputFilename,
-        default_quote: skipQuotes ? undefined : defaultQuote,
-        default_mugshot_filename: ensuredDefaultMugshot,
+        default_quote: skipQuotes ? undefined : defaultQuoteFallback,
+        default_mugshot_filename: fallbackDefaults[0] ?? ensuredDefaultMugshot,
         default_baby_photo_filename: skipBabyPhotos ? undefined : ensuredDefaultBaby,
         // Legacy fields (kept for backwards compatibility)
         font_family: nameFontFamily,
@@ -2093,7 +2242,9 @@ export default function App({ embedded = false }: AppProps) {
                 workspaceId={workspaceId}
                 babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
                 defaultBabyFilename={defaultBabyFilename}
-                defaultQuote={defaultQuote}
+                defaultQuoteFallback={defaultQuoteFallback}
+                defaultQuoteAssignments={defaultQuoteAssignments}
+                defaultMugshotAssignments={defaultMugshotAssignments}
                 perSpread={Math.max(1, Math.min(peoplePerSpread || 1, slots.length || 1))}
                 swapMode={swapMode}
                 swapDisabled={forceAlphabetical}
@@ -2160,8 +2311,13 @@ export default function App({ embedded = false }: AppProps) {
             <h2>{steps[activeStep]}</h2>
             <MugshotMappingStep
               workspaceId={workspaceId}
-              defaultMugshotFilename={defaultMugshotFilename}
-              onDefaultMugshotFilename={setDefaultMugshotFilename}
+              defaultMugshotFilenames={defaultMugshotFilenames}
+              onDefaultMugshotFilenames={setDefaultMugshotFilenames}
+              defaultMugshotRandomize={defaultMugshotRandomize}
+              onDefaultMugshotRandomize={setDefaultMugshotRandomize}
+              defaultMugshotAssignments={defaultMugshotAssignments}
+              lockedPeople={lockedPeople}
+              onLockedPeople={setLockedPeople}
               ensureDefaultMugshotEagle={ensureDefaultMugshotEagle}
               namingPattern={namingPattern}
               setNamingPattern={setNamingPattern}
@@ -2197,8 +2353,12 @@ export default function App({ embedded = false }: AppProps) {
           <section className="mapping-step">
             <h2>{steps[activeStep]}</h2>
             <QuotesStepStep
-              defaultQuote={defaultQuote}
-              onDefaultQuote={setDefaultQuote}
+              defaultQuotes={defaultQuotes}
+              onDefaultQuotes={setDefaultQuotes}
+              defaultQuotesRandomize={defaultQuotesRandomize}
+              onDefaultQuotesRandomize={setDefaultQuotesRandomize}
+              defaultQuoteAssignments={defaultQuoteAssignments}
+              defaultMugshotAssignments={defaultMugshotAssignments}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}
               quotesWarningsOpen={quotesWarningsOpen}
@@ -2230,7 +2390,9 @@ export default function App({ embedded = false }: AppProps) {
               workspaceId={workspaceId}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               defaultBabyFilename={defaultBabyFilename}
-              defaultQuote={defaultQuote}
+              defaultQuoteFallback={defaultQuoteFallback}
+              defaultQuoteAssignments={defaultQuoteAssignments}
+              defaultMugshotAssignments={defaultMugshotAssignments}
               onDefaultBabyFilename={setDefaultBabyFilename}
               babyZipWarnings={babyZipWarnings}
               onBabyZipWarnings={setBabyZipWarnings}

@@ -12,8 +12,13 @@ import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../util
 
 export function MugshotMapping({
   workspaceId,
-  defaultMugshotFilename,
-  onDefaultMugshotFilename,
+  defaultMugshotFilenames,
+  onDefaultMugshotFilenames,
+  defaultMugshotRandomize,
+  onDefaultMugshotRandomize,
+  defaultMugshotAssignments,
+  lockedPeople,
+  onLockedPeople,
   ensureDefaultMugshotEagle,
   namingPattern,
   setNamingPattern,
@@ -43,8 +48,13 @@ export function MugshotMapping({
   onContinue,
 }: {
   workspaceId: string | null;
-  defaultMugshotFilename: string | null;
-  onDefaultMugshotFilename: (v: string | null) => void;
+  defaultMugshotFilenames: string[];
+  onDefaultMugshotFilenames: React.Dispatch<React.SetStateAction<string[]>>;
+  defaultMugshotRandomize: boolean;
+  onDefaultMugshotRandomize: (v: boolean) => void;
+  defaultMugshotAssignments: Record<number, string>;
+  lockedPeople: Record<number, true>;
+  onLockedPeople: React.Dispatch<React.SetStateAction<Record<number, true>>>;
   ensureDefaultMugshotEagle: () => Promise<string | null>;
   namingPattern: string;
   setNamingPattern: (v: string) => void;
@@ -88,6 +98,7 @@ export function MugshotMapping({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [swapsPerformed, setSwapsPerformed] = useState(false);
+  const [defaultDragIdx, setDefaultDragIdx] = useState<number | null>(null);
 
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
@@ -108,19 +119,22 @@ export function MugshotMapping({
 
   useEffect(() => {
     if (!workspaceId) return;
-    if (defaultMugshotFilename) return;
+    if (defaultMugshotFilenames.length > 0) return;
     if (didInitDefaultMugshot.current) return;
 
     (async () => {
       try {
         const filename = await ensureDefaultMugshotEagle();
-        if (filename) didInitDefaultMugshot.current = true;
+        if (filename) {
+          didInitDefaultMugshot.current = true;
+          onDefaultMugshotFilenames((prev) => (prev.includes(filename) ? prev : [...prev, filename]));
+        }
       } catch (err) {
         console.error(err);
         didInitDefaultMugshot.current = false;
       }
     })();
-  }, [workspaceId, defaultMugshotFilename, ensureDefaultMugshotEagle, onDefaultMugshotFilename]);
+  }, [workspaceId, defaultMugshotFilenames.length, ensureDefaultMugshotEagle, onDefaultMugshotFilenames]);
 
   useEffect(() => {
     if (!loading || progress <= 0) {
@@ -340,12 +354,67 @@ export function MugshotMapping({
     }
   };
 
-  const uploadDefaultMugshot = async (file: File | null) => {
-    if (!workspaceId || !file) return;
+  const toggleLock = (personIndex: number) => {
+    onLockedPeople((prev) => {
+      const next = { ...prev };
+      if (next[personIndex]) {
+        delete next[personIndex];
+      } else {
+        next[personIndex] = true;
+      }
+      return next;
+    });
+  };
+
+  const removePerson = (personIndex: number) => {
+    setPeople((prev) => prev.filter((p) => p.index !== personIndex));
+    setAdjustments((prev) => {
+      const { [personIndex]: _omit, ...rest } = prev;
+      return rest;
+    });
+    onLockedPeople((prev) => {
+      const next = { ...prev };
+      delete next[personIndex];
+      return next;
+    });
+    setSwapsPerformed(true);
+  };
+
+  const reorderDefaultMugshots = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    onDefaultMugshotFilenames((prev) => {
+      if (fromIdx < 0 || fromIdx >= prev.length) return prev;
+      if (toIdx < 0 || toIdx >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+  };
+
+  const removeDefaultMugshot = (filename: string) => {
+    onDefaultMugshotFilenames((prev) => prev.filter((f) => f !== filename));
+  };
+
+  const uploadDefaultMugshots = async (files: File[] | null) => {
+    if (!workspaceId || !files || files.length === 0) return;
     try {
-      const filename = await uploadImage(workspaceId, "mugshot", file);
-      onDefaultMugshotFilename(filename);
-      setStatus("Default portrait updated");
+      const uploaded: string[] = [];
+      for (const file of files) {
+        // eslint-disable-next-line no-await-in-loop
+        const filename = await uploadImage(workspaceId, "mugshot", file);
+        uploaded.push(filename);
+      }
+      if (uploaded.length) {
+        onDefaultMugshotFilenames((prev) => {
+          const next = [...prev];
+          for (const f of uploaded) {
+            if (!next.includes(f)) next.push(f);
+          }
+          return next;
+        });
+      }
+      setStatus(`Added ${uploaded.length} default portrait${uploaded.length === 1 ? "" : "s"}`);
     } catch (err) {
       console.error(err);
       setStatus(`Default portrait upload failed.\n${formatServerMessage(err)}`);
@@ -354,6 +423,13 @@ export function MugshotMapping({
 
   const applyDecisions = async () => {
     if (!workspaceId) return;
+    const lockedSnapshot = Object.keys(lockedPeople).reduce((acc, key) => {
+      const idx = Number(key);
+      if (!Number.isFinite(idx)) return acc;
+      const person = people.find((p) => p.index === idx);
+      acc[idx] = person?.mugshot_filename ?? null;
+      return acc;
+    }, {} as Record<number, string | null>);
     const entries = Object.entries(adjustments)
       .map(([personIndex, entry]) => ({ personIndex: Number(personIndex), entry }))
       .filter(({ personIndex }) => Number.isFinite(personIndex));
@@ -404,7 +480,19 @@ export function MugshotMapping({
     setStatus("Applying mapping changes...");
     try {
       const resp = await applyMapping(workspaceId, people, payload);
-      setPeople(resp.people);
+      let nextPeople = resp.people;
+      if (Object.keys(lockedPeople).length > 0) {
+        nextPeople = resp.people.map((p) => {
+          if (!lockedPeople[p.index]) return p;
+          const adjustment = adjustments[p.index];
+          if (adjustment?.remove || adjustment?.replacement_mugshot) return p;
+          if (Object.prototype.hasOwnProperty.call(lockedSnapshot, p.index)) {
+            return { ...p, mugshot_filename: lockedSnapshot[p.index] };
+          }
+          return p;
+        });
+      }
+      setPeople(nextPeople);
       setStatus("Mapping updated");
       setAdjustments({});
       setAdjustmentsResetNonce((n) => n + 1);
@@ -431,6 +519,10 @@ export function MugshotMapping({
     if (sourceIdx === targetIdx) return;
     if (sourceIdx < 0 || targetIdx < 0) return;
     if (sourceIdx >= people.length || targetIdx >= people.length) return;
+    const sourcePerson = people[sourceIdx];
+    const targetPerson = people[targetIdx];
+    if (!sourcePerson || !targetPerson) return;
+    if (lockedPeople[sourcePerson.index] || lockedPeople[targetPerson.index]) return;
     const next = [...people];
     const a = next[sourceIdx];
     const b = next[targetIdx];
@@ -552,28 +644,51 @@ export function MugshotMapping({
             />
 
             <div className="stack" style={{ gap: 6 }}>
-              <strong>Default portrait (optional)</strong>
-              <div className="muted small">Used when a student has no portrait. You can replace it any time.</div>
-              {workspaceId && defaultMugshotFilename ? (
-                <div className="inline" style={{ alignItems: "center", gap: 10 }}>
-                  <img
-                    src={assetUrl(workspaceId, "mugshot", defaultMugshotFilename)}
-                    alt="default portrait"
-                    className="thumb"
-                  />
-                  <span className="muted small">Current default: {defaultMugshotFilename}</span>
+              <strong>Default portraits (optional)</strong>
+              <div className="muted small">Used when a student has no portrait. Reorder to create a pattern.</div>
+              {workspaceId && defaultMugshotFilenames.length > 0 ? (
+                <div className="default-portrait-grid">
+                  {defaultMugshotFilenames.map((filename, idx) => (
+                    <div
+                      key={`${filename}-${idx}`}
+                      className={clsx("default-portrait-item", defaultDragIdx === idx && "dragging")}
+                      draggable
+                      onDragStart={() => setDefaultDragIdx(idx)}
+                      onDragOver={(evt) => evt.preventDefault()}
+                      onDragEnd={() => setDefaultDragIdx(null)}
+                      onDrop={() => {
+                        if (defaultDragIdx == null) return;
+                        reorderDefaultMugshots(defaultDragIdx, idx);
+                        setDefaultDragIdx(null);
+                      }}
+                    >
+                      <img src={assetUrl(workspaceId, "mugshot", filename)} alt="default portrait" className="thumb" />
+                      <div className="default-portrait-actions">
+                        <button type="button" onClick={() => removeDefaultMugshot(filename)} disabled={loading}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="inline" style={{ alignItems: "center", gap: 10 }}>
                   <img src={withBase("assets/default_eagle.svg")} alt="default portrait (eagle)" className="thumb" />
-                  <span className="muted small">Current default: eagle</span>
+                  <span className="muted small">Current default: eagle (auto fallback)</span>
                 </div>
               )}
 
-              <UploadDropLabel accept="image/*" disabled={loading} onFile={(file) => uploadDefaultMugshot(file)}>
-                <span className="muted small">Upload default portrait</span>
-                <input type="file" accept="image/*" onChange={(e) => uploadDefaultMugshot(e.target.files?.[0] ?? null)} />
+              <UploadDropLabel accept="image/*" disabled={loading} multiple onFiles={uploadDefaultMugshots}>
+                <span className="muted small">Upload default portrait(s)</span>
+                <input type="file" accept="image/*" multiple />
               </UploadDropLabel>
+
+              <ToggleSwitch
+                checked={defaultMugshotRandomize}
+                onChange={onDefaultMugshotRandomize}
+                label="Randomize default portraits"
+                description="When on, missing portraits use a random default from the list."
+              />
 
               <div className="inline" style={{ gap: 10 }}>
                 <button
@@ -583,18 +698,19 @@ export function MugshotMapping({
                     try {
                       const filename = await ensureDefaultMugshotEagle();
                       if (filename) {
-                        setStatus("Default portrait set to eagle");
+                        onDefaultMugshotFilenames((prev) => (prev.includes(filename) ? prev : [...prev, filename]));
+                        setStatus("Eagle portrait added to defaults");
                       }
                     } catch (err) {
                       console.error(err);
-                      setStatus("Could not set default eagle portrait");
+                      setStatus("Could not add eagle portrait");
                     }
                   }}
                 >
-                  Use eagle default
+                  Add eagle default
                 </button>
-                <button type="button" disabled={loading} onClick={() => onDefaultMugshotFilename(null)}>
-                  Clear default
+                <button type="button" disabled={loading} onClick={() => onDefaultMugshotFilenames([])}>
+                  Clear defaults
                 </button>
               </div>
             </div>
@@ -682,6 +798,8 @@ export function MugshotMapping({
 
             <div className="people-grid">
               {people.map((p, rowIdx) => {
+                const isLocked = Boolean(lockedPeople[p.index]);
+                const assignedDefault = defaultMugshotAssignments[p.index];
                 const cardClasses = clsx("people-card", {
                   "swap-mode": swapMode === "card",
                   dragging: swapMode === "card" && dragIdx === rowIdx,
@@ -715,6 +833,18 @@ export function MugshotMapping({
                           </strong>
                         </div>
                       </div>
+                      <div className="people-card-header-actions">
+                        <button
+                          type="button"
+                          className={clsx("lock-toggle", isLocked && "locked")}
+                          onClick={() => toggleLock(p.index)}
+                          disabled={loading}
+                          title={isLocked ? "Unlock portrait" : "Lock portrait"}
+                          aria-pressed={isLocked}
+                        >
+                          {isLocked ? "🔒" : "🔓"}
+                        </button>
+                      </div>
                       <div className="thumb-cell">
                         {p.mugshot_filename && workspaceId ? (
                           <img
@@ -723,25 +853,27 @@ export function MugshotMapping({
                             className={clsx("thumb", {
                               "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
                             })}
-                            draggable={swapMode === "portrait"}
+                            draggable={swapMode === "portrait" && !isLocked}
                             onDragStart={(evt) => {
                               if (swapMode !== "portrait") return;
+                              if (isLocked) return;
                               setDragIdx(rowIdx);
                               evt.dataTransfer.effectAllowed = "move";
                               evt.dataTransfer.setData("text/plain", String(rowIdx));
                             }}
                           />
-                        ) : defaultMugshotFilename && workspaceId ? (
+                        ) : assignedDefault && workspaceId ? (
                           <div className="stack" style={{ gap: 4, alignItems: "center" }}>
                             <img
-                              src={assetUrl(workspaceId, "mugshot", defaultMugshotFilename)}
+                              src={assetUrl(workspaceId, "mugshot", assignedDefault)}
                               alt="default portrait"
                               className={clsx("thumb", {
                                 "portrait-swap-target": swapMode === "portrait" && dropTarget === rowIdx,
                               })}
-                              draggable={swapMode === "portrait"}
+                              draggable={swapMode === "portrait" && !isLocked}
                               onDragStart={(evt) => {
                                 if (swapMode !== "portrait") return;
+                                if (isLocked) return;
                                 setDragIdx(rowIdx);
                                 evt.dataTransfer.effectAllowed = "move";
                                 evt.dataTransfer.setData("text/plain", String(rowIdx));
@@ -761,7 +893,7 @@ export function MugshotMapping({
                           <ToggleSwitch
                             checked={Boolean(adjustments[p.index]?.shiftEnabled)}
                             onChange={(v) => setShiftEnabled(p.index, v)}
-                            disabled={loading || swapEnabled}
+                            disabled={loading || swapEnabled || isLocked}
                             label="Shift"
                             className="small"
                             style={{ margin: 0 }}
@@ -773,7 +905,7 @@ export function MugshotMapping({
                               type="number"
                               step={1}
                               value={Math.floor(adjustments[p.index]?.shiftCount ?? 0)}
-                              disabled={loading || swapEnabled || !adjustments[p.index]?.shiftEnabled}
+                              disabled={loading || swapEnabled || isLocked || !adjustments[p.index]?.shiftEnabled}
                               onChange={(e) => setShiftCount(p.index, Number(e.target.value))}
                               style={{ width: 72 }}
                             />
@@ -783,18 +915,27 @@ export function MugshotMapping({
                         <ToggleSwitch
                           checked={Boolean(adjustments[p.index]?.remove)}
                           onChange={(v) => setRemoveEnabled(p.index, v)}
-                          disabled={loading || swapEnabled}
+                          disabled={loading || swapEnabled || isLocked}
                           label="Reset to default portrait"
                           className="small"
                           style={{ margin: 0 }}
                         />
+
+                        <button
+                          type="button"
+                          className="danger small"
+                          onClick={() => removePerson(p.index)}
+                          disabled={loading || swapEnabled}
+                        >
+                          Remove person
+                        </button>
                       </div>
                     </div>
 
                     <UploadDropLabel
                       key={`${p.index}-${adjustmentsResetNonce}`}
                       accept="image/*"
-                      disabled={loading || swapEnabled || Boolean(adjustments[p.index]?.remove)}
+                      disabled={loading || swapEnabled || Boolean(adjustments[p.index]?.remove) || isLocked}
                       onFile={(file) => uploadReplacement(p.index, file)}
                     >
                       <span className="muted small">Upload replacement portrait</span>

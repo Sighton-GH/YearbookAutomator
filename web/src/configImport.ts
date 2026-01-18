@@ -4,6 +4,7 @@ export type SessionLike = {
   skipBabyPhotos?: boolean;
   defaultBabyFilename?: string | null;
   defaultMugshotFilename?: string | null;
+  defaultMugshotFilenames?: string[];
   people?: Array<{
     mugshot_filename?: string | null;
     baby_photo_filename?: string | null;
@@ -61,6 +62,12 @@ export async function computeMissingAssets(
   for (const p of session.people ?? []) {
     add("mugshot", p.mugshot_filename ?? null);
     add("baby", p.baby_photo_filename ?? null);
+  }
+
+  if (Array.isArray(session.defaultMugshotFilenames)) {
+    for (const f of session.defaultMugshotFilenames) add("mugshot", f ?? null);
+  } else {
+    add("mugshot", session.defaultMugshotFilename ?? null);
   }
 
   for (const it of wanted) {

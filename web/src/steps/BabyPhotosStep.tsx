@@ -30,7 +30,9 @@ export function BabyPhotosStep({
   workspaceId,
   babyMaskBox,
   defaultBabyFilename,
-  defaultQuote,
+  defaultQuoteFallback,
+  defaultQuoteAssignments,
+  defaultMugshotAssignments,
   onDefaultBabyFilename,
   babyZipWarnings,
   onBabyZipWarnings,
@@ -62,7 +64,9 @@ export function BabyPhotosStep({
   workspaceId: string | null;
   babyMaskBox: Box | null;
   defaultBabyFilename: string | null;
-  defaultQuote: string;
+  defaultQuoteFallback: string;
+  defaultQuoteAssignments: Record<number, string>;
+  defaultMugshotAssignments: Record<number, string>;
   onDefaultBabyFilename: (v: string | null) => void;
   babyZipWarnings: string[];
   onBabyZipWarnings: (v: string[]) => void;
@@ -1282,7 +1286,8 @@ export function BabyPhotosStep({
             <div className="people-grid">
               {people.map((p, idx) => {
                 const babyFilename = p.baby_photo_filename || defaultBabyFilename;
-                const quote = (p.quote ?? defaultQuote ?? "").trim();
+                const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
+                const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
                 const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
                 const babyThumbStyle: React.CSSProperties = {
                   ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
@@ -1310,6 +1315,11 @@ export function BabyPhotosStep({
                         <div className="thumb-cell">
                           {p.mugshot_filename && workspaceId ? (
                             <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
+                          ) : assignedDefaultMugshot && workspaceId ? (
+                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                              <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
+                              <div className="muted small">(default)</div>
+                            </div>
                           ) : (
                             <div className="muted small">(missing)</div>
                           )}

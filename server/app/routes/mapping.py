@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.mapping_review import apply_mapping_decisions
+from app.services.spreadsheet import ingest_spreadsheet
 from app.services.storage import save_upload, workspace_dir
 from app.services.background_removal import (
     BackgroundMode,

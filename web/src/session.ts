@@ -28,7 +28,10 @@ export type PersistedSessionV1 = {
   slotAssignments: Record<number, number>;
   placementMode?: PlacementMode;
   forceAlphabetical?: boolean;
-  defaultQuote: string;
+  defaultQuote?: string;
+  defaultQuotes?: string[];
+  defaultQuotesRandomize?: boolean;
+  defaultQuotesSeed?: number;
   defaultBabyFilename: string | null;
   babyIngest?: {
     advancedNameMatch?: boolean;
@@ -51,6 +54,10 @@ export type PersistedSessionV1 = {
   babyBackgroundColor?: string;
   centerBabyOnFace?: boolean;
   defaultMugshotFilename?: string | null;
+  defaultMugshotFilenames?: string[];
+  defaultMugshotRandomize?: boolean;
+  defaultMugshotSeed?: number;
+  lockedPeople?: number[];
   nameFontFamily: string;
   nameFontWeight: FontWeight;
   nameFontSize: number;
