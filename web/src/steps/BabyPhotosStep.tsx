@@ -927,12 +927,6 @@ export function BabyPhotosStep({
         <div className="panel">
           {workspaceId && people.length > 0 ? (
             <div className="stack">
-              <div className="inline">
-                <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
-                  Reset to original photos
-                </button>
-              </div>
-
               <div className="people-grid">
                 {people.map((p, idx) => {
                   const babyFilename = p.baby_photo_filename || defaultBabyFilename;
@@ -957,44 +951,45 @@ export function BabyPhotosStep({
                             </strong>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="grid two">
-                        <div className="stack" style={{ gap: 6 }}>
-                          <div className="muted small">Mugshot</div>
-                          <div className="thumb-cell">
-                            {p.mugshot_filename && workspaceId ? (
-                              <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
-                            ) : assignedDefaultMugshot && workspaceId ? (
-                              <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                                <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
-                                <div className="muted small">(default)</div>
-                              </div>
-                            ) : (
-                              <div className="muted small">(missing)</div>
-                            )}
+                        <div className="thumb-stack">
+                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                            <div className="muted small">Mugshot</div>
+                            <div className="thumb-cell">
+                              {p.mugshot_filename && workspaceId ? (
+                                <img src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)} alt="portrait" className="thumb" />
+                              ) : assignedDefaultMugshot && workspaceId ? (
+                                <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                                  <img src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)} alt="default portrait" className="thumb" />
+                                  <div className="muted small">(default)</div>
+                                </div>
+                              ) : (
+                                <div className="muted small">(missing)</div>
+                              )}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="stack" style={{ gap: 6 }}>
-                          <div className="muted small">Baby photo</div>
-                          <div className={clsx("thumb-cell", "thumb-cell-baby", canShowImage && "has-image")}
-                            style={babyThumbStyle}
-                          >
-                            {babyFilename && workspaceId ? (
-                              <img
-                                src={assetUrl(workspaceId, "baby", babyFilename)}
-                                alt="baby"
-                                className={clsx("thumb", "thumb-baby", maskUrl && "masked")}
-                                onClick={() => {
-                                  if (!babyFilename) return;
-                                  openCropper(idx, babyFilename);
-                                }}
-                                onError={() => setBabyThumbError((prev) => ({ ...prev, [p.index]: true }))}
-                              />
-                            ) : (
-                              <div className="muted small">(missing)</div>
-                            )}
+                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                            <div className="muted small">Baby</div>
+                            <div
+                              className={clsx("thumb-cell", "thumb-cell-baby", canShowImage && "has-image")}
+                              style={babyThumbStyle}
+                            >
+                              {babyFilename && workspaceId ? (
+                                <img
+                                  src={assetUrl(workspaceId, "baby", babyFilename)}
+                                  alt="baby"
+                                  className={clsx("thumb", "thumb-baby", maskUrl && "masked")}
+                                  onClick={() => {
+                                    if (!babyFilename) return;
+                                    openCropper(idx, babyFilename);
+                                  }}
+                                  onError={() => setBabyThumbError((prev) => ({ ...prev, [p.index]: true }))}
+                                />
+                              ) : (
+                                <div className="muted small">(missing)</div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1043,6 +1038,10 @@ export function BabyPhotosStep({
       <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
+            <button type="button" className="danger" onClick={resetToOriginalPhotos} disabled={loading || !originalBabyPeople}>
+              Reset to original photos
+            </button>
+
             <p className="muted">
               Upload baby photos in two ways: (1) a ZIP to automatically match photos to students by filename, and (2) a default
               baby photo used when a student is missing one. Click <strong>Process</strong> to apply your selections. After processing, you can

@@ -15,6 +15,7 @@ export function QuotesStep({
   onDefaultQuotesRandomize,
   defaultQuoteAssignments,
   defaultMugshotAssignments,
+  defaultBabyFilename,
   quotesWarnings,
   onQuotesWarnings,
   quotesWarningsOpen,
@@ -42,6 +43,7 @@ export function QuotesStep({
   onDefaultQuotesRandomize: (v: boolean) => void;
   defaultQuoteAssignments: Record<number, string>;
   defaultMugshotAssignments: Record<number, string>;
+  defaultBabyFilename: string | null;
   quotesWarnings: string[];
   onQuotesWarnings: (v: string[]) => void;
   quotesWarningsOpen: boolean;
@@ -232,6 +234,7 @@ export function QuotesStep({
                 const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
                 const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote;
                 const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+                const babyFilename = p.baby_photo_filename || defaultBabyFilename;
                 return (
                   <div className="people-card" key={p.index}>
                     <div className="people-card-header">
@@ -244,24 +247,39 @@ export function QuotesStep({
                         </div>
                       </div>
                       <div className="thumb-stack">
-                        {p.mugshot_filename ? (
-                          <img
-                            src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                            alt="portrait"
-                            className="thumb"
-                          />
-                        ) : assignedDefaultMugshot ? (
-                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                        <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                          <div className="muted small">Mugshot</div>
+                          {p.mugshot_filename ? (
                             <img
-                              src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
-                              alt="default portrait"
+                              src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
+                              alt="portrait"
                               className="thumb"
                             />
-                            <div className="muted small">(default)</div>
-                          </div>
-                        ) : (
-                          <div className="muted small">(missing mugshot)</div>
-                        )}
+                          ) : assignedDefaultMugshot ? (
+                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                              <img
+                                src={assetUrl(workspaceId, "mugshot", assignedDefaultMugshot)}
+                                alt="default portrait"
+                                className="thumb"
+                              />
+                              <div className="muted small">(default)</div>
+                            </div>
+                          ) : (
+                            <div className="muted small">(missing)</div>
+                          )}
+                        </div>
+                        <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                          <div className="muted small">Baby</div>
+                          {babyFilename ? (
+                            <img
+                              src={assetUrl(workspaceId, "baby", babyFilename)}
+                              alt="baby"
+                              className="thumb thumb-baby"
+                            />
+                          ) : (
+                            <div className="muted small">(missing)</div>
+                          )}
+                        </div>
                       </div>
                     </div>
 

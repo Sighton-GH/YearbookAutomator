@@ -17,6 +17,9 @@ export function MugshotMapping({
   defaultMugshotRandomize,
   onDefaultMugshotRandomize,
   defaultMugshotAssignments,
+  defaultBabyFilename,
+  defaultQuoteAssignments,
+  defaultQuoteFallback,
   lockedPeople,
   onLockedPeople,
   ensureDefaultMugshotEagle,
@@ -53,6 +56,9 @@ export function MugshotMapping({
   defaultMugshotRandomize: boolean;
   onDefaultMugshotRandomize: (v: boolean) => void;
   defaultMugshotAssignments: Record<number, string>;
+  defaultBabyFilename: string | null;
+  defaultQuoteAssignments: Record<number, string>;
+  defaultQuoteFallback: string;
   lockedPeople: Record<number, true>;
   onLockedPeople: React.Dispatch<React.SetStateAction<Record<number, true>>>;
   ensureDefaultMugshotEagle: () => Promise<string | null>;
@@ -150,6 +156,10 @@ export function MugshotMapping({
     typeof window !== "undefined" &&
     !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) &&
     window.location.protocol !== "https:";
+
+  const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
+    setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
+  };
 
   const handleIngest = async () => {
     // Make sure the user can see status/progress updates.
@@ -554,38 +564,13 @@ export function MugshotMapping({
         <div className="panel">
           {workspaceId && people.length > 0 ? (
             <div className="stack">
-              <div className="inline">
-                <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
-                  Apply mapping adjustments
-                </button>
-                <button type="button" className="danger" onClick={resetToOriginalMapping} disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}>
-                  Reset to original mapping
-                </button>
-                <button
-                  type="button"
-                  className={clsx({ primary: swapMode === "card" })}
-                  onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}
-                >
-                  {swapMode === "card" ? "Swap Cards: On" : "Swap Cards: Off"}
-                </button>
-                <button
-                  type="button"
-                  className={clsx({ primary: swapMode === "portrait" })}
-                  onClick={() => setSwapMode((v) => (v === "portrait" ? "off" : "portrait"))}
-                >
-                  {swapMode === "portrait" ? "Swap Portraits: On" : "Swap Portraits: Off"}
-                </button>
-              </div>
-
-              {swapMode === "card" && <p className="muted small">Card swap: drag a card onto another to swap their ordering.</p>}
-              {swapMode === "portrait" && (
-                <p className="muted small">Portrait swap: drag a card onto another to swap which portrait is mapped to each card.</p>
-              )}
-
               <div className="people-grid">
                 {people.map((p, rowIdx) => {
                   const isLocked = Boolean(lockedPeople[p.index]);
                   const assignedDefault = defaultMugshotAssignments[p.index];
+                  const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
+                  const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote || defaultQuoteFallback;
+                  const babyFilename = p.baby_photo_filename || defaultBabyFilename;
                   const cardClasses = clsx("people-card", {
                     "swap-mode": swapMode === "card",
                     dragging: swapMode === "card" && dragIdx === rowIdx,
@@ -624,29 +609,54 @@ export function MugshotMapping({
                         </div>
 
                         <div className="thumb-stack">
-                          {p.mugshot_filename ? (
-                            <img
-                              src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
-                              alt="portrait"
-                              className="thumb"
-                            />
-                          ) : assignedDefault ? (
-                            <div className="stack" style={{ gap: 4, alignItems: "center" }}>
-                              <img src={assetUrl(workspaceId, "mugshot", assignedDefault)} alt="default portrait" className="thumb" />
-                              <div className="muted small">(default)</div>
-                            </div>
-                          ) : (
-                            <div className="muted small">(missing mugshot)</div>
-                          )}
-                          {swapMode === "portrait" ? (
-                            <div className="drag-overlay">
-                              {swapEnabled ? "Drag to swap" : ""}
-                            </div>
-                          ) : null}
+                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                            <div className="muted small">Mugshot</div>
+                            {p.mugshot_filename ? (
+                              <img
+                                src={assetUrl(workspaceId, "mugshot", p.mugshot_filename)}
+                                alt="portrait"
+                                className="thumb"
+                              />
+                            ) : assignedDefault ? (
+                              <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                                <img src={assetUrl(workspaceId, "mugshot", assignedDefault)} alt="default portrait" className="thumb" />
+                                <div className="muted small">(default)</div>
+                              </div>
+                            ) : (
+                              <div className="muted small">(missing)</div>
+                            )}
+                            {swapMode === "portrait" ? (
+                              <div className="drag-overlay">
+                                {swapEnabled ? "Drag to swap" : ""}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="stack" style={{ gap: 4, alignItems: "center" }}>
+                            <div className="muted small">Baby</div>
+                            {babyFilename ? (
+                              <img
+                                src={assetUrl(workspaceId, "baby", babyFilename)}
+                                alt="baby"
+                                className="thumb thumb-baby"
+                              />
+                            ) : (
+                              <div className="muted small">(missing)</div>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       <div className="stack" style={{ gap: 8 }}>
+                        <label className="field">
+                          <span>Quote</span>
+                          <textarea
+                            rows={2}
+                            value={displayQuote}
+                            onChange={(e) => updatePerson(rowIdx, (prev) => ({ ...prev, quote: e.target.value }))}
+                            placeholder=""
+                          />
+                        </label>
+
                         <label className="field">
                           <span>Portrait file</span>
                           <div className="inline" style={{ gap: 8, alignItems: "center" }}>
@@ -713,6 +723,44 @@ export function MugshotMapping({
       <aside className="mapping-sidebar">
         <div className="panel">
           <div className="stack">
+            <div className="stack" style={{ gap: 8 }}>
+              <div className="inline" style={{ flexWrap: "wrap" }}>
+                <button className="primary" onClick={applyDecisions} disabled={loading || !people.length}>
+                  Apply mapping adjustments
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={resetToOriginalMapping}
+                  disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
+                >
+                  Reset to original mapping
+                </button>
+              </div>
+
+              <div className="inline" style={{ flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className={clsx({ primary: swapMode === "card" })}
+                  onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}
+                >
+                  {swapMode === "card" ? "Swap Cards: On" : "Swap Cards: Off"}
+                </button>
+                <button
+                  type="button"
+                  className={clsx({ primary: swapMode === "portrait" })}
+                  onClick={() => setSwapMode((v) => (v === "portrait" ? "off" : "portrait"))}
+                >
+                  {swapMode === "portrait" ? "Swap Portraits: On" : "Swap Portraits: Off"}
+                </button>
+              </div>
+
+              {swapMode === "card" && <p className="muted small">Card swap: drag a card onto another to swap their ordering.</p>}
+              {swapMode === "portrait" && (
+                <p className="muted small">Portrait swap: drag a card onto another to swap which portrait is mapped to each card.</p>
+              )}
+            </div>
+
             <p className="muted">
               Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this step matches portraits by
               digits first (example: 001.jpg → row 1) using the filename pattern, with rows starting at 1 (header row is

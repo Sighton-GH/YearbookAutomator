@@ -477,6 +477,10 @@ body { margin: 0; }
   padding: 24px;
 }
 
+.page.page-wide {
+  max-width: 100%;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -1242,6 +1246,11 @@ button:disabled {
   gap: 12px;
 }
 
+.page.page-wide .people-grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
 .people-card {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1251,6 +1260,16 @@ button:disabled {
   gap: 10px;
   overflow: hidden;
   min-width: 0;
+}
+
+.page.page-wide .people-card {
+  padding: 12px;
+  gap: 10px;
+  overflow: visible;
+}
+
+.page.page-wide .people-card-header {
+  flex-wrap: wrap;
 }
 
 .people-card-header-actions {
@@ -1492,6 +1511,16 @@ button.small {
 .thumb-baby {
   width: 72px;
   height: 72px;
+}
+
+.page.page-wide .people-card .thumb {
+  width: 90px;
+  height: 90px;
+}
+
+.page.page-wide .people-card .thumb-baby {
+  width: 70px;
+  height: 70px;
 }
 
 .baby-thumb-editable {

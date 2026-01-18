@@ -2083,7 +2083,11 @@ export default function App({ embedded = false }: AppProps) {
         </div>
       )}
 
-      <div className="page">
+      <div
+        className={clsx("page", {
+          "page-wide": activeStep === 2 || activeStep === 3 || activeStep === 4,
+        })}
+      >
 
       <ToolMessages
         messages={toolMessages}
@@ -2316,6 +2320,9 @@ export default function App({ embedded = false }: AppProps) {
               defaultMugshotRandomize={defaultMugshotRandomize}
               onDefaultMugshotRandomize={setDefaultMugshotRandomize}
               defaultMugshotAssignments={defaultMugshotAssignments}
+              defaultBabyFilename={defaultBabyFilename}
+              defaultQuoteAssignments={defaultQuoteAssignments}
+              defaultQuoteFallback={defaultQuoteFallback}
               lockedPeople={lockedPeople}
               onLockedPeople={setLockedPeople}
               ensureDefaultMugshotEagle={ensureDefaultMugshotEagle}
@@ -2359,6 +2366,7 @@ export default function App({ embedded = false }: AppProps) {
               onDefaultQuotesRandomize={setDefaultQuotesRandomize}
               defaultQuoteAssignments={defaultQuoteAssignments}
               defaultMugshotAssignments={defaultMugshotAssignments}
+              defaultBabyFilename={defaultBabyFilename}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}
               quotesWarningsOpen={quotesWarningsOpen}
