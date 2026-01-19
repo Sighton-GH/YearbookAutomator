@@ -14,7 +14,7 @@ import { CompletionServerMessageWithWarningsLink } from "../components/WarningsC
 import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
-import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
   "Server deletes all data after 8 hours to protect privacy.",
@@ -131,6 +131,7 @@ export function MugshotMapping({
 
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
+  const statusRef = useRef<HTMLDivElement | null>(null);
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const zipRef = useRef<HTMLDivElement | null>(null);
@@ -196,7 +197,7 @@ export function MugshotMapping({
     }
     if (didScrollForProgressRef.current) return;
     didScrollForProgressRef.current = true;
-    scrollPastTopBar();
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [loading, progress]);
 
   const insecureHttp =
@@ -219,7 +220,7 @@ export function MugshotMapping({
 
   const handleIngest = async () => {
     // Make sure the user can see status/progress updates.
-    scrollPastTopBar();
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (!workspaceId) {
       setStatus("Parse the template first");
       return;
@@ -1048,19 +1049,21 @@ export function MugshotMapping({
                 Continue
               </button>
             </div>
-            <CompletionServerMessageWithWarningsLink
-              completedErrorCount={completedErrorCount}
-              baseMessage="Portrait mapping processing completed"
-              detailsRef={warningsRef}
-              setDetailsOpen={onWarningsOpen}
-            />
-            {completedErrorCount === null && status ? (
-              <p className="muted prewrap">{prefixServerMessage(status)}</p>
-            ) : null}
+            <div ref={statusRef} className="stack" style={{ gap: 6 }}>
+              <CompletionServerMessageWithWarningsLink
+                completedErrorCount={completedErrorCount}
+                baseMessage="Portrait mapping processing completed"
+                detailsRef={warningsRef}
+                setDetailsOpen={onWarningsOpen}
+              />
+              {completedErrorCount === null && status ? (
+                <p className="muted prewrap">{prefixServerMessage(status)}</p>
+              ) : null}
+              {loading && progress > 0 && <ProgressBar progress={progress} />}
+            </div>
             <div className="tool-tips-center">
               <TipsBox tips={sidebarTips} />
             </div>
-            {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
       </aside>

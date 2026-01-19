@@ -11,7 +11,7 @@ import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyP
 import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
-import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
   "Server deletes all data after 8 hours to protect privacy.",
@@ -95,6 +95,7 @@ export function QuotesStep({
 
   const quotesProcessingEstimateSecondsRef = useRef<number>(6);
   const didScrollForProgressRef = useRef(false);
+  const statusRef = useRef<HTMLDivElement | null>(null);
 
   const insecureHttp =
     typeof window !== "undefined" &&
@@ -108,7 +109,7 @@ export function QuotesStep({
     }
     if (didScrollForProgressRef.current) return;
     didScrollForProgressRef.current = true;
-    scrollPastTopBar();
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [loading, progress]);
 
   const maskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
@@ -159,7 +160,7 @@ export function QuotesStep({
 
   const handleProcessQuotes = async () => {
     // Make sure the user can see status/progress updates.
-    scrollPastTopBar();
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (!workspaceId) {
       setStatus("Parse the template and ingest portraits first (workspace is missing)");
       return;
@@ -448,19 +449,21 @@ export function QuotesStep({
                 Continue
               </button>
             </div>
-            <CompletionServerMessageWithWarningsLink
-              completedErrorCount={quotesCompletedErrorCount}
-              baseMessage="Quote processing completed"
-              detailsRef={warningsRef}
-              setDetailsOpen={onQuotesWarningsOpen}
-            />
-            {quotesCompletedErrorCount === null && status ? (
-              <p className="muted prewrap">{prefixServerMessage(status)}</p>
-            ) : null}
+            <div ref={statusRef} className="stack" style={{ gap: 6 }}>
+              <CompletionServerMessageWithWarningsLink
+                completedErrorCount={quotesCompletedErrorCount}
+                baseMessage="Quote processing completed"
+                detailsRef={warningsRef}
+                setDetailsOpen={onQuotesWarningsOpen}
+              />
+              {quotesCompletedErrorCount === null && status ? (
+                <p className="muted prewrap">{prefixServerMessage(status)}</p>
+              ) : null}
+              {loading && progress > 0 && <ProgressBar progress={progress} />}
+            </div>
             <div className="tool-tips-center">
               <TipsBox tips={sidebarTips} />
             </div>
-            {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
       </aside>

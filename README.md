@@ -38,6 +38,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrd
 
 **Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
+**Optional GPU acceleration (background removal):**
+Ultra-complex background removal uses an ONNX model. If you have a CUDA-capable GPU, install `onnxruntime-gpu` (already listed in requirements) and ensure the matching CUDA/cuDNN runtime is available. If GPU providers are not available, the server falls back to CPU automatically. If installation fails on a non-GPU system, swap `onnxruntime-gpu` for `onnxruntime` in requirements.
+
 ### 2. Frontend (React/Vite)
 
 ```sh

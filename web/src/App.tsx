@@ -66,6 +66,8 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { TipsBox } from "./components/TipsBox";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
+import { comparePeopleByLastName, computeSlotNumberToIndex } from "./utils/placement";
+import { makeRng } from "./utils/random";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
 
 import {
@@ -120,92 +122,6 @@ type AppProps = {
   embedded?: boolean;
 };
 
-function computeSlotNumberToIndex(
-  slots: TemplateSlots[],
-  placementMode: PlacementMode,
-  templateWidth: number | null | undefined,
-): number[] {
-  const identity = slots.map((_, i) => i);
-  if (!slots.length) return identity;
-
-  // For "simultaneous": the parse step already returns slots in correct reading order
-  // across the full spread.
-  if (placementMode === "simultaneous") return identity;
-
-  // For "left_then_right": renumber slots so slot #1..#N fills the left page in reading
-  // order, then the right page in reading order.
-  const fallbackWidth = Math.max(1, ...slots.map((s) => s.mugshot.x + s.mugshot.width));
-  const midX = (templateWidth ?? fallbackWidth) / 2;
-
-  const heights = [...slots.map((s) => s.mugshot.height)].sort((a, b) => a - b);
-  const medH = heights[Math.floor(heights.length / 2)] || 1;
-  const rowTol = Math.max(1, Math.round(medH * 0.6));
-
-  type Item = { idx: number; cy: number; cx: number };
-
-  const left: Item[] = [];
-  const right: Item[] = [];
-  slots.forEach((slot, idx) => {
-    const b = slot.mugshot;
-    const cx = b.x + b.width / 2;
-    const cy = b.y + b.height / 2;
-    (cx < midX ? left : right).push({ idx, cy, cx });
-  });
-
-  const orderSide = (items: Item[]): number[] => {
-    if (!items.length) return [];
-    const sorted = [...items].sort((a, b) => (a.cy - b.cy) || (a.cx - b.cx));
-    const rows: Item[][] = [];
-    const rowCenters: number[] = [];
-    for (const it of sorted) {
-      if (!rows.length) {
-        rows.push([it]);
-        rowCenters.push(it.cy);
-        continue;
-      }
-      const last = rowCenters[rowCenters.length - 1];
-      if (Math.abs(it.cy - last) <= rowTol) {
-        rows[rows.length - 1].push(it);
-        const row = rows[rows.length - 1];
-        rowCenters[rowCenters.length - 1] = row.reduce((sum, r) => sum + r.cy, 0) / row.length;
-      } else {
-        rows.push([it]);
-        rowCenters.push(it.cy);
-      }
-    }
-
-    const out: number[] = [];
-    for (const row of rows) {
-      row.sort((a, b) => a.cx - b.cx);
-      out.push(...row.map((r) => r.idx));
-    }
-    return out;
-  };
-
-  return [...orderSide(left), ...orderSide(right)];
-}
-
-function comparePeopleByLastName(a: PersonRecord, b: PersonRecord): number {
-  const normalize = (s: string | null | undefined) => (s ?? "").trim();
-
-  const aLast = normalize(a.last_name);
-  const bLast = normalize(b.last_name);
-  const aLastEmpty = !aLast;
-  const bLastEmpty = !bLast;
-  if (aLastEmpty !== bLastEmpty) return aLastEmpty ? 1 : -1;
-
-  // Full lexicographic compare (not first-letter only)
-  const lastCmp = aLast.localeCompare(bLast, undefined, { sensitivity: "base" });
-  if (lastCmp) return lastCmp;
-
-  const aFirst = normalize(a.first_name);
-  const bFirst = normalize(b.first_name);
-  const firstCmp = aFirst.localeCompare(bFirst, undefined, { sensitivity: "base" });
-  if (firstCmp) return firstCmp;
-
-  // Stable fallback: spreadsheet row index
-  return (a.index ?? 0) - (b.index ?? 0);
-}
 
 export default function App({ embedded = false }: AppProps) {
   const location = useLocation();
@@ -1470,16 +1386,6 @@ export default function App({ embedded = false }: AppProps) {
 
   const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
 
-  const makeRng = (seed: number) => {
-    let t = seed || 1;
-    return () => {
-      t += 0x6D2B79F5;
-      let r = Math.imul(t ^ (t >>> 15), t | 1);
-      r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-  };
-
   const defaultMugshotAssignments = useMemo(() => {
     if (!defaultMugshotFilenames.length) return {} as Record<number, string>;
     const missing = people.filter((p) => !p.mugshot_filename);
@@ -1550,14 +1456,24 @@ export default function App({ embedded = false }: AppProps) {
     totalSpreads?: number;
     overallStartMs?: number;
     countUsage?: boolean;
+    suppressStatus?: boolean;
+    manageLoading?: boolean;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
-    setProgress(0);
-    setLoading(true);
+    const manageLoading = opts.manageLoading ?? true;
+    const suppressStatus = Boolean(opts.suppressStatus);
+    if (!suppressStatus) {
+      setProgress(0);
+    }
+    if (manageLoading) {
+      setLoading(true);
+    }
     const baseLabel = opts.spreadIndex && opts.totalSpreads
       ? `Rendering spread ${opts.spreadIndex}/${opts.totalSpreads}...`
       : (opts.statusLabel || (opts.outputFilename ? "Generating preview..." : "Generating spread..."));
-    setStatus(baseLabel);
+    if (!suppressStatus) {
+      setStatus(baseLabel);
+    }
     try {
       const ensuredDefaultMugshot = await ensureDefaultMugshotEagle();
       const ensuredDefaultBaby = skipBabyPhotos ? undefined : ((await ensureDefaultBabyAbcBlocks()) ?? undefined);
@@ -1633,12 +1549,12 @@ export default function App({ embedded = false }: AppProps) {
           const hasMulti = Boolean(opts.spreadIndex && opts.totalSpreads && typeof opts.overallStartMs === "number");
 
           // Progress bar: overall for multi-spread renders, per-spread otherwise.
-          if (hasMulti) {
+          if (!suppressStatus && hasMulti) {
             const doneSpreads = Math.max(0, (opts.spreadIndex ?? 1) - 1);
             const totalSpreads = Math.max(1, opts.totalSpreads ?? 1);
             const overallFrac = Math.max(0, Math.min(1, (doneSpreads + spreadPct / 100) / totalSpreads));
             setProgress(Math.round(overallFrac * 100));
-          } else {
+          } else if (!suppressStatus) {
             setProgress(Math.round(spreadPct));
           }
 
@@ -1673,25 +1589,39 @@ export default function App({ embedded = false }: AppProps) {
             }
           }
           if (etaSeconds !== null) parts.push(`ETA ${formatEtaSeconds(etaSeconds)}`);
-          setStatus(parts.join(" — "));
+          if (!suppressStatus) {
+            setStatus(parts.join(" — "));
+          }
 
           if (statusResp.error) {
-            setStatus(`Generation failed.\nserver message:\n${statusResp.error}`);
-            setLoading(false);
+            if (!suppressStatus) {
+              setStatus(`Generation failed.\nserver message:\n${statusResp.error}`);
+            }
+            if (manageLoading) {
+              setLoading(false);
+            }
             return null;
           }
           if (statusResp.output) {
             opts.onDone?.(statusResp.output);
-            setStatus(opts.outputFilename ? "Preview ready" : "Generation complete");
-            setProgress(100);
-            setLoading(false);
+            if (!suppressStatus) {
+              setStatus(opts.outputFilename ? "Preview ready" : "Generation complete");
+              setProgress(100);
+            }
+            if (manageLoading) {
+              setLoading(false);
+            }
             return statusResp.output;
           }
           await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           console.error(err);
-          setStatus(`Generation polling failed.\n${formatServerMessage(err)}`);
-          setLoading(false);
+          if (!suppressStatus) {
+            setStatus(`Generation polling failed.\n${formatServerMessage(err)}`);
+          }
+          if (manageLoading) {
+            setLoading(false);
+          }
           return null;
         }
       }
@@ -1701,8 +1631,12 @@ export default function App({ embedded = false }: AppProps) {
     } catch (err) {
       console.error(err);
       const base = opts.outputFilename ? "Preview generation failed" : "Generation failed";
-      setStatus(`${base}.\n${formatServerMessage(err)}`);
-      setLoading(false);
+      if (!suppressStatus) {
+        setStatus(`${base}.\n${formatServerMessage(err)}`);
+      }
+      if (manageLoading) {
+        setLoading(false);
+      }
       return null;
     }
   };
@@ -1741,28 +1675,71 @@ export default function App({ embedded = false }: AppProps) {
     setOutputPath(null);
 
     const overallStartMs = performance.now();
+    const maxParallel = 3;
+    const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
+    const results: (string | null)[] = Array.from({ length: totalSpreads }, () => null);
+    let completed = 0;
+    let nextIndex = 0;
+    let failed = false;
 
-    for (let spreadIdx = 0; spreadIdx < totalSpreads; spreadIdx++) {
-      const start = spreadIdx * perSpread;
-      const end = Math.min(peopleForAll.length, start + perSpread);
-      const spreadPeople = peopleForAll.slice(start, end);
-      const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
-      const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.${ext}`;
-      const out = await runGeneration({
-        outputFilename: filename,
-        peopleOverride: spreadPeople,
-        spreadIndex: spreadIdx + 1,
-        totalSpreads,
-        overallStartMs,
-        countUsage: spreadIdx === 0,
-      });
-      if (!out) return;
-      outputs.push(out);
-      setOutputPaths([...outputs]);
+    setLoading(true);
+    setProgress(0);
+    setStatus(`Rendering ${totalSpreads} spreads (max ${maxParallel} at a time)...`);
+
+    const worker = async () => {
+      while (true) {
+        if (failed) return;
+        const spreadIdx = nextIndex;
+        if (spreadIdx >= totalSpreads) return;
+        nextIndex += 1;
+
+        const start = spreadIdx * perSpread;
+        const end = Math.min(peopleForAll.length, start + perSpread);
+        const spreadPeople = peopleForAll.slice(start, end);
+        const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.${ext}`;
+        const out = await runGeneration({
+          outputFilename: filename,
+          peopleOverride: spreadPeople,
+          spreadIndex: spreadIdx + 1,
+          totalSpreads,
+          overallStartMs,
+          countUsage: spreadIdx === 0,
+          suppressStatus: true,
+          manageLoading: false,
+        });
+
+        if (!out) {
+          failed = true;
+          return;
+        }
+
+        results[spreadIdx] = out;
+        completed += 1;
+        const pct = Math.round((completed / Math.max(1, totalSpreads)) * 100);
+        setProgress(pct);
+        setStatus(`Rendered ${completed}/${totalSpreads} spreads...`);
+        setOutputPaths(results.filter((r): r is string => Boolean(r)));
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(maxParallel, totalSpreads) }, () => worker());
+    await Promise.all(workers);
+
+    if (failed) {
+      setStatus("Generation failed.\nOne or more spreads did not render successfully.");
+      setLoading(false);
+      return;
+    }
+
+    for (const out of results) {
+      if (out) outputs.push(out);
     }
 
     setOutputPath(outputs[0] || null);
     setOutputNonce((n) => n + 1);
+    setLoading(false);
+    setProgress(100);
+    setStatus("Generation complete");
     setActiveStep(7);
   };
 

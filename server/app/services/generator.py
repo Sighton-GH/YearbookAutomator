@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -16,6 +17,61 @@ _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
     "pdf": ".pdf",
     "tiff": ".tiff",
 }
+
+_GPU_AVAILABLE: bool | None = None
+
+
+def _gpu_available() -> bool:
+    global _GPU_AVAILABLE
+    if _GPU_AVAILABLE is not None:
+        return _GPU_AVAILABLE
+
+    prefer = os.getenv("YMGA_RENDER_PREFER_GPU", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    if not prefer:
+        _GPU_AVAILABLE = False
+        return _GPU_AVAILABLE
+
+    try:
+        import cv2  # type: ignore
+    except Exception:
+        _GPU_AVAILABLE = False
+        return _GPU_AVAILABLE
+
+    try:
+        count = cv2.cuda.getCudaEnabledDeviceCount() if hasattr(cv2, "cuda") else 0
+    except Exception:
+        count = 0
+    _GPU_AVAILABLE = count > 0
+    return _GPU_AVAILABLE
+
+
+def _resize_image(img: Image.Image, new_size: tuple[int, int]) -> Image.Image:
+    if img.size == new_size:
+        return img
+
+    if _gpu_available():
+        try:
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+
+            arr = np.array(img)
+            if arr.ndim == 2:
+                arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+            gmat = cv2.cuda_GpuMat()
+            gmat.upload(arr)
+            resized = cv2.cuda.resize(gmat, new_size, interpolation=cv2.INTER_LANCZOS4)
+            out = resized.download()
+            return Image.fromarray(out)
+        except Exception:
+            # GPU path failed; fall back to CPU resize.
+            pass
+
+    return img.resize(new_size, Image.LANCZOS)
 
 
 def _normalize_output_filename(name: str | None, output_format: str) -> str:
@@ -212,7 +268,7 @@ def _fit_image(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
         return img
     scale = max(target_w / img.width, target_h / img.height)
     new_size = (int(img.width * scale), int(img.height * scale))
-    resized = img.resize(new_size, Image.LANCZOS)
+    resized = _resize_image(img, new_size)
     x0 = (resized.width - target_w) // 2
     y0 = (resized.height - target_h) // 2
     return resized.crop((x0, y0, x0 + target_w, y0 + target_h))
@@ -228,7 +284,7 @@ def _fit_image_with_focus(img: Image.Image, target_w: int, target_h: int, focus_
     scale = max(target_w / img.width, target_h / img.height)
     new_w = max(1, int(img.width * scale))
     new_h = max(1, int(img.height * scale))
-    resized = img.resize((new_w, new_h), Image.LANCZOS)
+    resized = _resize_image(img, (new_w, new_h))
 
     # Map focus point into resized coordinates.
     cx = float(focus_x) * scale
@@ -701,7 +757,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         if (w, h) != (template_w, template_h):
             tick(90, f"Resizing to {w}x{h}")
             resampling = getattr(Image, "Resampling", Image).LANCZOS
-            base = base.resize((w, h), resample=resampling)
+            try:
+                base = _resize_image(base, (w, h))
+            except Exception:
+                base = base.resize((w, h), resample=resampling)
 
     if output_format == "tiff":
         tick(92, "Saving TIFF")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import logging
 import os
 import threading
 from pathlib import Path
@@ -18,8 +19,119 @@ class BackgroundAlreadyRemovedError(RuntimeError):
     """Raised when background removal is skipped due to existing alpha."""
 
 
-_rembg_lock = threading.Lock()
-_rembg_session = None
+logger = logging.getLogger("uvicorn.error")
+
+_rembg_pool_lock = threading.Lock()
+_rembg_pool_condition = threading.Condition(_rembg_pool_lock)
+_rembg_pool: list[object] = []
+_rembg_pool_created = 0
+_rembg_pool_max: int | None = None
+_rembg_pool_providers: list[str] | None = None
+_rembg_providers_logged = False
+
+
+def _get_rembg_providers() -> list[str] | None:
+    """Return preferred ONNX Runtime providers (GPU if available), else None.
+
+    We keep this best-effort so missing GPU runtimes don't break CPU usage.
+    """
+
+    try:
+        import onnxruntime as ort  # type: ignore
+    except Exception:
+        return None
+
+    available = set(ort.get_available_providers())
+
+    forced = os.getenv("YMGA_REMBG_PROVIDER", "").strip()
+    if forced:
+        # Allow a comma-separated override (e.g. CUDAExecutionProvider,CPUExecutionProvider).
+        wanted = [p.strip() for p in forced.split(",") if p.strip()]
+        chosen = [p for p in wanted if p in available]
+        if chosen:
+            return chosen
+    # Prefer GPU providers when installed.
+    gpu_candidates = [
+        "CUDAExecutionProvider",
+        "DmlExecutionProvider",
+        "ROCMExecutionProvider",
+        "TensorrtExecutionProvider",
+    ]
+    for gpu in gpu_candidates:
+        if gpu in available:
+            return [gpu, "CPUExecutionProvider"]
+
+    if "CPUExecutionProvider" in available:
+        return ["CPUExecutionProvider"]
+
+    # Fallback: let rembg decide if providers are unknown.
+    return None
+
+
+def _get_rembg_pool_max(providers: list[str] | None) -> int:
+    raw = os.getenv("YMGA_REMBG_POOL_SIZE", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+
+    # Default: single session to avoid resource contention; opt-in for parallelism.
+    return 1
+
+
+def _acquire_rembg_session() -> object:
+    """Acquire a rembg session from a small pool for parallel inference."""
+
+    try:
+        from rembg import new_session  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise ValueError(
+            "Ultra complex background removal requires 'rembg'. "
+            "Install server requirements to enable this mode."
+        ) from exc
+
+    global _rembg_pool_created, _rembg_pool_max, _rembg_pool_providers, _rembg_providers_logged
+
+    with _rembg_pool_condition:
+        if _rembg_pool_providers is None:
+            _rembg_pool_providers = _get_rembg_providers()
+        if not _rembg_providers_logged:
+            logger.info("rembg providers: %s", _rembg_pool_providers or "default")
+            _rembg_providers_logged = True
+        if _rembg_pool_max is None:
+            _rembg_pool_max = _get_rembg_pool_max(_rembg_pool_providers)
+
+        while True:
+            if _rembg_pool:
+                return _rembg_pool.pop()
+
+            if _rembg_pool_created < _rembg_pool_max:
+                _rembg_pool_created += 1
+                break
+
+            # Wait for a session to be released.
+            _rembg_pool_condition.wait()
+
+    # Create session outside the lock.
+    try:
+        session = (
+            new_session("isnet-general-use", providers=_rembg_pool_providers)
+            if _rembg_pool_providers
+            else new_session("isnet-general-use")
+        )
+    except Exception:
+        with _rembg_pool_condition:
+            _rembg_pool_created = max(0, _rembg_pool_created - 1)
+            _rembg_pool_condition.notify()
+        raise
+    return session
+
+
+def _release_rembg_session(session: object) -> None:
+    with _rembg_pool_condition:
+        _rembg_pool.append(session)
+        _rembg_pool_condition.notify()
 
 
 def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
@@ -29,29 +141,25 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
     """
 
     try:
-        from rembg import new_session, remove  # type: ignore
+        from rembg import remove  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ValueError(
             "Ultra complex background removal requires 'rembg'. "
             "Install server requirements to enable this mode."
         ) from exc
 
-    global _rembg_session
-    with _rembg_lock:
-        if _rembg_session is None:
-            # Good general-purpose model for photos.
-            _rembg_session = new_session("isnet-general-use")
+    session = _acquire_rembg_session()
 
     # alpha_matting improves edges (hair, soft boundaries) but is slower.
     # NOTE: pymatting (used by rembg alpha-matting) prints PERFORMANCE WARNING
     # messages directly to stdout; suppress those by default to avoid spamming
     # the server logs.
     verbose = os.getenv("YMGA_REMBG_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
-    with _rembg_lock:
+    try:
         if verbose:
             out = remove(
                 image_bytes,
-                session=_rembg_session,
+                session=session,
                 alpha_matting=True,
                 alpha_matting_foreground_threshold=240,
                 alpha_matting_background_threshold=10,
@@ -61,12 +169,14 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
             with contextlib.redirect_stdout(io.StringIO()):
                 out = remove(
                     image_bytes,
-                    session=_rembg_session,
+                    session=session,
                     alpha_matting=True,
                     alpha_matting_foreground_threshold=240,
                     alpha_matting_background_threshold=10,
                     alpha_matting_erode_size=10,
                 )
+    finally:
+        _release_rembg_session(session)
     if not isinstance(out, (bytes, bytearray)):
         raise ValueError("Ultra complex background removal failed")
     return bytes(out)

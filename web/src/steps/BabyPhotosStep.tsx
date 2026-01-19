@@ -28,7 +28,7 @@ import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
-import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "../utils/ui";
+import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
   "Server deletes all data after 8 hours to protect privacy.",
@@ -163,6 +163,7 @@ export function BabyPhotosStep({
 
   const babyZipRef = useRef<HTMLDivElement | null>(null);
   const babyZipWarningsRef = useRef<HTMLDetailsElement | null>(null);
+  const statusRef = useRef<HTMLDivElement | null>(null);
 
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -771,7 +772,7 @@ export function BabyPhotosStep({
 
   const handleProcess = async () => {
     // Make sure the user can see status/progress updates.
-    scrollPastTopBar();
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (!workspaceId) {
       setStatus("Ensure template is parsed first");
       return;
@@ -1420,19 +1421,21 @@ export function BabyPhotosStep({
                 Continue
               </button>
             </div>
-            <CompletionServerMessageWithWarningsLink
-              completedErrorCount={babyCompletedErrorCount}
-              baseMessage="Baby photo processing completed"
-              detailsRef={babyZipWarningsRef}
-              setDetailsOpen={onBabyZipWarningsOpen}
-            />
-            {babyCompletedErrorCount === null && status ? (
-              <p className="muted prewrap">{prefixServerMessage(status)}</p>
-            ) : null}
+            <div ref={statusRef} className="stack" style={{ gap: 6 }}>
+              <CompletionServerMessageWithWarningsLink
+                completedErrorCount={babyCompletedErrorCount}
+                baseMessage="Baby photo processing completed"
+                detailsRef={babyZipWarningsRef}
+                setDetailsOpen={onBabyZipWarningsOpen}
+              />
+              {babyCompletedErrorCount === null && status ? (
+                <p className="muted prewrap">{prefixServerMessage(status)}</p>
+              ) : null}
+              {loading && progress > 0 && <ProgressBar progress={progress} />}
+            </div>
             <div className="tool-tips-center">
               <TipsBox tips={sidebarTips} />
             </div>
-            {loading && progress > 0 && <ProgressBar progress={progress} />}
           </div>
         </div>
       </aside>
