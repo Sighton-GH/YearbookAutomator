@@ -204,6 +204,7 @@ export default function App({ embedded = false }: AppProps) {
   const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [reviewPanel, setReviewPanel] = useState<"preview" | "people">("preview");
   const [progress, setProgress] = useState(0);
   const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
   const [annotatedPreviewUrl, setAnnotatedPreviewUrl] = useState<string | null>(null);
@@ -498,6 +499,7 @@ export default function App({ embedded = false }: AppProps) {
     setOutputNonce(0);
     setPreviewPath(null);
     setPreviewNonce(0);
+    setReviewPanel("preview");
     setProgress(0);
     setTemplatePreviewUrl(null);
     setAnnotatedPreviewUrl(null);
@@ -2119,7 +2121,7 @@ export default function App({ embedded = false }: AppProps) {
 
       <div
         className={clsx("page", {
-          "page-wide": activeStep === 2 || activeStep === 3 || activeStep === 4,
+          "page-wide": activeStep === 2 || activeStep === 3 || activeStep === 4 || activeStep === 6,
         })}
       >
 
@@ -2155,6 +2157,24 @@ export default function App({ embedded = false }: AppProps) {
                   <div className="stack" style={{ gap: 6 }}>
                     {status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
                     {loading && progress > 0 && <ProgressBar progress={progress} />}
+                    <div className="review-tabs" role="tablist" aria-label="Review panels">
+                      <button
+                        type="button"
+                        className={clsx("review-tab", { active: reviewPanel === "preview" })}
+                        onClick={() => setReviewPanel("preview")}
+                        aria-pressed={reviewPanel === "preview"}
+                      >
+                        Preview & settings
+                      </button>
+                      <button
+                        type="button"
+                        className={clsx("review-tab", { active: reviewPanel === "people" })}
+                        onClick={() => setReviewPanel("people")}
+                        aria-pressed={reviewPanel === "people"}
+                      >
+                        People cards
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2252,10 +2272,9 @@ export default function App({ embedded = false }: AppProps) {
           )}
           {activeStep === 6 && (
             <>
-            {insecureHttp && !allowInsecureReviewResults ? (
+            {reviewPanel === "preview" && insecureHttp && !allowInsecureReviewResults ? (
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
-            ) : (
-              <div className="stack">
+            ) : reviewPanel === "preview" ? (
               <RenderPreflight
                 people={people}
                 peoplePerSpread={peoplePerSpread}
@@ -2274,8 +2293,9 @@ export default function App({ embedded = false }: AppProps) {
                 workspaceId={workspaceId}
                 previewPath={previewPath}
                 previewNonce={previewNonce}
+                layout="split"
               />
-
+            ) : (
               <ReviewStep
                 people={people}
                 workspaceId={workspaceId}
@@ -2301,7 +2321,6 @@ export default function App({ embedded = false }: AppProps) {
                   setSlotAssignments({});
                 }}
               />
-              </div>
             )}
             </>
           )}
