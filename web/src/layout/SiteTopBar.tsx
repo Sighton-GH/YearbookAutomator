@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { withBase } from "../baseUrl";
 import { getStoredLicenseKey, setStoredLicenseKey, validateLicenseKey } from "../licensing";
 
 export function SiteTopBar() {
@@ -115,9 +116,19 @@ export function SiteTopBar() {
   return (
     <header className="ss-topbar">
       <div className="ss-topbar-inner">
-        <NavLink to="/" className="ss-brand" aria-label="Sylit Yearbook Tools">
-          <span className="ss-brand-main">Sylit Yearbook Tools</span>
-          <span className="ss-brand-sub">Custom Yearbook Spread Automator</span>
+        <NavLink
+          to="/"
+          className="ss-brand"
+          aria-label="Sighton Yearbook Tools"
+          style={{ display: "flex", alignItems: "center", gap: 10 }}
+        >
+          <img
+            src={withBase("assets/Sighton_Logo.png")}
+            alt="Sighton logo"
+            style={{ width: 36, height: 36, objectFit: "contain", display: "block" }}
+          />
+          <span className="ss-brand-main">Sighton Yearbook Tools</span>
+          <span className="ss-brand-sub">Custom Flow Automator</span>
         </NavLink>
 
         <div className="ss-topbar-right">

@@ -58,8 +58,13 @@ export function ToolAppPage() {
     <div className={`app-shell${isDark ? " dark" : ""}`}>
       <div className="app-return-bar">
         <div className="app-return-inner">
-          <div className="app-title-row">
-            <span className="app-title">Custom Yearbook Spread Automator</span>
+          <div className="app-title-row" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img
+              src={withBase("assets/Sighton_Logo.png")}
+              alt="Sighton logo"
+              style={{ width: 28, height: 28, objectFit: "contain" }}
+            />
+            <span className="app-title">Custom Flow Automator</span>
             <div className="app-file-actions" aria-label="Configuration">
               <button
                 type="button"
@@ -96,7 +101,14 @@ export function ToolAppPage() {
         <App embedded />
       )}
       <footer className="app-footer">
-        <div className="app-footer-inner">Sighton Innovations</div>
+        <div className="app-footer-inner" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <img
+            src={withBase("assets/Sighton_Logo.png")}
+            alt="Sighton logo"
+            style={{ width: 20, height: 20, objectFit: "contain" }}
+          />
+          <span>Sighton Innovations</span>
+        </div>
       </footer>
     </div>
   );

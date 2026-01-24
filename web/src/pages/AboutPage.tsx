@@ -2,8 +2,6 @@ import { withBase } from "../baseUrl";
 
 const ASSETS = {
   cover: withBase("assets/CoverImage1.webp"),
-  heroShowcase: withBase("assets/showcase-hero.webp"), // IMAGE SLOT: Hero collage showing template parsing + final spread side-by-side
-  autoflowDemo: withBase("assets/showcase-autoflow.svg"), // IMAGE SLOT: Animation/diagram showing portraits automatically flowing into template slots
   annotatedTemplate: withBase("assets/showcase-annotated-template.webp"), // IMAGE SLOT: Template with colored annotation boxes (green mugshots, orange names, red quotes, blue baby photos)
   uploadInterface: withBase("assets/showcase-upload-interface.webp"), // IMAGE SLOT: Drag-and-drop upload step with spreadsheet + photos
   automaticMapping: withBase("assets/showcase-automatic-mapping.webp"), // IMAGE SLOT: Mapping review with photos matched to names and confidence
@@ -27,7 +25,7 @@ export function AboutPage() {
     <main>
       <section className="ss-cover ss-hero" style={{ backgroundImage: `url(${ASSETS.cover})` }}>
         <div className="ss-cover-inner">
-          <div className="ss-cover-grid" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 24, alignItems: "center" }}>
+          <div className="ss-cover-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24, alignItems: "center" }}>
             <div className="ss-hero-card">
               <div className="ss-kicker">Portrait Autoflow for Custom Templates</div>
               <h1 className="ss-cover-title">Automated graduation spread generation</h1>
@@ -38,13 +36,6 @@ export function AboutPage() {
                 <a className="ss-cta" href={withBase("tool")}>Open the Tool</a>
                 <a className="ss-cta" href={withBase("how-to-use")} style={{ background: "var(--bg-panel)", color: "var(--accent)", border: "1px solid var(--border)" }}>How it works</a>
               </div>
-            </div>
-            <div className="panel" style={{ padding: 0, overflow: "hidden", background: "var(--bg-quiet)", border: "1px solid var(--border)" }}>
-              <img
-                src={ASSETS.heroShowcase}
-                alt="Yearbook spread tool showcase"
-                style={{ width: "100%", display: "block" }}
-              />
             </div>
           </div>
         </div>
@@ -60,11 +51,30 @@ export function AboutPage() {
                 Visual walkthrough of portraits moving from uploads into annotated slots—with quotes and baby photo support.
               </p>
             </div>
-            <img
-              src={ASSETS.autoflowDemo}
-              alt="Portrait autoflow animation"
-              style={{ width: "100%", display: "block", borderTop: "1px solid var(--border)" }}
-            />
+            <div className="autoflow-demo" aria-label="Portraits flowing into template slots">
+              <div className="autoflow-spread">
+                <div className="autoflow-slot s1" />
+                <div className="autoflow-slot s2" />
+                <div className="autoflow-slot s3" />
+                <div className="autoflow-slot s4" />
+                <div className="autoflow-slot s5" />
+                <div className="autoflow-slot s6" />
+                <div className="autoflow-name n1" />
+                <div className="autoflow-name n2" />
+                <div className="autoflow-name n3" />
+                <div className="autoflow-name n4" />
+                <div className="autoflow-name n5" />
+                <div className="autoflow-name n6" />
+              </div>
+              <div className="autoflow-portraits">
+                <div className="autoflow-portrait p1" />
+                <div className="autoflow-portrait p2" />
+                <div className="autoflow-portrait p3" />
+                <div className="autoflow-portrait p4" />
+                <div className="autoflow-portrait p5" />
+                <div className="autoflow-portrait p6" />
+              </div>
+            </div>
           </div>
         </div>
       </section>

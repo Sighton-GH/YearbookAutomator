@@ -2159,7 +2159,7 @@ export default function App({ embedded = false }: AppProps) {
             <header className="topbar tool-topbar">
               <div>
                 <div className="topbar-title-row">
-                  <h1>Custom Yearbook Spread Automator</h1>
+                  <h1>Custom Flow Automator</h1>
                   {configActions}
                 </div>
                 <p className="muted">Developed by Sighton Innovations — local-first, ready to host later.</p>

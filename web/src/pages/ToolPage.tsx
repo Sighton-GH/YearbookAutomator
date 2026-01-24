@@ -61,7 +61,7 @@ export function ToolPage() {
     <main>
       <section className="ss-cover">
         <div className="ss-cover-inner">
-          <h1 className="ss-cover-title">Custom Yearbook Spread Automator</h1>
+          <h1 className="ss-cover-title">Custom Flow Automator</h1>
           <p className="ss-cover-subtitle">
             Parse a yearbook template, ingest spreadsheets and photos, review assignments, then generate a
             print-ready composite.
