@@ -19,6 +19,7 @@ import {
 import { withBase } from "../baseUrl";
 import { ProgressBar } from "../components/ProgressBar";
 import { PeopleCard } from "../components/PeopleCard";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
@@ -164,6 +165,10 @@ export function BabyPhotosStep({
   const babyZipRef = useRef<HTMLDivElement | null>(null);
   const babyZipWarningsRef = useRef<HTMLDetailsElement | null>(null);
   const statusRef = useRef<HTMLDivElement | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("Portrait preview");
+  const [previewRotation, setPreviewRotation] = useState(0);
 
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -955,6 +960,23 @@ export function BabyPhotosStep({
 
   return (
     <>
+      <ImagePreviewDialog
+        open={previewOpen}
+        title={previewTitle}
+        imageUrl={previewUrl}
+        rotationDegrees={previewRotation}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        onCancel={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        cancelLabel="Cancel"
+        onRotateClockwise={() => setPreviewRotation((r) => (r + 90) % 360)}
+        onRotateCounterClockwise={() => setPreviewRotation((r) => (r - 90 + 360) % 360)}
+      />
       <div className="mapping-layout">
         <div className="mapping-main">
         <div className="panel">
@@ -965,6 +987,7 @@ export function BabyPhotosStep({
                   const babyFilename = p.baby_photo_filename || defaultBabyFilename;
                   const quote = (p.quote ?? defaultQuoteAssignments[p.index] ?? defaultQuoteFallback ?? "").trim();
                   const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+                  const mugshotFilename = p.mugshot_filename || assignedDefaultMugshot || null;
                   const canShowImage = Boolean(babyFilename) && !babyThumbError[p.index];
                   const babyThumbStyle: React.CSSProperties = {
                     ...(maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : {}),
@@ -986,6 +1009,13 @@ export function BabyPhotosStep({
                         filename: p.mugshot_filename,
                         defaultFilename: assignedDefaultMugshot ?? null,
                         showDefaultLabel: true,
+                        onClick: () => {
+                          if (!workspaceId || !mugshotFilename) return;
+                          setPreviewTitle(`${p.first_name} ${p.last_name}`.trim() || "Portrait preview");
+                          setPreviewUrl(assetUrl(workspaceId, "mugshot", mugshotFilename));
+                          setPreviewRotation(0);
+                          setPreviewOpen(true);
+                        },
                       }}
                       baby={{
                         label: "Baby",

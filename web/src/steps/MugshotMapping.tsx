@@ -7,6 +7,7 @@ import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyP
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ProgressBar } from "../components/ProgressBar";
 import { PeopleCard } from "../components/PeopleCard";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
@@ -132,6 +133,10 @@ export function MugshotMapping({
   const ingestProcessingEstimateSecondsRef = useRef<number>(10);
   const didScrollForProgressRef = useRef(false);
   const statusRef = useRef<HTMLDivElement | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("Portrait preview");
+  const [previewRotation, setPreviewRotation] = useState(0);
 
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const zipRef = useRef<HTMLDivElement | null>(null);
@@ -615,6 +620,23 @@ export function MugshotMapping({
 
   return (
     <div className={clsx("mapping-layout", !hasPeople && "mapping-layout-empty")}>
+      <ImagePreviewDialog
+        open={previewOpen}
+        title={previewTitle}
+        imageUrl={previewUrl}
+        rotationDegrees={previewRotation}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        onCancel={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        cancelLabel="Cancel"
+        onRotateClockwise={() => setPreviewRotation((r) => (r + 90) % 360)}
+        onRotateCounterClockwise={() => setPreviewRotation((r) => (r - 90 + 360) % 360)}
+      />
       <div className="mapping-main">
         <div className="panel">
           {workspaceId && people.length > 0 ? (
@@ -623,6 +645,7 @@ export function MugshotMapping({
                 {people.map((p, rowIdx) => {
                   const isLocked = Boolean(lockedPeople[p.index]);
                   const assignedDefault = defaultMugshotAssignments[p.index];
+                  const mugshotFilename = p.mugshot_filename || assignedDefault || null;
                   const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
                   const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote || defaultQuoteFallback;
                   const babyFilename = p.baby_photo_filename || defaultBabyFilename;
@@ -665,6 +688,13 @@ export function MugshotMapping({
                         defaultFilename: assignedDefault ?? null,
                         showDefaultLabel: true,
                         overlayLabel: swapMode === "portrait" && swapEnabled ? "Drag to swap" : null,
+                        onClick: () => {
+                          if (!workspaceId || !mugshotFilename) return;
+                          setPreviewTitle(`${p.first_name} ${p.last_name}`.trim() || "Portrait preview");
+                          setPreviewUrl(assetUrl(workspaceId, "mugshot", mugshotFilename));
+                          setPreviewRotation(0);
+                          setPreviewOpen(true);
+                        },
                       }}
                       baby={{
                         label: "Baby",

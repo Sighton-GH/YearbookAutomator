@@ -207,6 +207,17 @@ def _encode_png_rgba(rgba: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
+def _binarize_alpha(bgra: np.ndarray, *, threshold: int = 128) -> np.ndarray:
+    """Force alpha to fully transparent or fully opaque to avoid ghosting."""
+    if bgra.shape[2] != 4:
+        return bgra
+    alpha = bgra[:, :, 3]
+    alpha = np.where(alpha >= threshold, 255, 0).astype(np.uint8)
+    out = bgra.copy()
+    out[:, :, 3] = alpha
+    return out
+
+
 def _keep_largest_component(mask01: np.ndarray) -> np.ndarray:
     mask01 = (mask01 > 0).astype(np.uint8)
     num, labels, stats, _centroids = cv2.connectedComponentsWithStats(mask01, connectivity=8)
@@ -374,7 +385,12 @@ def remove_background(
 
     if mode == "ultra_complex":
         # rembg handles decoding/encoding; return PNG bytes with alpha.
-        return _remove_background_ultra_complex(image_bytes)
+        ultra = _remove_background_ultra_complex(image_bytes)
+        # Ensure final output is strictly transparent/opaque (no semi-transparent ghosting).
+        out_bgra = _decode_bgra(ultra)
+        out_bgra = _binarize_alpha(out_bgra, threshold=128)
+        rgba = cv2.cvtColor(out_bgra, cv2.COLOR_BGRA2RGBA)
+        return _encode_png_rgba(rgba)
 
     if mode == "complex":
         # GrabCut can be slow on large inputs; downscale for segmentation, then upscale the mask.

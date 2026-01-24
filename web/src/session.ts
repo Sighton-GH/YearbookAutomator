@@ -48,6 +48,7 @@ export type PersistedSessionV1 = {
     output_filename: string;
     crop_area_pixels: Area;
     export_size: { width: number; height: number };
+    rotation_degrees?: number;
     used_background_preview?: { background_mode: BackgroundMode; force?: boolean } | null;
     created_at: string;
   }>;

@@ -16,6 +16,7 @@ import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export type BabyPhotoEditorHandle = {
   openEditor: (idx: number) => void;
@@ -73,10 +74,13 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
   const [showDiscardWarning, setShowDiscardWarning] = useState(false);
   const [showApplyWarning, setShowApplyWarning] = useState(false);
   const [showChangesSaved, setShowChangesSaved] = useState(false);
+  const [showResetWarning, setShowResetWarning] = useState(false);
+  const removeBgCancelRef = useRef(false);
   const changesSavedTimerRef = useRef<number | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const editorCropRef = useRef<HTMLDivElement | null>(null);
   const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
@@ -158,6 +162,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setEditingSrc(base);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+    setRotation(0);
     setCroppedAreaPixels(null);
     setEditorMediaSize(null);
     setEditingAction(null);
@@ -173,6 +178,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setDirtyEdits(false);
     setShowDiscardWarning(false);
     setShowApplyWarning(false);
+    setShowResetWarning(false);
     setShowChangesSaved(false);
     if (changesSavedTimerRef.current !== null) {
       window.clearTimeout(changesSavedTimerRef.current);
@@ -197,6 +203,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setEditingName("");
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+    setRotation(0);
     setCroppedAreaPixels(null);
     setEditorMediaSize(null);
     setEditingAction(null);
@@ -211,6 +218,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setDirtyEdits(false);
     setShowDiscardWarning(false);
     setShowApplyWarning(false);
+    setShowResetWarning(false);
     setShowChangesSaved(false);
     if (changesSavedTimerRef.current !== null) {
       window.clearTimeout(changesSavedTimerRef.current);
@@ -235,6 +243,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setEditingName("");
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+    setRotation(0);
     setCroppedAreaPixels(null);
     setEditorMediaSize(null);
     setEditingAction(null);
@@ -249,6 +258,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setDirtyEdits(false);
     setShowDiscardWarning(false);
     setShowApplyWarning(false);
+    setShowResetWarning(false);
     setShowChangesSaved(false);
     if (changesSavedTimerRef.current !== null) {
       window.clearTimeout(changesSavedTimerRef.current);
@@ -390,7 +400,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         height: Math.max(minH, Math.round(desiredH * scale)),
       };
 
-      const blob = await cropToPngBlob(srcForCrop, croppedAreaPixels, exportSize);
+      const blob = await cropToPngBlob(srcForCrop, croppedAreaPixels, exportSize, rotation);
       const file = new File([blob], `baby_edit_${personIndex}_${Date.now()}.png`, { type: "image/png" });
 
       const uploadedFilename = await uploadImage(workspaceId, "baby", file);
@@ -405,6 +415,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
             output_filename: uploadedFilename,
             crop_area_pixels: { ...croppedAreaPixels },
             export_size: { ...exportSize },
+            rotation_degrees: rotation,
             used_background_preview: hasPreview ? { background_mode: removeBgMode, force: Boolean(lastRemoveBgForce) } : null,
             created_at: new Date().toISOString(),
           });
@@ -419,6 +430,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setEditingSrc(nextBase);
       setCrop({ x: 0, y: 0 });
       setZoom(1);
+      setRotation(0);
       setCroppedAreaPixels(null);
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
@@ -453,21 +465,59 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setRemoveBgEtaSeconds(null);
     setRemoveBgMessage("Starting…");
     setRemoveBgAlreadyRemoved(false);
+    removeBgCancelRef.current = false;
     try {
+      let sourceFilename = editingFilename;
+
+      if (croppedAreaPixels && editingSrc) {
+        setRemoveBgMessage("Cropping preview…");
+        const cropW = Math.max(1, Math.round(croppedAreaPixels.width));
+        const cropH = Math.max(1, Math.round(croppedAreaPixels.height));
+        const minW = Math.max(1, Math.round(outSize.width));
+        const minH = Math.max(1, Math.round(outSize.height));
+        const desiredW = Math.max(minW, cropW);
+        const desiredH = Math.max(minH, cropH);
+        const MAX_PREVIEW_DIM = 1024;
+        const scale = Math.min(1, MAX_PREVIEW_DIM / Math.max(desiredW, desiredH));
+        const previewSize = {
+          width: Math.max(minW, Math.round(desiredW * scale)),
+          height: Math.max(minH, Math.round(desiredH * scale)),
+        };
+
+        const blob = await cropToPngBlob(editingSrc, croppedAreaPixels, previewSize, rotation);
+        const tmpFile = new File([blob], `baby_preview_${Date.now()}.png`, { type: "image/png" });
+        sourceFilename = await uploadImage(workspaceId, "baby", tmpFile);
+      }
+
       const { job_id } = await startRemoveBackgroundPreviewJob({
         workspaceId,
         kind: "baby",
-        filename: editingFilename,
+        filename: sourceFilename,
         backgroundMode: removeBgMode,
         force,
       });
 
       const start = Date.now();
       while (true) {
+        if (removeBgCancelRef.current) {
+          setRemoveBgMessage("Canceled");
+          setStatus("Background removal canceled.");
+          break;
+        }
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, 250));
+        if (removeBgCancelRef.current) {
+          setRemoveBgMessage("Canceled");
+          setStatus("Background removal canceled.");
+          break;
+        }
         // eslint-disable-next-line no-await-in-loop
         const s = await removeBackgroundPreviewStatus(job_id);
+        if (removeBgCancelRef.current) {
+          setRemoveBgMessage("Canceled");
+          setStatus("Background removal canceled.");
+          break;
+        }
         setRemoveBgProgress(Math.max(1, Math.min(100, Math.round(s.progress ?? 0))));
         setRemoveBgEtaSeconds(typeof s.eta_seconds === "number" ? s.eta_seconds : null);
         setRemoveBgMessage(prefixServerMessage(s.message || "Working…"));
@@ -560,6 +610,19 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     <>
       {workspaceId && editingIdx !== null && editingSrc && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit baby photo">
+          <ConfirmDialog
+            open={showResetWarning}
+            title="Reset to original?"
+            message="This will discard your current edits for this baby photo and restore the original image."
+            confirmLabel="Reset"
+            cancelLabel="Cancel"
+            destructive
+            onCancel={() => setShowResetWarning(false)}
+            onConfirm={() => {
+              setShowResetWarning(false);
+              resetEditingToOriginal();
+            }}
+          />
           <div className="modal baby-editor-modal">
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
@@ -584,6 +647,31 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                   Center
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRotation((r) => (r - 90 + 360) % 360);
+                    setDirtyEdits(true);
+                  }}
+                  disabled={editingBusy}
+                  aria-label="Rotate counter-clockwise"
+                  title="Rotate counter-clockwise"
+                >
+                  ↺
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRotation((r) => (r + 90) % 360);
+                    setDirtyEdits(true);
+                  }}
+                  disabled={editingBusy}
+                  aria-label="Rotate clockwise"
+                  title="Rotate clockwise"
+                >
+                  ↻
+                </button>
+
                 <div className="popover-anchor">
                   <button type="button" onClick={() => void centerEditingOnFace()} disabled={editingBusy}>
                     Center on face
@@ -602,7 +690,11 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                   )}
                 </div>
 
-                <button type="button" onClick={resetEditingToOriginal} disabled={editingBusy || !originalBabyPeople}>
+                <button
+                  type="button"
+                  onClick={() => setShowResetWarning(true)}
+                  disabled={editingBusy || !originalBabyPeople}
+                >
                   Reset to original
                 </button>
 
@@ -619,6 +711,20 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                   >
                     Remove background
                   </button>
+
+                  {editingAction === "remove_background" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removeBgCancelRef.current = true;
+                        setRemoveBgMessage("Canceling…");
+                      }}
+                      disabled={!editingBusy}
+                      style={{ marginLeft: 6 }}
+                    >
+                      Stop
+                    </button>
+                  )}
 
                   {removeBgPopoverOpen && (
                     <div className="popover below" role="dialog" aria-label="Background removal options">
@@ -670,6 +776,19 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                             <div className="progress determinate" aria-label="Background removal progress">
                               <div className="progress-bar determinate" style={{ width: `${removeBgProgress}%` }} />
                             </div>
+                            <div className="actions" style={{ justifyContent: "flex-end" }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!editingAction) return;
+                                  removeBgCancelRef.current = true;
+                                  setRemoveBgMessage("Canceling…");
+                                }}
+                                disabled={!editingBusy}
+                              >
+                                Stop
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -688,6 +807,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                     image={editingSrc}
                     crop={crop}
                     zoom={zoom}
+                    rotation={rotation}
                     aspect={cropAspect}
                     cropSize={editorCropSize ?? undefined}
                     onMediaLoaded={(ms) => setEditorMediaSize(ms)}

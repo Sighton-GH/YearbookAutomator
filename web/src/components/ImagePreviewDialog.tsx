@@ -9,6 +9,7 @@ export function ImagePreviewDialog({
   cancelLabel = "Cancel",
   onRotateClockwise,
   onRotateCounterClockwise,
+  rotationDegrees = 0,
   busy = false,
   hint,
 }: {
@@ -20,6 +21,7 @@ export function ImagePreviewDialog({
   cancelLabel?: string;
   onRotateClockwise?: () => void | Promise<void>;
   onRotateCounterClockwise?: () => void | Promise<void>;
+  rotationDegrees?: number;
   busy?: boolean;
   hint?: React.ReactNode;
 }) {
@@ -60,6 +62,9 @@ export function ImagePreviewDialog({
                     display: "block",
                     borderRadius: 8,
                     margin: "0 auto",
+                    transform: rotationDegrees ? `rotate(${rotationDegrees}deg)` : undefined,
+                    transition: "transform 160ms ease",
+                    transformOrigin: "center center",
                   }}
                 />
               ) : (

@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { InfoPopover } from "../components/InfoPopover";
 import { UploadDropLabel } from "../components/UploadDropLabel";
 import { PeopleCard } from "../components/PeopleCard";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { ProgressBar } from "../components/ProgressBar";
 import { CompletionServerMessageWithWarningsLink } from "../components/WarningsCompletion";
-import { babyMaskUrl, type BackgroundMode, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
+import { assetUrl, babyMaskUrl, type BackgroundMode, type Box, type PersonRecord, uploadQuotesSpreadsheet } from "../api";
 import { BabyPhotoEditor, type BabyPhotoEditorHandle } from "../components/BabyPhotoEditor";
 import { TipsBox } from "../components/TipsBox";
 import { formatServerMessage } from "../configFile";
@@ -96,6 +97,10 @@ export function QuotesStep({
   const quotesProcessingEstimateSecondsRef = useRef<number>(6);
   const didScrollForProgressRef = useRef(false);
   const statusRef = useRef<HTMLDivElement | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("Portrait preview");
+  const [previewRotation, setPreviewRotation] = useState(0);
 
   const insecureHttp =
     typeof window !== "undefined" &&
@@ -255,7 +260,25 @@ export function QuotesStep({
   };
 
   return (
-    <div className="mapping-layout">
+    <>
+      <ImagePreviewDialog
+        open={previewOpen}
+        title={previewTitle}
+        imageUrl={previewUrl}
+        rotationDegrees={previewRotation}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        onCancel={() => {
+          setPreviewOpen(false);
+          setPreviewRotation(0);
+        }}
+        cancelLabel="Cancel"
+        onRotateClockwise={() => setPreviewRotation((r) => (r + 90) % 360)}
+        onRotateCounterClockwise={() => setPreviewRotation((r) => (r - 90 + 360) % 360)}
+      />
+      <div className="mapping-layout">
       <div className="mapping-main">
         <div className="panel">
           {workspaceId && people.length > 0 ? (
@@ -264,6 +287,7 @@ export function QuotesStep({
                 const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
                 const displayQuote = (p.quote ?? "").trim() ? (p.quote ?? "") : assignedDefaultQuote;
                 const assignedDefaultMugshot = defaultMugshotAssignments[p.index];
+                const mugshotFilename = p.mugshot_filename || assignedDefaultMugshot || null;
                 const babyFilename = p.baby_photo_filename || defaultBabyFilename;
                 return (
                   <PeopleCard
@@ -276,6 +300,13 @@ export function QuotesStep({
                       filename: p.mugshot_filename,
                       defaultFilename: assignedDefaultMugshot ?? null,
                       showDefaultLabel: true,
+                      onClick: () => {
+                        if (!workspaceId || !mugshotFilename) return;
+                        setPreviewTitle(`${p.first_name} ${p.last_name}`.trim() || "Portrait preview");
+                        setPreviewUrl(assetUrl(workspaceId, "mugshot", mugshotFilename));
+                        setPreviewRotation(0);
+                        setPreviewOpen(true);
+                      },
                     }}
                     baby={{
                       label: "Baby",
@@ -481,6 +512,7 @@ export function QuotesStep({
         setStatus={setStatus}
         onBabyEditHistoryAdd={onBabyEditHistoryAdd}
       />
-    </div>
+      </div>
+    </>
   );
 }

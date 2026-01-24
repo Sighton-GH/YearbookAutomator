@@ -928,7 +928,12 @@ export default function App({ embedded = false }: AppProps) {
 
       const objectUrl = URL.createObjectURL(sourceBlob);
       try {
-        const outBlob = await cropToPngBlob(objectUrl, h.crop_area_pixels, h.export_size);
+        const outBlob = await cropToPngBlob(
+          objectUrl,
+          h.crop_area_pixels,
+          h.export_size,
+          typeof h.rotation_degrees === "number" ? h.rotation_degrees : 0
+        );
         const file = new File([outBlob], h.output_filename, { type: "image/png" });
         await uploadImageAs(ws, "baby", file, h.output_filename);
       } finally {
