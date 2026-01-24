@@ -3,7 +3,12 @@ import { UploadDropLabel } from "../components/UploadDropLabel";
 import { InfoPopover } from "../components/InfoPopover";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { parseTemplate, type RawParseDebug, type TemplateSlots } from "../api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { NoticeDialog } from "../components/NoticeDialog";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { formatEtaSeconds } from "../utils/ui";
+import { handleSpreadUploads } from "../utils/spreadUploadHandling";
+import { rotateImageFile, rotateImageFileCounterClockwise } from "../utils/imageTransforms";
 
 export function TemplateParsing({
   workspaceId,
@@ -70,9 +75,22 @@ export function TemplateParsing({
 }) {
   const [showMissing, setShowMissing] = useState(false);
   const [showCustomOptions, setShowCustomOptions] = useState(false);
+  const [lowResWarning, setLowResWarning] = useState<string | null>(null);
+  const [portraitReviewOpen, setPortraitReviewOpen] = useState(false);
+  const [portraitReviewMessage, setPortraitReviewMessage] = useState<string | null>(null);
+  const [autoDuplicatePortrait, setAutoDuplicatePortrait] = useState(false);
+  const [annotatedPreviewOpen, setAnnotatedPreviewOpen] = useState(false);
+  const [cleanPreviewOpen, setCleanPreviewOpen] = useState(false);
+  const [annotatedRotating, setAnnotatedRotating] = useState(false);
+  const [cleanRotating, setCleanRotating] = useState(false);
+  const annotatedOriginalRef = useRef<File | null>(null);
+  const cleanOriginalRef = useRef<File | null>(null);
   const annotatedRef = useRef<HTMLDivElement | null>(null);
   const cleanRef = useRef<HTMLDivElement | null>(null);
   const parseProcessingEstimateSecondsRef = useRef(4);
+  const lastHandledKeyRef = useRef<string | null>(null);
+  const lowResResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
+  const portraitReviewResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
 
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -128,6 +146,56 @@ export function TemplateParsing({
     setLoading(true);
     setStatus(hasUpload ? "Uploading templates..." : "Parsing template...");
 
+    let annotatedToParse = annotated;
+    let cleanToParse = clean;
+
+    if (annotated && clean) {
+      const key = `${annotated.name}-${annotated.size}-${annotated.lastModified}-${clean.name}-${clean.size}-${clean.lastModified}`;
+      if (lastHandledKeyRef.current !== key) {
+        try {
+          const handled = await handleSpreadUploads({
+            annotated,
+            clean,
+            autoDuplicatePortrait,
+            promptHandlers: {
+              onLowResolution: (message) =>
+                new Promise<"continue" | "cancel">((resolve) => {
+                  lowResResolverRef.current = resolve;
+                  setLowResWarning(message);
+                }),
+              onPortraitNeedsReview: (message) =>
+                new Promise<"continue" | "cancel">((resolve) => {
+                  portraitReviewResolverRef.current = resolve;
+                  setPortraitReviewMessage(message);
+                  setPortraitReviewOpen(true);
+                }),
+            },
+          });
+          if (handled.canceled) {
+            setStatus("Upload canceled.");
+            setLoading(false);
+            return;
+          }
+
+          annotatedToParse = handled.annotated;
+          cleanToParse = handled.clean;
+
+          if (handled.didDuplicate || handled.didRotate) {
+            onAnnotatedChange(annotatedToParse);
+            onCleanChange(cleanToParse);
+          }
+
+          const finalKey = `${annotatedToParse.name}-${annotatedToParse.size}-${annotatedToParse.lastModified}-${cleanToParse.name}-${cleanToParse.size}-${cleanToParse.lastModified}`;
+          lastHandledKeyRef.current = finalKey;
+        } catch (err) {
+          console.error(err);
+          setStatus("Failed to process the uploaded spread.");
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     const opStartMs = performance.now();
     let uploadFinishedMs: number | null = null;
     let processingInterval: number | null = null;
@@ -164,7 +232,7 @@ export function TemplateParsing({
         startProcessingTicker();
       }
 
-      const resp = await parseTemplate(annotated, clean, {
+      const resp = await parseTemplate(annotatedToParse, cleanToParse, {
         workspaceId: workspaceId || undefined,
         mugshotColor: mugshotColor || undefined,
         babyColor: babyColor || undefined,
@@ -222,6 +290,151 @@ export function TemplateParsing({
 
   return (
     <div className="stack">
+      <ConfirmDialog
+        open={Boolean(lowResWarning)}
+        title="Low resolution spread"
+        message={lowResWarning ?? undefined}
+        confirmLabel="Continue"
+        cancelLabel="Cancel upload"
+        onCancel={() => {
+          lowResResolverRef.current?.("cancel");
+          lowResResolverRef.current = null;
+          setLowResWarning(null);
+        }}
+        onConfirm={() => {
+          lowResResolverRef.current?.("continue");
+          lowResResolverRef.current = null;
+          setLowResWarning(null);
+        }}
+      />
+      <NoticeDialog
+        open={portraitReviewOpen}
+        title="Portrait spread check"
+        message={portraitReviewMessage ?? undefined}
+        actionLabel="Cancel"
+        secondaryLabel="Continue"
+        emphasizeAction
+        onAction={() => {
+          portraitReviewResolverRef.current?.("cancel");
+          portraitReviewResolverRef.current = null;
+          setPortraitReviewOpen(false);
+          setPortraitReviewMessage(null);
+        }}
+        onSecondary={() => {
+          portraitReviewResolverRef.current?.("continue");
+          portraitReviewResolverRef.current = null;
+          setPortraitReviewOpen(false);
+          setPortraitReviewMessage(null);
+        }}
+      />
+      <ImagePreviewDialog
+        open={annotatedPreviewOpen}
+        title="Annotated template preview"
+        imageUrl={annotatedPreview}
+        onClose={() => setAnnotatedPreviewOpen(false)}
+        onCancel={() => {
+          if (annotatedOriginalRef.current) {
+            onAnnotatedChange(annotatedOriginalRef.current);
+          }
+          if (cleanOriginalRef.current) {
+            onCleanChange(cleanOriginalRef.current);
+          }
+          setAnnotatedPreviewOpen(false);
+        }}
+        cancelLabel="Cancel"
+        onRotateClockwise={
+          annotated && clean
+            ? async () => {
+                if (annotatedRotating) return;
+                setAnnotatedRotating(true);
+                try {
+                  const [nextAnnotated, nextClean] = await Promise.all([
+                    rotateImageFile(annotated),
+                    rotateImageFile(clean),
+                  ]);
+                  onAnnotatedChange(nextAnnotated);
+                  onCleanChange(nextClean);
+                } finally {
+                  setAnnotatedRotating(false);
+                }
+              }
+            : undefined
+        }
+        onRotateCounterClockwise={
+          annotated && clean
+            ? async () => {
+                if (annotatedRotating) return;
+                setAnnotatedRotating(true);
+                try {
+                  const [nextAnnotated, nextClean] = await Promise.all([
+                    rotateImageFileCounterClockwise(annotated),
+                    rotateImageFileCounterClockwise(clean),
+                  ]);
+                  onAnnotatedChange(nextAnnotated);
+                  onCleanChange(nextClean);
+                } finally {
+                  setAnnotatedRotating(false);
+                }
+              }
+            : undefined
+        }
+        busy={annotatedRotating}
+        hint="Rotating updates both annotated and clean templates to keep them aligned."
+      />
+      <ImagePreviewDialog
+        open={cleanPreviewOpen}
+        title="Clean template preview"
+        imageUrl={cleanPreview}
+        onClose={() => setCleanPreviewOpen(false)}
+        onCancel={() => {
+          if (annotatedOriginalRef.current) {
+            onAnnotatedChange(annotatedOriginalRef.current);
+          }
+          if (cleanOriginalRef.current) {
+            onCleanChange(cleanOriginalRef.current);
+          }
+          setCleanPreviewOpen(false);
+        }}
+        cancelLabel="Cancel"
+        onRotateClockwise={
+          annotated && clean
+            ? async () => {
+                if (cleanRotating) return;
+                setCleanRotating(true);
+                try {
+                  const [nextAnnotated, nextClean] = await Promise.all([
+                    rotateImageFile(annotated),
+                    rotateImageFile(clean),
+                  ]);
+                  onAnnotatedChange(nextAnnotated);
+                  onCleanChange(nextClean);
+                } finally {
+                  setCleanRotating(false);
+                }
+              }
+            : undefined
+        }
+        onRotateCounterClockwise={
+          annotated && clean
+            ? async () => {
+                if (cleanRotating) return;
+                setCleanRotating(true);
+                try {
+                  const [nextAnnotated, nextClean] = await Promise.all([
+                    rotateImageFileCounterClockwise(annotated),
+                    rotateImageFileCounterClockwise(clean),
+                  ]);
+                  onAnnotatedChange(nextAnnotated);
+                  onCleanChange(nextClean);
+                } finally {
+                  setCleanRotating(false);
+                }
+              }
+            : undefined
+        }
+        busy={cleanRotating}
+        hint="Rotating updates both annotated and clean templates to keep them aligned."
+      />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "12px" }}>
         <div ref={annotatedRef}>
           <div className="upload-title">Annotated template (.png)</div>
@@ -248,7 +461,21 @@ export function TemplateParsing({
                 onAnnotatedChange(file);
               }}
             />
-            {annotatedPreview && <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />}
+            {annotatedPreview && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  annotatedOriginalRef.current = annotated ?? null;
+                  cleanOriginalRef.current = clean ?? null;
+                  setAnnotatedPreviewOpen(true);
+                }}
+                style={{ padding: 0, border: "none", background: "transparent", cursor: "pointer", width: "100%" }}
+              >
+                <img src={annotatedPreview} alt="Annotated preview" className="template-thumb" />
+              </button>
+            )}
           </UploadDropLabel>
         </div>
 
@@ -277,8 +504,32 @@ export function TemplateParsing({
                 onCleanChange(file);
               }}
             />
-            {cleanPreview && <img src={cleanPreview} alt="Clean preview" className="template-thumb" />}
+            {cleanPreview && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  annotatedOriginalRef.current = annotated ?? null;
+                  cleanOriginalRef.current = clean ?? null;
+                  setCleanPreviewOpen(true);
+                }}
+                style={{ padding: 0, border: "none", background: "transparent", cursor: "pointer", width: "100%" }}
+              >
+                <img src={cleanPreview} alt="Clean preview" className="template-thumb" />
+              </button>
+            )}
           </UploadDropLabel>
+        </div>
+      </div>
+      <div className="callout">
+        <ToggleSwitch
+          checked={autoDuplicatePortrait}
+          onChange={setAutoDuplicatePortrait}
+          label="Duplicate page into spread"
+        />
+        <div className="muted small" style={{ marginTop: 6 }}>
+          Enable this if you uploaded a single page and want it duplicated to form a full spread.
         </div>
       </div>
       <label className="field">

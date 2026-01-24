@@ -63,6 +63,7 @@ import { TemplatePreview } from "./components/TemplatePreview";
 import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { NoticeDialog } from "./components/NoticeDialog";
 import { TipsBox } from "./components/TipsBox";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
@@ -257,6 +258,9 @@ export default function App({ embedded = false }: AppProps) {
   const [configImportStatus, setConfigImportStatus] = useState<string>("");
   const [configImportError, setConfigImportError] = useState<string>("");
   const [configToImport, setConfigToImport] = useState<ConfigFileV1<PersistedSessionV1> | null>(null);
+  const [importLowResWarning, setImportLowResWarning] = useState<string | null>(null);
+  const [importPortraitReviewOpen, setImportPortraitReviewOpen] = useState(false);
+  const [importPortraitReviewMessage, setImportPortraitReviewMessage] = useState<string | null>(null);
   const [importAnnotated, setImportAnnotated] = useState<File | null>(null);
   const [importClean, setImportClean] = useState<File | null>(null);
   const [importSpreadsheet, setImportSpreadsheet] = useState<File | null>(null);
@@ -269,6 +273,9 @@ export default function App({ embedded = false }: AppProps) {
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const importLowResResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
+  const importPortraitReviewResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
 
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
@@ -747,6 +754,21 @@ export default function App({ embedded = false }: AppProps) {
         clean,
         parseTemplate,
         setStatus: setConfigImportStatus,
+        promptHandlers: {
+          onLowResolution: (message) =>
+            new Promise<"continue" | "cancel">((resolve) => {
+              importLowResResolverRef.current = resolve;
+              setImportLowResWarning(message);
+            }),
+          onPortraitNeedsReview: () =>
+            new Promise<"continue" | "cancel">((resolve) => {
+              importPortraitReviewResolverRef.current = resolve;
+              setImportPortraitReviewMessage(
+                "The uploaded image is vertical. If it is meant to be only one page, cancel and re-upload a full spread. If it is rotated wrong, rotate it after import from the template preview."
+              );
+              setImportPortraitReviewOpen(true);
+            }),
+        },
       });
 
       // Bind everything to the new workspace.
@@ -1845,6 +1867,43 @@ export default function App({ embedded = false }: AppProps) {
         onConfirm={() => {
           setShowResetConfirm(false);
           handleReset();
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(importLowResWarning)}
+        title="Low resolution spread"
+        message={importLowResWarning ?? undefined}
+        confirmLabel="Continue"
+        cancelLabel="Cancel upload"
+        onCancel={() => {
+          importLowResResolverRef.current?.("cancel");
+          importLowResResolverRef.current = null;
+          setImportLowResWarning(null);
+        }}
+        onConfirm={() => {
+          importLowResResolverRef.current?.("continue");
+          importLowResResolverRef.current = null;
+          setImportLowResWarning(null);
+        }}
+      />
+      <NoticeDialog
+        open={importPortraitReviewOpen}
+        title="Portrait spread check"
+        message={importPortraitReviewMessage ?? undefined}
+        actionLabel="Cancel"
+        secondaryLabel="Continue"
+        emphasizeAction
+        onAction={() => {
+          importPortraitReviewResolverRef.current?.("cancel");
+          importPortraitReviewResolverRef.current = null;
+          setImportPortraitReviewOpen(false);
+          setImportPortraitReviewMessage(null);
+        }}
+        onSecondary={() => {
+          importPortraitReviewResolverRef.current?.("continue");
+          importPortraitReviewResolverRef.current = null;
+          setImportPortraitReviewOpen(false);
+          setImportPortraitReviewMessage(null);
         }}
       />
       {showConfigModal && (

@@ -1,4 +1,5 @@
 import type { MissingAsset } from "./configFile";
+import { handleSpreadUploads, type SpreadUploadPromptHandlers } from "./utils/spreadUploadHandling";
 
 export type SessionLike = {
   skipBabyPhotos?: boolean;
@@ -135,11 +136,17 @@ export async function importTemplate<S extends SessionLike>(args: {
   clean: File;
   parseTemplate: ParseTemplateFn;
   setStatus?: (s: string) => void;
+  promptHandlers?: SpreadUploadPromptHandlers;
 }): Promise<string> {
-  const { session, annotated, clean, parseTemplate, setStatus } = args;
+  const { session, annotated, clean, parseTemplate, setStatus, promptHandlers } = args;
   setStatus?.("Parsing template…");
 
-  const resp = await parseTemplate(annotated, clean, {
+  const handled = await handleSpreadUploads({ annotated, clean, promptHandlers });
+  if (handled.canceled) {
+    throw new Error("Template upload canceled by user.");
+  }
+
+  const resp = await parseTemplate(handled.annotated, handled.clean, {
     mugshotColor: session.templateParse?.mugshotColor || undefined,
     babyColor: session.templateParse?.babyColor || undefined,
     nameColor: session.templateParse?.nameColor || undefined,
