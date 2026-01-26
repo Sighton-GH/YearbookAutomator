@@ -213,6 +213,7 @@ def admin_panel(_: Annotated[None, Depends(_require_admin)]):
 </head>
 <body>
   <h1>License Admin</h1>
+  <p><a href="/admin/settings">Go to settings</a></p>
 
   {warning}
 

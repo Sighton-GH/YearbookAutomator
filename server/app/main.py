@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.routes import templates, mapping, generation, fonts
 from app.routes import workspaces
 from app.routes import licensing
+from app.routes import admin_settings
 from app.services.workspace_cleanup import cleanup_loop
 from app.services.storage import InvalidWorkspaceId, clear_all_workspaces
 from app.services.licensing import (
@@ -146,6 +147,7 @@ async def license_guard(request: Request, call_next):
     if (
         path.startswith("/api/licensing")
         or path.startswith("/admin/licenses")
+        or path.startswith("/admin/settings")
         or path in {"/health", "/docs", "/openapi.json", "/redoc"}
     ):
         return await call_next(request)
@@ -199,6 +201,7 @@ app.include_router(generation.router, prefix="/api/generation", tags=["generatio
 app.include_router(fonts.router, prefix="/api/fonts", tags=["fonts"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 app.include_router(licensing.router, tags=["licensing"])
+app.include_router(admin_settings.router, tags=["admin"])
 
 @app.get("/health")
 def health() -> dict[str, str]:

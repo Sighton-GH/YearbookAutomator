@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import BinaryIO, List, Tuple
 
+import logging
+import os
+
 import cv2
 import numpy as np
 
@@ -13,6 +16,46 @@ DEFAULT_BABY_HEX = "004aad"
 TEXT_NAME_HEX = "ff751f"  # orange
 TEXT_QUOTE_HEX = "ff3131"  # red
 MIN_AREA_FLOOR = 400  # safeguard against tiny detections
+
+_opencl_configured = False
+_opencl_enabled = False
+_logger = logging.getLogger("uvicorn.error")
+
+
+def _configure_opencl() -> bool:
+    global _opencl_configured, _opencl_enabled
+    if _opencl_configured:
+        return _opencl_enabled
+    _opencl_configured = True
+    prefer = os.getenv("YMGA_OPENCL", "true").strip().lower() not in {"0", "false", "no", "off"}
+    if not prefer:
+        _opencl_enabled = False
+        return _opencl_enabled
+    try:
+        if cv2.ocl.haveOpenCL():
+            cv2.ocl.setUseOpenCL(True)
+            _opencl_enabled = bool(cv2.ocl.useOpenCL())
+        else:
+            _opencl_enabled = False
+    except Exception:
+        _opencl_enabled = False
+    _logger.info("OpenCL enabled (template parser): %s", _opencl_enabled)
+    return _opencl_enabled
+
+
+def _maybe_umat(arr: np.ndarray) -> cv2.UMat | np.ndarray:
+    if _configure_opencl():
+        try:
+            return cv2.UMat(arr)
+        except Exception:
+            return arr
+    return arr
+
+
+def _maybe_umat_result(mat: cv2.UMat | np.ndarray) -> np.ndarray:
+    if isinstance(mat, cv2.UMat):
+        return mat.get()
+    return mat
 
 
 def _scale_box(box: Box, sx: float, sy: float) -> Box:
@@ -66,7 +109,8 @@ def _detect_boxes_with_color(hex_color: str, hsv_img: np.ndarray, min_area: int,
     last_mask = np.zeros(hsv_img.shape[:2], dtype=np.uint8)
     for tol in tol_steps:
         color_range = _hex_to_hsv_range(hex_color, tol=tol)
-        mask = cv2.inRange(hsv_img, np.array(color_range[0]), np.array(color_range[1]))
+        mask = cv2.inRange(_maybe_umat(hsv_img), np.array(color_range[0]), np.array(color_range[1]))
+        mask = _maybe_umat_result(mask)
         boxes = _boxes_from_mask(mask, min_area=min_area)
         last_mask = mask
         if boxes:
@@ -165,7 +209,8 @@ def extract_slots(
         clean_w, clean_h = _maybe_decode_image_size(clean_bytes)
 
     height, width, _ = img.shape
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(_maybe_umat(img), cv2.COLOR_BGR2HSV)
+    hsv = _maybe_umat_result(hsv)
 
     if clean_w is not None and clean_h is not None and (clean_w != int(width) or clean_h != int(height)):
         sx = clean_w / float(width)
@@ -194,10 +239,12 @@ def extract_slots(
     if use_custom and not mugshot_boxes and (not enable_baby_photos or not baby_boxes):
         green_range = GREEN_RANGE
         blue_range = BLUE_RANGE
-        green_mask = cv2.inRange(hsv, np.array(green_range[0]), np.array(green_range[1]))
+        green_mask = cv2.inRange(_maybe_umat(hsv), np.array(green_range[0]), np.array(green_range[1]))
+        green_mask = _maybe_umat_result(green_mask)
         mugshot_boxes = _boxes_from_mask(green_mask, min_area=min_area)
         if enable_baby_photos:
-            blue_mask = cv2.inRange(hsv, np.array(blue_range[0]), np.array(blue_range[1]))
+            blue_mask = cv2.inRange(_maybe_umat(hsv), np.array(blue_range[0]), np.array(blue_range[1]))
+            blue_mask = _maybe_umat_result(blue_mask)
             baby_boxes = _boxes_from_mask(blue_mask, min_area=min_area)
 
     if not mugshot_boxes and (not enable_baby_photos or not baby_boxes):

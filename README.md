@@ -39,7 +39,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrd
 **Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
 **Optional GPU acceleration (background removal):**
-Ultra-complex background removal uses an ONNX model. If you have a CUDA-capable GPU, install `onnxruntime-gpu` (already listed in requirements) and ensure the matching CUDA/cuDNN runtime is available. If GPU providers are not available, the server falls back to CPU automatically. If installation fails on a non-GPU system, swap `onnxruntime-gpu` for `onnxruntime` in requirements.
+Ultra-complex background removal uses an ONNX model. On Windows, the recommended GPU path is **DirectML** via `onnxruntime-directml` (listed in requirements). This works on most GPUs that support DirectX 12 (feature level 11_0+). If you prefer CUDA on a supported NVIDIA GPU, swap `onnxruntime-directml` for `onnxruntime-gpu` and install the matching CUDA/cuDNN runtime. If no GPU provider is available, the server falls back to CPU automatically.
+
+To force DirectML at runtime, set:
+`YMGA_REMBG_PROVIDER=DmlExecutionProvider`
 
 ### 2. Frontend (React/Vite)
 

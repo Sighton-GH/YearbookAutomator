@@ -19,6 +19,7 @@ _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
 }
 
 _GPU_AVAILABLE: bool | None = None
+_OPENCL_AVAILABLE: bool | None = None
 
 
 def _gpu_available() -> bool:
@@ -50,6 +51,26 @@ def _gpu_available() -> bool:
     return _GPU_AVAILABLE
 
 
+def _opencl_available() -> bool:
+    global _OPENCL_AVAILABLE
+    if _OPENCL_AVAILABLE is not None:
+        return _OPENCL_AVAILABLE
+    prefer = os.getenv("YMGA_OPENCL", "true").strip().lower() not in {"0", "false", "no", "off"}
+    if not prefer:
+        _OPENCL_AVAILABLE = False
+        return _OPENCL_AVAILABLE
+    try:
+        import cv2  # type: ignore
+        if cv2.ocl.haveOpenCL():
+            cv2.ocl.setUseOpenCL(True)
+            _OPENCL_AVAILABLE = bool(cv2.ocl.useOpenCL())
+        else:
+            _OPENCL_AVAILABLE = False
+    except Exception:
+        _OPENCL_AVAILABLE = False
+    return _OPENCL_AVAILABLE
+
+
 def _resize_image(img: Image.Image, new_size: tuple[int, int]) -> Image.Image:
     if img.size == new_size:
         return img
@@ -69,6 +90,21 @@ def _resize_image(img: Image.Image, new_size: tuple[int, int]) -> Image.Image:
             return Image.fromarray(out)
         except Exception:
             # GPU path failed; fall back to CPU resize.
+            pass
+
+    if _opencl_available():
+        try:
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+
+            arr = np.array(img)
+            if arr.ndim == 2:
+                arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+            umat = cv2.UMat(arr)
+            resized = cv2.resize(umat, new_size, interpolation=cv2.INTER_LANCZOS4)
+            out = resized.get()
+            return Image.fromarray(out)
+        except Exception:
             pass
 
     return img.resize(new_size, Image.LANCZOS)
@@ -301,72 +337,10 @@ def _fit_image_with_focus(img: Image.Image, target_w: int, target_h: int, focus_
 def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
     """Best-effort face detection. Returns the center of the largest detected face."""
     try:
-        import numpy as np
-        import cv2  # type: ignore
+        from app.services.face_detection import detect_face_center as detect
     except Exception:
         return None
-
-    try:
-        rgb = img_rgb.convert("RGB")
-    except Exception:
-        return None
-
-    # Downscale for speed; map coordinates back to original.
-    max_dim = max(rgb.width, rgb.height)
-    scale = 1.0
-    if max_dim > 900:
-        scale = 900.0 / float(max_dim)
-        new_size = (max(1, int(rgb.width * scale)), max(1, int(rgb.height * scale)))
-        rgb_small = rgb.resize(new_size, Image.BILINEAR)
-    else:
-        rgb_small = rgb
-
-    arr = np.array(rgb_small)
-    if arr.ndim != 3 or arr.shape[2] != 3:
-        return None
-
-    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    try:
-        gray = cv2.equalizeHist(gray)
-    except Exception:
-        pass
-
-    cascade_paths = []
-    try:
-        base = getattr(cv2, "data", None)
-        if base is not None and getattr(base, "haarcascades", None):
-            cascade_paths = [
-                str(base.haarcascades) + "haarcascade_frontalface_alt2.xml",
-                str(base.haarcascades) + "haarcascade_frontalface_default.xml",
-            ]
-    except Exception:
-        cascade_paths = []
-
-    faces = []
-    for path in cascade_paths:
-        try:
-            clf = cv2.CascadeClassifier(path)
-            if clf.empty():
-                continue
-            found = clf.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
-            if found is not None and len(found) > 0:
-                faces = found
-                break
-        except Exception:
-            continue
-
-    if faces is None or len(faces) == 0:
-        return None
-
-    # Choose the largest face.
-    best = max(faces, key=lambda r: float(r[2]) * float(r[3]))
-    x, y, w, h = [float(v) for v in best]
-    cx_small = x + w / 2
-    cy_small = y + h / 2
-
-    # Map from small image coords back to original image coords.
-    inv = 1.0 / scale
-    return (cx_small * inv, cy_small * inv)
+    return detect(img_rgb)
 
 
 def detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:

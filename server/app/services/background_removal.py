@@ -5,6 +5,7 @@ import io
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -28,6 +29,50 @@ _rembg_pool_created = 0
 _rembg_pool_max: int | None = None
 _rembg_pool_providers: list[str] | None = None
 _rembg_providers_logged = False
+
+_opencl_configured = False
+_opencl_enabled = False
+
+
+def _configure_opencl() -> bool:
+    """Best-effort OpenCL enablement for OpenCV ops."""
+    global _opencl_configured, _opencl_enabled
+    if _opencl_configured:
+        return _opencl_enabled
+    _opencl_configured = True
+    prefer = os.getenv("YMGA_OPENCL", "true").strip().lower() not in {"0", "false", "no", "off"}
+    if not prefer:
+        _opencl_enabled = False
+        return _opencl_enabled
+    try:
+        if cv2.ocl.haveOpenCL():
+            cv2.ocl.setUseOpenCL(True)
+            _opencl_enabled = bool(cv2.ocl.useOpenCL())
+        else:
+            _opencl_enabled = False
+    except Exception:
+        _opencl_enabled = False
+    logger.info("OpenCL enabled: %s", _opencl_enabled)
+    return _opencl_enabled
+
+
+def _maybe_umat(arr: np.ndarray) -> cv2.UMat | np.ndarray:
+    if _configure_opencl():
+        try:
+            return cv2.UMat(arr)
+        except Exception:
+            return arr
+    return arr
+
+
+def _maybe_umat_result(mat: cv2.UMat | np.ndarray) -> np.ndarray:
+    if isinstance(mat, cv2.UMat):
+        return mat.get()
+    return mat
+
+
+def _time_enabled() -> bool:
+    return os.getenv("YMGA_BG_TIMING", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _get_rembg_providers() -> list[str] | None:
@@ -149,6 +194,9 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
         ) from exc
 
     session = _acquire_rembg_session()
+    # Log active provider choice for easier GPU verification.
+    providers = _rembg_pool_providers or _get_rembg_providers()
+    logger.info("rembg active providers: %s", providers or "default")
 
     # alpha_matting improves edges (hair, soft boundaries) but is slower.
     # NOTE: pymatting (used by rembg alpha-matting) prints PERFORMANCE WARNING
@@ -234,14 +282,16 @@ def _resize_to_max(bgr: np.ndarray, max_dim: int) -> tuple[np.ndarray, float]:
     scale = max_dim / float(max(h, w))
     new_w = max(1, int(round(w * scale)))
     new_h = max(1, int(round(h * scale)))
-    resized = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    return resized, scale
+    src = _maybe_umat(bgr)
+    resized = cv2.resize(src, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return _maybe_umat_result(resized), scale
 
 
 def _soften_alpha(mask01: np.ndarray, sigma: float = 1.5) -> np.ndarray:
     mask255 = (mask01.astype(np.uint8) * 255)
-    blurred = cv2.GaussianBlur(mask255, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
-    return blurred.astype(np.uint8)
+    src = _maybe_umat(mask255)
+    blurred = cv2.GaussianBlur(src, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
+    return _maybe_umat_result(blurred).astype(np.uint8)
 
 
 def _simple_background_mask(bgr: np.ndarray) -> np.ndarray:
@@ -263,7 +313,8 @@ def _simple_background_mask(bgr: np.ndarray) -> np.ndarray:
     border_lab = cv2.cvtColor(border.reshape(-1, 1, 3), cv2.COLOR_BGR2LAB).reshape(-1, 3)
     bg_lab = np.median(border_lab, axis=0).astype(np.float32)
 
-    img_lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
+    img_lab = cv2.cvtColor(_maybe_umat(bgr), cv2.COLOR_BGR2LAB)
+    img_lab = _maybe_umat_result(img_lab).astype(np.float32)
     dist = np.linalg.norm(img_lab - bg_lab[None, None, :], axis=2)
 
     # Dynamic-ish threshold based on border spread; keeps the simple method stable.
@@ -273,8 +324,10 @@ def _simple_background_mask(bgr: np.ndarray) -> np.ndarray:
     bg = (dist < thr).astype(np.uint8)
     fg = (1 - bg).astype(np.uint8)
 
-    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    fg = _maybe_umat_result(fg)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = _maybe_umat_result(fg)
 
     fg = _keep_largest_component(fg)
     return fg
@@ -296,8 +349,10 @@ def _grabcut_foreground_mask(bgr: np.ndarray) -> np.ndarray:
     cv2.grabCut(bgr, mask, rect, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
 
     fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    fg = _maybe_umat_result(fg)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = _maybe_umat_result(fg)
     fg = _keep_largest_component(fg)
     return fg
 
@@ -331,12 +386,14 @@ def _grabcut_foreground_mask_seeded(bgr: np.ndarray) -> np.ndarray:
 
     # Sure foreground = eroded seed (avoid including background near edges).
     k = max(3, int(round(min(h, w) * 0.01)) | 1)  # odd kernel size
-    sure_fg = cv2.erode(seed_fg, np.ones((k, k), np.uint8), iterations=1)
+    sure_fg = cv2.erode(_maybe_umat(seed_fg), np.ones((k, k), np.uint8), iterations=1)
+    sure_fg = _maybe_umat_result(sure_fg)
     gc[sure_fg == 1] = cv2.GC_FGD
 
     # Sure background = dilated background.
     seed_bg = (1 - seed_fg).astype(np.uint8)
-    sure_bg = cv2.dilate(seed_bg, np.ones((k, k), np.uint8), iterations=1)
+    sure_bg = cv2.dilate(_maybe_umat(seed_bg), np.ones((k, k), np.uint8), iterations=1)
+    sure_bg = _maybe_umat_result(sure_bg)
     gc[sure_bg == 1] = cv2.GC_BGD
 
     bgd_model = np.zeros((1, 65), np.float64)
@@ -344,8 +401,10 @@ def _grabcut_foreground_mask_seeded(bgr: np.ndarray) -> np.ndarray:
     cv2.grabCut(bgr, gc, None, bgd_model, fgd_model, 6, cv2.GC_INIT_WITH_MASK)
 
     fg = np.where((gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    fg = _maybe_umat_result(fg)
+    fg = cv2.morphologyEx(_maybe_umat(fg), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+    fg = _maybe_umat_result(fg)
     fg = _keep_largest_component(fg)
     return fg
 
@@ -364,7 +423,9 @@ def remove_background(
     - ultra_complex: ML segmentation (highest quality; heavy).
     """
 
+    t0 = time.perf_counter()
     bgra = _decode_bgra(image_bytes)
+    t_decode = time.perf_counter()
 
     # If the image already has transparency, it may already be background-removed.
     # However, some PNGs carry tiny accidental alpha (e.g. a few pixels) and users
@@ -379,37 +440,66 @@ def remove_background(
                 if report_already_removed:
                     raise BackgroundAlreadyRemovedError("background already removed")
                 rgba = cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)
-                return _encode_png_rgba(rgba)
+                out = _encode_png_rgba(rgba)
+                if _time_enabled():
+                    logger.info("bg.remove timing: decode=%.1fms short-circuit=%.1fms", (t_decode - t0) * 1000, (time.perf_counter() - t0) * 1000)
+                return out
 
     bgr = bgra[:, :, :3]
 
     if mode == "ultra_complex":
         # rembg handles decoding/encoding; return PNG bytes with alpha.
+        t_ultra = time.perf_counter()
         ultra = _remove_background_ultra_complex(image_bytes)
+        t_ultra_done = time.perf_counter()
         # Ensure final output is strictly transparent/opaque (no semi-transparent ghosting).
         out_bgra = _decode_bgra(ultra)
         out_bgra = _binarize_alpha(out_bgra, threshold=128)
         rgba = cv2.cvtColor(out_bgra, cv2.COLOR_BGRA2RGBA)
-        return _encode_png_rgba(rgba)
+        out = _encode_png_rgba(rgba)
+        if _time_enabled():
+            logger.info(
+                "bg.remove timing: decode=%.1fms ultra=%.1fms post=%.1fms total=%.1fms",
+                (t_decode - t0) * 1000,
+                (t_ultra_done - t_ultra) * 1000,
+                (time.perf_counter() - t_ultra_done) * 1000,
+                (time.perf_counter() - t0) * 1000,
+            )
+        return out
 
     if mode == "complex":
         # GrabCut can be slow on large inputs; downscale for segmentation, then upscale the mask.
+        t_seg = time.perf_counter()
         bgr_small, scale = _resize_to_max(bgr, max_dim=900)
         # Seeded initialization improves quality vs rectangle-only.
         fg_small = _grabcut_foreground_mask_seeded(bgr_small)
         if scale != 1.0:
             h, w = bgr.shape[:2]
-            fg01 = cv2.resize(fg_small, (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+            fg01 = cv2.resize(_maybe_umat(fg_small), (w, h), interpolation=cv2.INTER_NEAREST)
+            fg01 = _maybe_umat_result(fg01).astype(np.uint8)
         else:
             fg01 = fg_small
+        t_seg_done = time.perf_counter()
     else:
+        t_seg = time.perf_counter()
         fg01 = _simple_background_mask(bgr)
-
+        t_seg_done = time.perf_counter()
+    t_soft = time.perf_counter()
     alpha = _soften_alpha(fg01, sigma=1.5)
-
     out_bgra = np.dstack([bgr, alpha])
+    t_out = time.perf_counter()
     rgba = cv2.cvtColor(out_bgra, cv2.COLOR_BGRA2RGBA)
-    return _encode_png_rgba(rgba)
+    out = _encode_png_rgba(rgba)
+    if _time_enabled():
+        logger.info(
+            "bg.remove timing: decode=%.1fms segment=%.1fms soften=%.1fms compose=%.1fms total=%.1fms",
+            (t_decode - t0) * 1000,
+            (t_seg_done - t_seg) * 1000,
+            (t_out - t_soft) * 1000,
+            (time.perf_counter() - t_out) * 1000,
+            (time.perf_counter() - t0) * 1000,
+        )
+    return out
 
 
 def background_removed_filename(original_filename: str, person_index: int | None = None) -> str:
