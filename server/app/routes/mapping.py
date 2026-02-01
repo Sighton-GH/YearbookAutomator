@@ -110,7 +110,9 @@ async def detect_face_center_api(image: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image")
 
-    center = detect_face_center(img)
+    from app.services.face_detection import detect_face_center_for_editor
+
+    center = detect_face_center_for_editor(img)
     if not center:
         # Face detection is optional (depends on numpy/opencv). Make this
         # user-actionable for the UI.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,7 @@ _RETINA_SESSION: object | None = None
 _RETINA_MODEL_PATH: str | None = None
 _RETINA_INPUT_SIZE: int | None = None
 _RETINA_PROVIDERS: list[str] | None = None
+_RETINA_PIP_LOGGED = False
 
 _YUNET: object | None = None
 _YUNET_MODEL_PATH: str | None = None
@@ -106,6 +108,28 @@ def _load_yunet(model_path: str, input_size: int, score_threshold: float) -> obj
     try:
         detector = cv2.FaceDetectorYN.create(model_path, "", (input_size, input_size))
         detector.setScoreThreshold(float(score_threshold))
+
+        # Best-effort GPU backend selection (OpenCL / DirectML if available).
+        backend = os.getenv("YMGA_YUNET_BACKEND", "").strip().upper()
+        target = os.getenv("YMGA_YUNET_TARGET", "").strip().upper()
+
+        def _apply_backend_target(b: int, t: int) -> None:
+            try:
+                detector.setBackend(b)
+                detector.setTarget(t)
+            except Exception:
+                pass
+
+        if backend and target and hasattr(cv2, f"DNN_BACKEND_{backend}") and hasattr(cv2, f"DNN_TARGET_{target}"):
+            _apply_backend_target(getattr(cv2, f"DNN_BACKEND_{backend}"), getattr(cv2, f"DNN_TARGET_{target}"))
+        else:
+            # Prefer DirectML if available; otherwise try OpenCL.
+            if hasattr(cv2, "DNN_BACKEND_DML") and hasattr(cv2, "DNN_TARGET_DML"):
+                _apply_backend_target(cv2.DNN_BACKEND_DML, cv2.DNN_TARGET_DML)
+            elif hasattr(cv2, "DNN_TARGET_OPENCL"):
+                _apply_backend_target(cv2.DNN_BACKEND_OPENCV, cv2.DNN_TARGET_OPENCL)
+            elif hasattr(cv2, "DNN_TARGET_OPENCL_FP16"):
+                _apply_backend_target(cv2.DNN_BACKEND_OPENCV, cv2.DNN_TARGET_OPENCL_FP16)
     except Exception:
         return None
 
@@ -232,6 +256,42 @@ def _retinaface_detect(img_rgb: Image.Image, model_path: str, input_size: int, c
     return _nms(out)
 
 
+def _retinaface_pip_detect(img_rgb: Image.Image, conf_threshold: float) -> list[FaceBox]:
+    global _RETINA_PIP_LOGGED
+    try:
+        from retinaface import RetinaFace  # type: ignore
+    except Exception:
+        return []
+
+    if not _RETINA_PIP_LOGGED:
+        logger.info("RetinaFace pip backend enabled")
+        _RETINA_PIP_LOGGED = True
+
+    try:
+        rgb = img_rgb.convert("RGB")
+    except Exception:
+        return []
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
+        try:
+            rgb.save(tmp.name, format="PNG")
+            resp = RetinaFace.detect_faces(tmp.name) or {}
+        except Exception:
+            return []
+
+    out: list[FaceBox] = []
+    for _, face in resp.items():
+        area = face.get("facial_area") if isinstance(face, dict) else None
+        score = face.get("score") if isinstance(face, dict) else None
+        if not area or len(area) < 4:
+            continue
+        if score is not None and float(score) < conf_threshold:
+            continue
+        x0, y0, x1, y1 = [float(v) for v in area[:4]]
+        out.append(FaceBox(x=x0, y=y0, w=max(1.0, x1 - x0), h=max(1.0, y1 - y0), score=float(score or 0.0)))
+    return _nms(out)
+
+
 def _yunet_detect(img_rgb: Image.Image, model_path: str, input_size: int, score_threshold: float) -> list[FaceBox]:
     detector = _load_yunet(model_path, input_size, score_threshold)
     if detector is None:
@@ -302,10 +362,10 @@ def _pick_center(boxes: list[FaceBox]) -> Optional[tuple[float, float]]:
     return (best.x + best.w / 2.0, best.y + best.h / 2.0)
 
 
-def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
+def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
+    """Editor flow: prioritize RetinaFace for manual baby photo edits."""
     settings = get_face_detection_settings()
 
-    # 1) RetinaFace (preferred)
     if settings.retinaface_model_path:
         boxes = _retinaface_detect(
             img_rgb,
@@ -316,9 +376,20 @@ def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
         center = _pick_center(boxes)
         if center is not None:
             return center
+    else:
+        boxes = _retinaface_pip_detect(img_rgb, float(settings.retinaface_confidence or 0.7))
+        center = _pick_center(boxes)
+        if center is not None:
+            return center
 
-    # 2) YuNet (opt-in)
-    if settings.enable_yunet and settings.yunet_model_path:
+    boxes = _haar_detect(img_rgb)
+    return _pick_center(boxes)
+
+
+def detect_face_center_for_generation(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
+    """Generation flow: use YuNet (GPU-accelerated if available)."""
+    settings = get_face_detection_settings()
+    if settings.yunet_model_path:
         boxes = _yunet_detect(
             img_rgb,
             settings.yunet_model_path,
@@ -329,6 +400,10 @@ def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
         if center is not None:
             return center
 
-    # 3) Haar fallback
     boxes = _haar_detect(img_rgb)
     return _pick_center(boxes)
+
+
+def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
+    """Backward-compatible default (editor behavior)."""
+    return detect_face_center_for_editor(img_rgb)

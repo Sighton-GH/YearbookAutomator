@@ -85,6 +85,7 @@ def admin_settings(_: Annotated[None, Depends(_require_admin)]):
     <h3>Notes</h3>
     <ul>
       <li>RetinaFace is always attempted first when a model path is provided.</li>
+      <li>If the model path is empty, the server will try the <code>retina-face</code> pip package (if installed).</li>
       <li>YuNet runs only when enabled above and a model path is provided.</li>
       <li>Both models should be ONNX files compatible with OpenCV / ONNX Runtime.</li>
     </ul>

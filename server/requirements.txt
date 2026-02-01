@@ -13,4 +13,5 @@ pytesseract==0.3.10
 pytest==8.3.2
 rembg==2.0.57
 onnxruntime-directml==1.20.1
+retina-face==0.0.17
 PyMuPDF==1.24.14

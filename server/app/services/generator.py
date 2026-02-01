@@ -337,7 +337,7 @@ def _fit_image_with_focus(img: Image.Image, target_w: int, target_h: int, focus_
 def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
     """Best-effort face detection. Returns the center of the largest detected face."""
     try:
-        from app.services.face_detection import detect_face_center as detect
+        from app.services.face_detection import detect_face_center_for_generation as detect
     except Exception:
         return None
     return detect(img_rgb)

@@ -23,7 +23,8 @@ class FaceDetectionSettings:
     yunet_score_threshold: float = 0.7
 
 
-DEFAULT_SETTINGS = FaceDetectionSettings()
+_DEFAULT_YUNET_PATH = str((Path(__file__).resolve().parents[2] / "models" / "face" / "face_detection_yunet_2023mar.onnx"))
+DEFAULT_SETTINGS = FaceDetectionSettings(yunet_model_path=_DEFAULT_YUNET_PATH)
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -61,12 +62,15 @@ def _read_raw() -> dict:
 
 def get_face_detection_settings() -> FaceDetectionSettings:
     raw = _read_raw()
+    yunet_default = DEFAULT_SETTINGS.yunet_model_path
+    if yunet_default and not Path(yunet_default).exists():
+        yunet_default = ""
     return FaceDetectionSettings(
         enable_yunet=_coerce_bool(raw.get("enable_yunet", DEFAULT_SETTINGS.enable_yunet)),
         retinaface_model_path=str(raw.get("retinaface_model_path", DEFAULT_SETTINGS.retinaface_model_path) or ""),
         retinaface_input_size=_coerce_int(raw.get("retinaface_input_size", DEFAULT_SETTINGS.retinaface_input_size), DEFAULT_SETTINGS.retinaface_input_size),
         retinaface_confidence=_coerce_float(raw.get("retinaface_confidence", DEFAULT_SETTINGS.retinaface_confidence), DEFAULT_SETTINGS.retinaface_confidence),
-        yunet_model_path=str(raw.get("yunet_model_path", DEFAULT_SETTINGS.yunet_model_path) or ""),
+        yunet_model_path=str(raw.get("yunet_model_path", yunet_default) or ""),
         yunet_input_size=_coerce_int(raw.get("yunet_input_size", DEFAULT_SETTINGS.yunet_input_size), DEFAULT_SETTINGS.yunet_input_size),
         yunet_score_threshold=_coerce_float(raw.get("yunet_score_threshold", DEFAULT_SETTINGS.yunet_score_threshold), DEFAULT_SETTINGS.yunet_score_threshold),
     )
