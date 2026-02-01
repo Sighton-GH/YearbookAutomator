@@ -362,6 +362,12 @@ def _pick_center(boxes: list[FaceBox]) -> Optional[tuple[float, float]]:
     return (best.x + best.w / 2.0, best.y + best.h / 2.0)
 
 
+def _pick_largest(boxes: list[FaceBox]) -> Optional[FaceBox]:
+    if not boxes:
+        return None
+    return max(boxes, key=lambda b: b.w * b.h)
+
+
 def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
     """Editor flow: prioritize RetinaFace for manual baby photo edits."""
     settings = get_face_detection_settings()
@@ -402,6 +408,24 @@ def detect_face_center_for_generation(img_rgb: Image.Image) -> Optional[tuple[fl
 
     boxes = _haar_detect(img_rgb)
     return _pick_center(boxes)
+
+
+def detect_face_box_for_generation(img_rgb: Image.Image) -> Optional[FaceBox]:
+    """Generation flow: return the largest detected face box (if any)."""
+    settings = get_face_detection_settings()
+    if settings.yunet_model_path:
+        boxes = _yunet_detect(
+            img_rgb,
+            settings.yunet_model_path,
+            int(settings.yunet_input_size or 320),
+            float(settings.yunet_score_threshold or 0.7),
+        )
+        best = _pick_largest(boxes)
+        if best is not None:
+            return best
+
+    boxes = _haar_detect(img_rgb)
+    return _pick_largest(boxes)
 
 
 def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
