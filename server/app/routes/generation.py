@@ -22,6 +22,7 @@ from app.services.licensing import (
     validate_and_record_use,
 )
 from app.services.licensing_usage import append_usage_event
+from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
 from app.services.storage import workspace_dir
 from app.services.progress import start_job, update_job, get_job
@@ -85,6 +86,10 @@ def _save_generation_request(payload: GenerationRequest) -> None:
 
 @router.post("/generate")
 async def generate(payload: GenerationRequest, request: Request) -> dict[str, Any]:
+    feature_settings = get_face_detection_settings()
+    if not feature_settings.enable_heavy_generation_ops:
+        payload.center_baby_on_face = False
+
     usage_payload: dict[str, object] | None = None
     if payload.count_usage:
         key = get_required_license_key_from_headers(request.headers)

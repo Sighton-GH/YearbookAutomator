@@ -435,7 +435,7 @@ export function MugshotMapping({
   };
 
   const removePerson = (personIndex: number) => {
-    setPeople((prev) => prev.filter((p) => p.index !== personIndex));
+    setPeople(people.filter((p) => p.index !== personIndex));
     setAdjustments((prev) => {
       const { [personIndex]: _omit, ...rest } = prev;
       return rest;

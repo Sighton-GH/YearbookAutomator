@@ -15,6 +15,7 @@ _SETTINGS_PATH = _SETTINGS_DIR / "settings.json"
 @dataclass(frozen=True)
 class FaceDetectionSettings:
     enable_yunet: bool = False
+    enable_heavy_generation_ops: bool = False
     retinaface_model_path: str = ""
     retinaface_input_size: int = 640
     retinaface_confidence: float = 0.7
@@ -67,6 +68,9 @@ def get_face_detection_settings() -> FaceDetectionSettings:
         yunet_default = ""
     return FaceDetectionSettings(
         enable_yunet=_coerce_bool(raw.get("enable_yunet", DEFAULT_SETTINGS.enable_yunet)),
+        enable_heavy_generation_ops=_coerce_bool(
+            raw.get("enable_heavy_generation_ops", DEFAULT_SETTINGS.enable_heavy_generation_ops)
+        ),
         retinaface_model_path=str(raw.get("retinaface_model_path", DEFAULT_SETTINGS.retinaface_model_path) or ""),
         retinaface_input_size=_coerce_int(raw.get("retinaface_input_size", DEFAULT_SETTINGS.retinaface_input_size), DEFAULT_SETTINGS.retinaface_input_size),
         retinaface_confidence=_coerce_float(raw.get("retinaface_confidence", DEFAULT_SETTINGS.retinaface_confidence), DEFAULT_SETTINGS.retinaface_confidence),

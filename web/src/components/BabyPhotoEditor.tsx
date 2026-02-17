@@ -82,6 +82,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const croppedAreaPixelsRef = useRef<Area | null>(null);
+  const pendingFaceCenterRef = useRef<{ x: number; y: number } | null>(null);
   const editorCropRef = useRef<HTMLDivElement | null>(null);
   const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
   const [editorMediaSize, setEditorMediaSize] = useState<MediaSize | null>(null);
@@ -141,6 +143,10 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     ro.observe(el);
     return () => ro.disconnect();
   }, [editingIdx, editingSrc, outSize.width, outSize.height]);
+
+  useEffect(() => {
+    croppedAreaPixelsRef.current = croppedAreaPixels;
+  }, [croppedAreaPixels]);
 
   const updatePerson = (idx: number, updater: (p: PersonRecord) => PersonRecord) => {
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
@@ -317,11 +323,52 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
       const imgW = editorMediaSize.naturalWidth;
       const imgH = editorMediaSize.naturalHeight;
-      const fx = Math.max(0, Math.min(imgW, fc.center_x));
-      const fy = Math.max(0, Math.min(imgH, fc.center_y));
+      const detectW = Math.max(1, Number(fc.width || imgW));
+      const detectH = Math.max(1, Number(fc.height || imgH));
+      const mapX = imgW / detectW;
+      const mapY = imgH / detectH;
+      const fx = Math.max(0, Math.min(imgW, fc.center_x * mapX));
+      const fy = Math.max(0, Math.min(imgH, fc.center_y * mapY));
 
-      const w = Math.max(1, Math.round(croppedAreaPixels.width));
-      const h = Math.max(1, Math.round(croppedAreaPixels.height));
+      const currentW = Math.max(1, Math.round(croppedAreaPixels.width));
+      const currentH = Math.max(1, Math.round(croppedAreaPixels.height));
+      const currentMin = Math.max(1, Math.min(currentW, currentH));
+      const detectedFaceSize = Math.max(
+        0,
+        Number(fc.face_width ?? 0) * mapX,
+        Number(fc.face_height ?? 0) * mapY
+      );
+
+      const TARGET_FACE_RATIO = 0.33;
+      const MIN_SCALE_FACTOR = 0.45;
+      const MAX_SCALE_FACTOR = 1.35;
+      const MIN_FACE_RATIO = 0.18;
+      const MAX_FACE_RATIO = 0.44;
+
+      let scale = 1;
+      if (detectedFaceSize > 0) {
+        const desiredMin = detectedFaceSize / TARGET_FACE_RATIO;
+        const ratioMin = detectedFaceSize / MAX_FACE_RATIO;
+        const ratioMax = detectedFaceSize / MIN_FACE_RATIO;
+        const boundedDesiredMin = Math.max(ratioMin, Math.min(ratioMax, desiredMin));
+        scale = boundedDesiredMin / currentMin;
+      }
+
+      const maxCenterableW = Math.max(1, Math.floor(2 * Math.min(fx, imgW - fx)));
+      const maxCenterableH = Math.max(1, Math.floor(2 * Math.min(fy, imgH - fy)));
+      const centerableScaleUpper = Math.min(maxCenterableW / currentW, maxCenterableH / currentH);
+
+      let minScaleAllowed = MIN_SCALE_FACTOR;
+      if (detectedFaceSize > 0) {
+        const minDimForMaxFaceRatio = detectedFaceSize / MAX_FACE_RATIO;
+        minScaleAllowed = Math.max(minScaleAllowed, minDimForMaxFaceRatio / currentMin);
+      }
+
+      scale = Math.min(scale, centerableScaleUpper);
+      scale = Math.max(minScaleAllowed, Math.min(MAX_SCALE_FACTOR, scale));
+
+      const w = Math.max(1, Math.round(currentW * scale));
+      const h = Math.max(1, Math.round(currentH * scale));
       const maxX = Math.max(0, imgW - w);
       const maxY = Math.max(0, imgH - h);
       const desiredArea: Area = {
@@ -340,10 +387,73 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         3
       );
 
+      pendingFaceCenterRef.current = { x: fx, y: fy };
       setCrop(nextCrop);
       setZoom(Math.max(0.5, Math.min(3, nextZoom)));
+
+      const refineToFaceCenter = (attempt: number) => {
+        if (!editorMediaSize || !editorCropSize) return;
+        const focus = pendingFaceCenterRef.current;
+        const areaNow = croppedAreaPixelsRef.current;
+        if (!focus || !areaNow) {
+          if (attempt < 4) {
+            window.setTimeout(() => refineToFaceCenter(attempt + 1), 35);
+          }
+          return;
+        }
+
+        const centerNowX = areaNow.x + areaNow.width / 2;
+        const centerNowY = areaNow.y + areaNow.height / 2;
+        const dx = focus.x - centerNowX;
+        const dy = focus.y - centerNowY;
+        const tolerance = 1;
+        if (Math.abs(dx) <= tolerance && Math.abs(dy) <= tolerance) {
+          pendingFaceCenterRef.current = null;
+          return;
+        }
+
+        const imgW2 = editorMediaSize.naturalWidth;
+        const imgH2 = editorMediaSize.naturalHeight;
+        const w2 = Math.max(1, Math.round(areaNow.width));
+        const h2 = Math.max(1, Math.round(areaNow.height));
+        const maxX2 = Math.max(0, imgW2 - w2);
+        const maxY2 = Math.max(0, imgH2 - h2);
+        const corrected: Area = {
+          width: w2,
+          height: h2,
+          x: Math.max(0, Math.min(maxX2, Math.round(areaNow.x + dx))),
+          y: Math.max(0, Math.min(maxY2, Math.round(areaNow.y + dy))),
+        };
+
+        const refined = getInitialCropFromCroppedAreaPixels(
+          corrected,
+          editorMediaSize,
+          0,
+          editorCropSize,
+          0.5,
+          3
+        );
+        setCrop(refined.crop);
+        setZoom(Math.max(0.5, Math.min(3, refined.zoom)));
+        if (attempt < 4) {
+          window.setTimeout(() => refineToFaceCenter(attempt + 1), 35);
+        } else {
+          pendingFaceCenterRef.current = null;
+        }
+      };
+
+      window.setTimeout(() => refineToFaceCenter(0), 35);
+
+      const detectorLabel = (() => {
+        if (fc.detector === "yunet") return "YuNet";
+        if (fc.detector === "retinaface") return "RetinaFace";
+        if (fc.detector === "haar") return "Haar";
+        return "face detector";
+      })();
+      const rotatedSuffix = fc.detector_rotation_cw && fc.detector_rotation_cw !== 0 ? " (rotated)" : "";
+
       setDirtyEdits(true);
-      setCenterFaceMessage("Centered on face");
+      setCenterFaceMessage(`Centered on face (${detectorLabel}${rotatedSuffix})`);
     } catch (err) {
       console.error(err);
       setCenterFaceMessage("Could not detect face");

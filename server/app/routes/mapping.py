@@ -31,6 +31,7 @@ from app.services.background_jobs import (
     pop_result_bytes as pop_bg_result_bytes,
     to_status_payload,
 )
+from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import detect_face_center
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
@@ -102,18 +103,18 @@ async def detect_face_center_api(image: UploadFile = File(...)):
         raw = await image.read()
         if not raw:
             raise HTTPException(status_code=400, detail="Empty image")
-        from PIL import Image
+        from PIL import Image, ImageOps
 
-        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image")
 
-    from app.services.face_detection import detect_face_center_for_editor
+    from app.services.face_detection import detect_face_box_for_editor_with_meta
 
-    center = detect_face_center_for_editor(img)
-    if not center:
+    result = detect_face_box_for_editor_with_meta(img)
+    if not result:
         # Face detection is optional (depends on numpy/opencv). Make this
         # user-actionable for the UI.
         try:
@@ -129,17 +130,27 @@ async def detect_face_center_api(image: UploadFile = File(...)):
                 "reason": "unavailable" if unavailable else "not_found",
                 "center_x": None,
                 "center_y": None,
+                "face_width": None,
+                "face_height": None,
+                "detector": None,
+                "detector_rotation_cw": None,
                 "width": img.width,
                 "height": img.height,
             }
         )
 
-    cx, cy = center
+    face, detector, rotation_cw = result
+    cx = face.x + face.w / 2.0
+    cy = face.y + face.h / 2.0
     return JSONResponse(
         {
             "found": True,
             "center_x": float(cx),
             "center_y": float(cy),
+            "face_width": float(face.w),
+            "face_height": float(face.h),
+            "detector": detector,
+            "detector_rotation_cw": int(rotation_cw),
             "width": img.width,
             "height": img.height,
         }
@@ -368,6 +379,10 @@ async def upload_image(
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
+    feature_settings = get_face_detection_settings()
+    if kind == "baby" and not feature_settings.enable_heavy_generation_ops:
+        remove_background = False
+
     filename = Path(file.filename).name
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
@@ -520,6 +535,10 @@ async def upload_baby_zip(
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> SpreadsheetPreview:
+    feature_settings = get_face_detection_settings()
+    if not feature_settings.enable_heavy_generation_ops:
+        remove_background = False
+
     # Parse people passed from frontend (source of truth for indices/names).
     people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
 

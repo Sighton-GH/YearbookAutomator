@@ -21,8 +21,6 @@ export function ToolMessages({
   messages: ToolMessage[];
   onDismiss?: (id: string) => void;
 }) {
-  if (!messages.length) return null;
-
   const [openById, setOpenById] = useState<Record<string, boolean>>({});
   const [closingById, setClosingById] = useState<Record<string, boolean>>({});
   const closeTimersRef = useRef<Record<string, number>>({});
@@ -127,6 +125,8 @@ export function ToolMessages({
     if (kind === "warning") return "warn";
     return "";
   };
+
+  if (!messages.length) return null;
 
   return (
     <div className="tool-messages" aria-label="Tool messages">

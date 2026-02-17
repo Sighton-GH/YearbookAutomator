@@ -29,6 +29,7 @@ import {
   removeBackgroundPreviewStatus,
   fetchRemoveBackgroundPreviewResult,
   detectFaceCenter,
+  getAdminFeatureFlags,
   type BackgroundMode,
   type Box,
   type PersonRecord,
@@ -172,6 +173,7 @@ export default function App({ embedded = false }: AppProps) {
   const [babyIngest, setBabyIngest] = useState<NonNullable<PersistedSessionV1["babyIngest"]>>({
     advancedNameMatch: true,
     partialNameMatch: true,
+    convertPdfs: true,
     removeBackground: false,
     backgroundMode: "simple",
     allowInsecureUploads: false,
@@ -223,6 +225,29 @@ export default function App({ embedded = false }: AppProps) {
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
   const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
+  const [heavyGenerationOpsEnabled, setHeavyGenerationOpsEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const flags = await getAdminFeatureFlags();
+        if (!cancelled) {
+          setHeavyGenerationOpsEnabled(Boolean(flags.enable_heavy_generation_ops));
+        }
+      } catch {
+        if (!cancelled) setHeavyGenerationOpsEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (heavyGenerationOpsEnabled) return;
+    if (centerBabyOnFace) setCenterBabyOnFace(false);
+  }, [heavyGenerationOpsEnabled, centerBabyOnFace]);
 
   useEffect(() => {
     if (!templateSize) {
@@ -478,6 +503,7 @@ export default function App({ embedded = false }: AppProps) {
     setBabyIngest({
       advancedNameMatch: true,
       partialNameMatch: true,
+      convertPdfs: true,
       removeBackground: false,
       backgroundMode: "simple",
       allowInsecureUploads: false,
@@ -647,6 +673,7 @@ export default function App({ embedded = false }: AppProps) {
     setBabyIngest({
       advancedNameMatch: Boolean(session.babyIngest?.advancedNameMatch ?? true),
       partialNameMatch: Boolean(session.babyIngest?.partialNameMatch ?? true),
+      convertPdfs: Boolean(session.babyIngest?.convertPdfs ?? true),
       removeBackground: Boolean(session.babyIngest?.removeBackground ?? false),
       backgroundMode: (session.babyIngest?.backgroundMode as BackgroundMode) ?? "simple",
       allowInsecureUploads: Boolean(session.babyIngest?.allowInsecureUploads ?? false),
@@ -1110,6 +1137,7 @@ export default function App({ embedded = false }: AppProps) {
         setBabyIngest({
           advancedNameMatch: Boolean(saved.babyIngest?.advancedNameMatch ?? true),
           partialNameMatch: Boolean(saved.babyIngest?.partialNameMatch ?? true),
+          convertPdfs: Boolean(saved.babyIngest?.convertPdfs ?? true),
           removeBackground: Boolean(saved.babyIngest?.removeBackground ?? false),
           backgroundMode: (saved.babyIngest?.backgroundMode as BackgroundMode) ?? "simple",
           allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
@@ -2185,7 +2213,7 @@ export default function App({ embedded = false }: AppProps) {
 
       <div
         className={clsx("page", {
-          "page-wide": activeStep === 2 || activeStep === 3 || activeStep === 4 || activeStep === 6,
+          "page-wide": activeStep === 3 || activeStep === 4 || activeStep === 6,
         })}
       >
 
@@ -2543,6 +2571,7 @@ export default function App({ embedded = false }: AppProps) {
               onBabyBackgroundColor={setBabyBackgroundColor}
               centerBabyOnFace={centerBabyOnFace}
               onCenterBabyOnFace={setCenterBabyOnFace}
+              heavyGenerationOpsEnabled={heavyGenerationOpsEnabled}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               setLoading={setLoading}

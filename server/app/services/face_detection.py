@@ -93,8 +93,10 @@ def _load_yunet(model_path: str, input_size: int, score_threshold: float) -> obj
     global _YUNET, _YUNET_MODEL_PATH, _YUNET_INPUT_SIZE, _YUNET_SCORE
 
     if not model_path:
+        logger.warning("YuNet disabled: empty model path")
         return None
     if not Path(model_path).exists():
+        logger.warning("YuNet model not found: %s", model_path)
         return None
 
     if (
@@ -130,7 +132,8 @@ def _load_yunet(model_path: str, input_size: int, score_threshold: float) -> obj
                 _apply_backend_target(cv2.DNN_BACKEND_OPENCV, cv2.DNN_TARGET_OPENCL)
             elif hasattr(cv2, "DNN_TARGET_OPENCL_FP16"):
                 _apply_backend_target(cv2.DNN_BACKEND_OPENCV, cv2.DNN_TARGET_OPENCL_FP16)
-    except Exception:
+    except Exception as exc:
+        logger.warning("YuNet initialization failed (%s)", exc)
         return None
 
     _YUNET = detector
@@ -312,6 +315,31 @@ def _yunet_detect(img_rgb: Image.Image, model_path: str, input_size: int, score_
     return out
 
 
+def _yunet_detect_with_status(
+    img_rgb: Image.Image,
+    model_path: str,
+    input_size: int,
+    score_threshold: float,
+) -> tuple[list[FaceBox], bool]:
+    detector = _load_yunet(model_path, input_size, score_threshold)
+    if detector is None:
+        return [], False
+
+    rgb = img_rgb.convert("RGB")
+    img = np.array(rgb)
+    bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    detector.setInputSize((bgr.shape[1], bgr.shape[0]))
+    ok, detections = detector.detect(bgr)
+    if not ok or detections is None:
+        return [], True
+
+    out: list[FaceBox] = []
+    for det in detections:
+        x, y, w, h, score = det[:5]
+        out.append(FaceBox(float(x), float(y), float(w), float(h), float(score)))
+    return out, True
+
+
 def _haar_detect(img_rgb: Image.Image) -> list[FaceBox]:
     try:
         rgb = img_rgb.convert("RGB")
@@ -350,7 +378,7 @@ def _haar_detect(img_rgb: Image.Image) -> list[FaceBox]:
 
     out: list[FaceBox] = []
     for (x, y, w, h) in faces:
-        out.append(FaceBox(float(x), float(y), float(w), float(h), score=1.0))
+        out.append(FaceBox(float(x), float(y), float(w), float(h), score=0.35))
     return out
 
 
@@ -368,9 +396,115 @@ def _pick_largest(boxes: list[FaceBox]) -> Optional[FaceBox]:
     return max(boxes, key=lambda b: b.w * b.h)
 
 
-def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
-    """Editor flow: prioritize RetinaFace for manual baby photo edits."""
-    settings = get_face_detection_settings()
+def _pick_editor_box(boxes: list[FaceBox], image_w: int, image_h: int) -> Optional[FaceBox]:
+    if not boxes:
+        return None
+
+    total_area = float(max(1, image_w * image_h))
+    center_x = image_w / 2.0
+    center_y = image_h / 2.0
+
+    top_score = max(float(b.score) for b in boxes)
+    min_score = max(0.5, top_score - 0.1)
+
+    candidates: list[FaceBox] = []
+    for box in boxes:
+        area_ratio = (box.w * box.h) / total_area
+        if area_ratio < 0.003 or area_ratio > 0.55:
+            continue
+        if float(box.score) < min_score:
+            continue
+        candidates.append(box)
+
+    if not candidates:
+        candidates = boxes
+
+    def _rank(box: FaceBox) -> tuple[float, float, float]:
+        bx = box.x + box.w / 2.0
+        by = box.y + box.h / 2.0
+        distance = (bx - center_x) ** 2 + (by - center_y) ** 2
+        return (-float(box.score), distance, -(box.w * box.h))
+
+    return min(candidates, key=_rank)
+
+
+def _rotate_for_detection(img_rgb: Image.Image, rotation_cw: int) -> Image.Image:
+    rot = int(rotation_cw) % 360
+    if rot == 0:
+        return img_rgb
+    if rot == 90:
+        return img_rgb.transpose(Image.ROTATE_270)
+    if rot == 180:
+        return img_rgb.transpose(Image.ROTATE_180)
+    if rot == 270:
+        return img_rgb.transpose(Image.ROTATE_90)
+    return img_rgb
+
+
+def _map_box_to_original(box: FaceBox, rotation_cw: int, orig_w: int, orig_h: int) -> FaceBox:
+    rot = int(rotation_cw) % 360
+
+    def inv(px: float, py: float) -> tuple[float, float]:
+        if rot == 0:
+            return px, py
+        if rot == 90:
+            return py, float(orig_h) - px
+        if rot == 180:
+            return float(orig_w) - px, float(orig_h) - py
+        if rot == 270:
+            return float(orig_w) - py, px
+        return px, py
+
+    corners = [
+        inv(box.x, box.y),
+        inv(box.x + box.w, box.y),
+        inv(box.x, box.y + box.h),
+        inv(box.x + box.w, box.y + box.h),
+    ]
+    xs = [p[0] for p in corners]
+    ys = [p[1] for p in corners]
+
+    x0 = max(0.0, min(float(orig_w), min(xs)))
+    y0 = max(0.0, min(float(orig_h), min(ys)))
+    x1 = max(0.0, min(float(orig_w), max(xs)))
+    y1 = max(0.0, min(float(orig_h), max(ys)))
+
+    return FaceBox(
+        x=x0,
+        y=y0,
+        w=max(1.0, x1 - x0),
+        h=max(1.0, y1 - y0),
+        score=float(box.score),
+    )
+
+
+def _detect_editor_box_single_orientation_with_meta(img_rgb: Image.Image, settings) -> Optional[tuple[FaceBox, str]]:
+    image_w, image_h = img_rgb.size
+    yunet_available = False
+
+    if settings.yunet_model_path:
+        boxes, yunet_available = _yunet_detect_with_status(
+            img_rgb,
+            settings.yunet_model_path,
+            int(settings.yunet_input_size or 320),
+            float(settings.yunet_score_threshold or 0.7),
+        )
+
+        # Relaxed second YuNet pass: slightly larger input and lower threshold.
+        # This recovers many baby/soft-focus cases that miss at strict defaults.
+        if not boxes and yunet_available:
+            relaxed_input = max(int(settings.yunet_input_size or 320), 512)
+            relaxed_score = max(0.35, min(float(settings.yunet_score_threshold or 0.7), 0.55))
+            boxes, _ = _yunet_detect_with_status(
+                img_rgb,
+                settings.yunet_model_path,
+                relaxed_input,
+                relaxed_score,
+            )
+
+        best = _pick_editor_box(boxes, image_w, image_h)
+        if best is not None:
+            return best, "yunet"
 
     if settings.retinaface_model_path:
         boxes = _retinaface_detect(
@@ -379,17 +513,94 @@ def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float,
             int(settings.retinaface_input_size or 640),
             float(settings.retinaface_confidence or 0.7),
         )
-        center = _pick_center(boxes)
-        if center is not None:
-            return center
+        best = _pick_editor_box(boxes, image_w, image_h)
+        if best is not None:
+            return best, "retinaface"
     else:
         boxes = _retinaface_pip_detect(img_rgb, float(settings.retinaface_confidence or 0.7))
-        center = _pick_center(boxes)
-        if center is not None:
-            return center
+        best = _pick_editor_box(boxes, image_w, image_h)
+        if best is not None:
+            return best, "retinaface"
+
+    # If YuNet is available but missed, avoid dropping to Haar (too noisy).
+    if yunet_available:
+        return None
 
     boxes = _haar_detect(img_rgb)
-    return _pick_center(boxes)
+    best = _pick_editor_box(boxes, image_w, image_h)
+    if best is not None:
+        return best, "haar"
+    return None
+
+
+def _detect_editor_box_single_orientation(img_rgb: Image.Image, settings) -> Optional[FaceBox]:
+    result = _detect_editor_box_single_orientation_with_meta(img_rgb, settings)
+    return result[0] if result else None
+
+
+def detect_face_box_for_editor_with_meta(img_rgb: Image.Image) -> Optional[tuple[FaceBox, str, int]]:
+    settings = get_face_detection_settings()
+    image_w, image_h = img_rgb.size
+
+    best_upright = _detect_editor_box_single_orientation_with_meta(img_rgb, settings)
+    if best_upright is not None:
+        box, detector = best_upright
+        return box, detector, 0
+
+    candidates: list[tuple[FaceBox, str, int]] = []
+    for rotation_cw in (90, 270, 180):
+        rotated = _rotate_for_detection(img_rgb, rotation_cw)
+        best_rot = _detect_editor_box_single_orientation_with_meta(rotated, settings)
+        if best_rot is None:
+            continue
+
+        rot_box, detector = best_rot
+        mapped = _map_box_to_original(rot_box, rotation_cw, image_w, image_h)
+        rotation_penalty = 0.02
+        candidates.append(
+            (
+                FaceBox(
+                    x=mapped.x,
+                    y=mapped.y,
+                    w=mapped.w,
+                    h=mapped.h,
+                    score=max(0.0, float(mapped.score) - rotation_penalty),
+                ),
+                detector,
+                rotation_cw,
+            )
+        )
+
+    if not candidates:
+        return None
+    best_box = _pick_editor_box([c[0] for c in candidates], image_w, image_h)
+    if best_box is None:
+        return None
+    for box, detector, rotation_cw in candidates:
+        same = (
+            abs(box.x - best_box.x) < 1e-3
+            and abs(box.y - best_box.y) < 1e-3
+            and abs(box.w - best_box.w) < 1e-3
+            and abs(box.h - best_box.h) < 1e-3
+        )
+        if same:
+            return box, detector, rotation_cw
+    first_box, first_detector, first_rotation = candidates[0]
+    return first_box, first_detector, first_rotation
+
+
+def detect_face_box_for_editor(img_rgb: Image.Image) -> Optional[FaceBox]:
+    """Editor flow: return the largest detected face box (if any)."""
+    result = detect_face_box_for_editor_with_meta(img_rgb)
+    return result[0] if result else None
+
+
+def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
+    """Editor flow: prioritize RetinaFace for manual baby photo edits."""
+    box = detect_face_box_for_editor(img_rgb)
+    if box is None:
+        return None
+    return (box.x + box.w / 2.0, box.y + box.h / 2.0)
 
 
 def detect_face_center_for_generation(img_rgb: Image.Image) -> Optional[tuple[float, float]]:

@@ -13,6 +13,12 @@ from app.services.admin_settings import get_face_detection_settings, update_face
 router = APIRouter()
 
 
+@router.get("/api/admin/settings/features")
+def admin_feature_flags() -> dict[str, bool]:
+    s = get_face_detection_settings()
+    return {"enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops)}
+
+
 @router.get("/admin/settings", response_class=HTMLResponse)
 def admin_settings(_: Annotated[None, Depends(_require_admin)]):
     s = get_face_detection_settings()
@@ -36,6 +42,19 @@ def admin_settings(_: Annotated[None, Depends(_require_admin)]):
 <body>
   <h1>Admin Settings</h1>
   <p><a href=\"/admin/licenses\">Back to license admin</a></p>
+
+  <div class=\"card\">
+    <h2>Generation Features</h2>
+    <form method=\"post\" action=\"/admin/settings/features\">
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_heavy_generation_ops\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_heavy_generation_ops else ""} />
+        Enable heavy baby-photo operations (background removal and center-on-face)
+      </label>
+      <div style=\"margin-top: 12px;\">
+        <button type=\"submit\">Save feature settings</button>
+      </div>
+    </form>
+  </div>
 
   <div class=\"card\">
     <h2>Face Detection (center-on-face)</h2>
@@ -94,7 +113,6 @@ def admin_settings(_: Annotated[None, Depends(_require_admin)]):
 </html>"""
     return HTMLResponse(content=html_body, status_code=200)
 
-
 @router.post("/admin/settings/face", response_class=HTMLResponse)
 def admin_settings_face(
     _: Annotated[None, Depends(_require_admin)],
@@ -119,6 +137,21 @@ def admin_settings_face(
     return HTMLResponse(
         content="""<html><body>
         <p>Settings updated.</p>
+        <p><a href='/admin/settings'>Back to settings</a></p>
+        </body></html>""",
+        status_code=200,
+    )
+
+
+@router.post("/admin/settings/features", response_class=HTMLResponse)
+def admin_settings_features(
+    _: Annotated[None, Depends(_require_admin)],
+    enable_heavy_generation_ops: str | None = Form(None),
+):
+    update_face_detection_settings({"enable_heavy_generation_ops": bool(enable_heavy_generation_ops)})
+    return HTMLResponse(
+        content="""<html><body>
+        <p>Feature settings updated.</p>
         <p><a href='/admin/settings'>Back to settings</a></p>
         </body></html>""",
         status_code=200,

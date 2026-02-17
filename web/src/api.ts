@@ -57,9 +57,22 @@ export type FaceCenterResponse = {
   reason?: "unavailable" | "not_found" | null;
   center_x: number | null;
   center_y: number | null;
+  face_width?: number | null;
+  face_height?: number | null;
+  detector?: "yunet" | "retinaface" | "haar" | null;
+  detector_rotation_cw?: number | null;
   width: number;
   height: number;
 };
+
+export type AdminFeatureFlags = {
+  enable_heavy_generation_ops: boolean;
+};
+
+export async function getAdminFeatureFlags() {
+  const { data } = await axios.get<AdminFeatureFlags>("/api/admin/settings/features");
+  return data;
+}
 
 export async function parseTemplate(
   annotated: File | null,

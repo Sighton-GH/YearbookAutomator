@@ -192,7 +192,7 @@ export async function importBabyZip<S extends SessionLike>(args: {
   await uploadBabyZip(workspaceId, (session.people ?? []) as NonNullable<S["people"]>, babyZip, {
     advancedNameMatch: Boolean(session.babyIngest?.advancedNameMatch ?? true),
     partialNameMatch: Boolean(session.babyIngest?.partialNameMatch ?? true),
-    convertPdfs: Boolean(session.babyIngest?.convertPdfs ?? false),
+    convertPdfs: Boolean(session.babyIngest?.convertPdfs ?? true),
     removeBackground: Boolean(session.babyIngest?.removeBackground ?? false),
     backgroundMode: (session.babyIngest?.backgroundMode as any) || undefined,
     onProgress: (pct) => setStatus?.(`Uploading baby photos zip… ${Math.round(pct)}%`),

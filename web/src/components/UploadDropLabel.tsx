@@ -88,7 +88,7 @@ export function UploadDropLabel({
     if (!dispatched) {
       setHasFile(true);
       setFileName(firstAccepted.name);
-      onFile(firstAccepted);
+      onFile?.(firstAccepted);
     }
   };
 
