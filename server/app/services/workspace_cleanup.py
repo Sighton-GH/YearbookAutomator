@@ -8,6 +8,8 @@ from threading import Event
 from app.services import progress
 from app.services.storage import delete_workspace, list_workspace_ids, read_workspace_meta
 
+MAX_SESSION_TTL_SECONDS = 8 * 60 * 60
+
 
 @dataclass(frozen=True)
 class CleanupConfig:
@@ -32,9 +34,14 @@ def _config_from_env() -> CleanupConfig:
         except ValueError:
             return default
 
+    ttl_seconds = get_int("YMGA_WORKSPACE_TTL_SECONDS", 8 * 60 * 60)
+    if ttl_seconds <= 0:
+        ttl_seconds = 8 * 60 * 60
+    ttl_seconds = min(ttl_seconds, MAX_SESSION_TTL_SECONDS)
+
     return CleanupConfig(
         grace_seconds=get_int("YMGA_WORKSPACE_GRACE_SECONDS", 20),
-        ttl_seconds=get_int("YMGA_WORKSPACE_TTL_SECONDS", 24 * 60 * 60),
+        ttl_seconds=ttl_seconds,
         interval_seconds=get_int("YMGA_WORKSPACE_CLEANUP_INTERVAL_SECONDS", 60),
         active_job_window_seconds=get_int("YMGA_WORKSPACE_ACTIVE_JOB_WINDOW_SECONDS", 5 * 60),
     )
@@ -64,16 +71,25 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
         meta = read_workspace_meta(workspace_id)
         last_seen = float(meta.get("last_seen") or 0)
         end_requested_at = meta.get("end_requested_at")
+        session_expires_at = meta.get("session_expires_at")
 
         should_delete = False
-        if end_requested_at is not None:
+        if session_expires_at is not None:
+            try:
+                session_expires_at_f = float(session_expires_at)
+            except (TypeError, ValueError):
+                session_expires_at_f = 0.0
+            if session_expires_at_f > 0 and now >= session_expires_at_f:
+                should_delete = True
+
+        if not should_delete and end_requested_at is not None:
             try:
                 end_requested_at_f = float(end_requested_at)
             except (TypeError, ValueError):
                 end_requested_at_f = 0.0
             if (now - end_requested_at_f) >= cfg.grace_seconds:
                 should_delete = True
-        elif last_seen and (now - last_seen) >= cfg.ttl_seconds:
+        elif not should_delete and last_seen and (now - last_seen) >= cfg.ttl_seconds:
             should_delete = True
 
         if should_delete and delete_workspace(workspace_id):

@@ -74,9 +74,13 @@ import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils
 
 import {
   clearSession,
+  createSessionIdentity,
+  ensureSessionTiming,
+  getRemainingSessionMs,
+  isSessionExpired,
   isPersistedSessionV1,
   parseStepFromSearch,
-  SESSION_KEY,
+  SESSION_TTL_MS,
   tryLoadSession,
   trySaveSession,
   type PersistedSessionV1,
@@ -120,6 +124,17 @@ const stepTips = [
   "Save a config file occasionally so you can restore work after a refresh or long session.",
 ];
 
+const SESSION_WARNING_MS = 30 * 60 * 1000;
+const SESSION_DANGER_MS = 5 * 60 * 1000;
+
+const formatSessionCountdown = (remainingMs: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
+};
+
 type AppProps = {
   embedded?: boolean;
 };
@@ -133,6 +148,9 @@ export default function App({ embedded = false }: AppProps) {
   const [didRestoreSession, setDidRestoreSession] = useState(false);
   const activeStepRef = useRef(0);
   activeStepRef.current = activeStep;
+  const [sessionIdentity, setSessionIdentity] = useState(() => createSessionIdentity());
+  const [sessionRemainingMs, setSessionRemainingMs] = useState<number>(SESSION_TTL_MS);
+  const sessionExpiryHandledRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [skipQuotes, setSkipQuotes] = useState(false);
@@ -552,11 +570,18 @@ export default function App({ embedded = false }: AppProps) {
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     clearSession();
+    const nextIdentity = createSessionIdentity();
+    setSessionIdentity(nextIdentity);
+    setSessionRemainingMs(SESSION_TTL_MS);
+    sessionExpiryHandledRef.current = false;
   };
 
   const buildSessionPayload = (): PersistedSessionV1 => {
     return {
       v: 1,
+      sessionId: sessionIdentity.sessionId,
+      startedAtMs: sessionIdentity.startedAtMs,
+      expiresAtMs: sessionIdentity.expiresAtMs,
       activeStep,
       workspaceId,
       templateId,
@@ -608,6 +633,8 @@ export default function App({ embedded = false }: AppProps) {
       quoteAllCaps,
       quoteAlign,
       peoplePerSpread,
+      outputFormat,
+      outputSize,
     };
   };
 
@@ -998,8 +1025,7 @@ export default function App({ embedded = false }: AppProps) {
   };
 
   // Keep the server workspace marked as active while this tab is open.
-  // Also request end-session cleanup on tab close, with a grace window to avoid
-  // deleting on quick reloads (the new tab load will 'touch' again).
+  // Reloads/disconnects are tolerated; server-side expiry enforces retention.
   useEffect(() => {
     if (!workspaceId) return;
 
@@ -1007,7 +1033,11 @@ export default function App({ embedded = false }: AppProps) {
     const ping = async () => {
       if (canceled) return;
       try {
-        await touchWorkspace(workspaceId);
+        await touchWorkspace(workspaceId, {
+          sessionId: sessionIdentity.sessionId,
+          startedAtMs: sessionIdentity.startedAtMs,
+          expiresAtMs: sessionIdentity.expiresAtMs,
+        });
       } catch {
         // ignore; server might be down or user is offline
       }
@@ -1018,28 +1048,11 @@ export default function App({ embedded = false }: AppProps) {
       void ping();
     }, 20_000);
 
-    const requestEndSession = () => {
-      try {
-        const form = new FormData();
-        form.append("workspace_id", workspaceId);
-        if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-          navigator.sendBeacon("/api/workspaces/end-session", form);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    window.addEventListener("pagehide", requestEndSession);
-    window.addEventListener("beforeunload", requestEndSession);
-
     return () => {
       canceled = true;
       window.clearInterval(interval);
-      window.removeEventListener("pagehide", requestEndSession);
-      window.removeEventListener("beforeunload", requestEndSession);
     };
-  }, [workspaceId]);
+  }, [workspaceId, sessionIdentity.expiresAtMs, sessionIdentity.sessionId, sessionIdentity.startedAtMs]);
 
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
@@ -1103,6 +1116,19 @@ export default function App({ embedded = false }: AppProps) {
   useEffect(() => {
     try {
       const saved = tryLoadSession();
+      if (saved) {
+        const normalized = ensureSessionTiming(saved);
+        if (isSessionExpired(normalized)) {
+          clearSession();
+        } else {
+          setSessionIdentity({
+            sessionId: normalized.sessionId!,
+            startedAtMs: normalized.startedAtMs!,
+            expiresAtMs: normalized.expiresAtMs!,
+          });
+          setSessionRemainingMs(getRemainingSessionMs(normalized));
+        }
+      }
 
       // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
       if (saved && !(workspaceId || templateId || people.length || slots.length)) {
@@ -1195,6 +1221,29 @@ export default function App({ embedded = false }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const tick = () => {
+      const remaining = Math.max(0, sessionIdentity.expiresAtMs - Date.now());
+      setSessionRemainingMs(remaining);
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [sessionIdentity.expiresAtMs]);
+
+  useEffect(() => {
+    if (sessionRemainingMs > 0) {
+      sessionExpiryHandledRef.current = false;
+      return;
+    }
+    if (sessionExpiryHandledRef.current) return;
+    sessionExpiryHandledRef.current = true;
+    handleReset();
+    setStatus("Session expired after 8 hours. Start a new session to continue.");
+    setShowSaveConfigReminder(false);
+  }, [sessionRemainingMs]);
+
   // URL -> state: allow /app?step=N to jump to a step (and restore after navigating back).
   useEffect(() => {
     if (!didRestoreSession) return;
@@ -1221,6 +1270,9 @@ export default function App({ embedded = false }: AppProps) {
   useEffect(() => {
     const payload: PersistedSessionV1 = {
       v: 1,
+      sessionId: sessionIdentity.sessionId,
+      startedAtMs: sessionIdentity.startedAtMs,
+      expiresAtMs: sessionIdentity.expiresAtMs,
       activeStep,
       workspaceId,
       templateId,
@@ -1318,6 +1370,9 @@ export default function App({ embedded = false }: AppProps) {
     peoplePerSpread,
     outputFormat,
     outputSize,
+    sessionIdentity.expiresAtMs,
+    sessionIdentity.sessionId,
+    sessionIdentity.startedAtMs,
   ]);
 
   // Note: quotes/baby steps are not skippable. Disabling only affects rendering.
@@ -1370,6 +1425,12 @@ export default function App({ embedded = false }: AppProps) {
     return null;
   }, [status]);
 
+  const sessionCountdown = useMemo(() => formatSessionCountdown(sessionRemainingMs), [sessionRemainingMs]);
+  const sessionExpiryTimeLabel = useMemo(
+    () => new Date(sessionIdentity.expiresAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    [sessionIdentity.expiresAtMs]
+  );
+
   // Gentle reminder to export a config after the session has been active for a while.
   useEffect(() => {
     if (!workspaceId) return;
@@ -1382,6 +1443,13 @@ export default function App({ embedded = false }: AppProps) {
 
   const toolMessages: ToolMessage[] = useMemo(() => {
     const out: ToolMessage[] = [];
+
+    out.push({
+      id: "session-expiry-countdown",
+      kind: sessionRemainingMs <= SESSION_DANGER_MS ? "error" : (sessionRemainingMs <= SESSION_WARNING_MS ? "warning" : "info"),
+      title: "Session expiry countdown",
+      body: `Time remaining: ${sessionCountdown}. Session expires at ${sessionExpiryTimeLabel}.`,
+    });
 
     if (insecureHttp) {
       out.push({
@@ -1436,8 +1504,19 @@ export default function App({ embedded = false }: AppProps) {
         body: renderFailedMessage,
       });
     }
-    return out.filter((m) => !dismissedToolMessageIds[m.id]);
-  }, [activeStep, allowInsecureReviewResults, allowInsecureUploads, dismissedToolMessageIds, insecureHttp, renderFailedMessage, showSaveConfigReminder]);
+    return out.filter((m) => m.id === "session-expiry-countdown" || !dismissedToolMessageIds[m.id]);
+  }, [
+    activeStep,
+    allowInsecureReviewResults,
+    allowInsecureUploads,
+    dismissedToolMessageIds,
+    insecureHttp,
+    renderFailedMessage,
+    sessionCountdown,
+    sessionExpiryTimeLabel,
+    sessionRemainingMs,
+    showSaveConfigReminder,
+  ]);
 
   const slotNumberToIndex = useMemo(() => {
     return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);

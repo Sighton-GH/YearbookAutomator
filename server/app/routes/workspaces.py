@@ -8,12 +8,22 @@ router = APIRouter()
 
 
 @router.post("/touch")
-async def touch(workspace_id: str = Form(...)) -> dict[str, bool]:
+async def touch(
+    workspace_id: str = Form(...),
+    session_id: str | None = Form(None),
+    started_at_ms: int | None = Form(None),
+    expires_at_ms: int | None = Form(None),
+) -> dict[str, bool]:
     """Mark a workspace as active.
 
     Frontend calls this periodically while the user has an open tab.
     """
-    touch_workspace(workspace_id)
+    touch_workspace(
+        workspace_id,
+        session_id=session_id,
+        started_at_ms=started_at_ms,
+        expires_at_ms=expires_at_ms,
+    )
     return {"ok": True}
 
 

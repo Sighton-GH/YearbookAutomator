@@ -465,9 +465,19 @@ export async function fetchRemoveBackgroundPreviewResult(jobId: string): Promise
   return resp.data as Blob;
 }
 
-export async function touchWorkspace(workspaceId: string): Promise<void> {
+export async function touchWorkspace(
+  workspaceId: string,
+  opts?: { sessionId?: string; startedAtMs?: number; expiresAtMs?: number }
+): Promise<void> {
   const form = new FormData();
   form.append("workspace_id", workspaceId);
+  if (opts?.sessionId) form.append("session_id", opts.sessionId);
+  if (typeof opts?.startedAtMs === "number" && Number.isFinite(opts.startedAtMs)) {
+    form.append("started_at_ms", String(Math.floor(opts.startedAtMs)));
+  }
+  if (typeof opts?.expiresAtMs === "number" && Number.isFinite(opts.expiresAtMs)) {
+    form.append("expires_at_ms", String(Math.floor(opts.expiresAtMs)));
+  }
   await axios.post("/api/workspaces/touch", form, {
     headers: { "Content-Type": "multipart/form-data" }
   });

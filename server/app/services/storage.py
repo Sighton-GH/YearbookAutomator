@@ -13,6 +13,7 @@ BASE_DATA.mkdir(exist_ok=True)
 
 # Accept hex IDs (default) and human-friendly IDs (tests/dev), alnum plus _ or -.
 _WORKSPACE_ID_RE = re.compile(r"^[0-9A-Za-z_-]{3,64}$")
+SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
 class InvalidWorkspaceId(ValueError):
@@ -63,10 +64,63 @@ def _write_workspace_meta(workspace_id: str, meta: dict) -> None:
     tmp.replace(path)
 
 
-def touch_workspace(workspace_id: str) -> None:
-    """Mark workspace as active and clear any pending end-session request."""
+def touch_workspace(
+    workspace_id: str,
+    *,
+    session_id: str | None = None,
+    started_at_ms: int | float | None = None,
+    expires_at_ms: int | float | None = None,
+) -> None:
+    """Mark workspace as active and clear any pending end-session request.
+
+    Session expiry is hard-capped to 8 hours from session start.
+    """
     meta = read_workspace_meta(workspace_id)
-    meta["last_seen"] = time.time()
+    now_s = time.time()
+    meta["last_seen"] = now_s
+
+    # Keep a stable session start once established for this workspace.
+    session_started_at = meta.get("session_started_at")
+    try:
+        session_started_at_s = float(session_started_at) if session_started_at is not None else 0.0
+    except (TypeError, ValueError):
+        session_started_at_s = 0.0
+
+    if session_started_at_s <= 0:
+        if started_at_ms is not None:
+            try:
+                session_started_at_s = float(started_at_ms) / 1000.0
+            except (TypeError, ValueError):
+                session_started_at_s = now_s
+        else:
+            session_started_at_s = now_s
+        meta["session_started_at"] = session_started_at_s
+
+    # Expires at most 8h from session start (policy). Never extend beyond that.
+    hard_expiry_s = session_started_at_s + SESSION_TTL_SECONDS
+    candidate_expiry_s = hard_expiry_s
+    if expires_at_ms is not None:
+        try:
+            candidate_expiry_s = float(expires_at_ms) / 1000.0
+        except (TypeError, ValueError):
+            candidate_expiry_s = hard_expiry_s
+
+    candidate_expiry_s = min(candidate_expiry_s, hard_expiry_s)
+    prev_expiry = meta.get("session_expires_at")
+    try:
+        prev_expiry_s = float(prev_expiry) if prev_expiry is not None else 0.0
+    except (TypeError, ValueError):
+        prev_expiry_s = 0.0
+
+    # Keep earliest known expiry to avoid accidental extension.
+    if prev_expiry_s > 0:
+        meta["session_expires_at"] = min(prev_expiry_s, candidate_expiry_s)
+    else:
+        meta["session_expires_at"] = candidate_expiry_s
+
+    if session_id:
+        meta["session_id"] = str(session_id)
+
     meta.pop("end_requested_at", None)
     _write_workspace_meta(workspace_id, meta)
 

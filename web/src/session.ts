@@ -4,6 +4,9 @@ import type { Align, FontWeight, PlacementMode } from "./types";
 
 export type PersistedSessionV1 = {
   v: 1;
+  sessionId?: string;
+  startedAtMs?: number;
+  expiresAtMs?: number;
   activeStep: number;
   workspaceId: string | null;
   templateId: string | null;
@@ -85,6 +88,89 @@ export const isPersistedSessionV1 = (x: unknown): x is PersistedSessionV1 => {
 };
 
 export const SESSION_KEY = "ymga.session.v1";
+export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+const readStorageItem = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  const storages: Storage[] = [window.localStorage, window.sessionStorage];
+  for (const storage of storages) {
+    try {
+      const raw = storage.getItem(key);
+      if (raw) return raw;
+    } catch {
+      // ignore storage availability/privacy mode
+    }
+  }
+  return null;
+};
+
+const writeStorageItem = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  const storages: Storage[] = [window.localStorage, window.sessionStorage];
+  for (const storage of storages) {
+    try {
+      storage.setItem(key, value);
+      return;
+    } catch {
+      // try next storage
+    }
+  }
+};
+
+const removeStorageItem = (key: string): void => {
+  if (typeof window === "undefined") return;
+  const storages: Storage[] = [window.localStorage, window.sessionStorage];
+  for (const storage of storages) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+};
+
+export function createSessionIdentity(nowMs = Date.now()): {
+  sessionId: string;
+  startedAtMs: number;
+  expiresAtMs: number;
+} {
+  const rand = Math.random().toString(36).slice(2, 10);
+  return {
+    sessionId: `sess_${nowMs}_${rand}`,
+    startedAtMs: nowMs,
+    expiresAtMs: nowMs + SESSION_TTL_MS,
+  };
+}
+
+export function ensureSessionTiming(session: PersistedSessionV1, nowMs = Date.now()): PersistedSessionV1 {
+  const startedAtMs =
+    typeof session.startedAtMs === "number" && Number.isFinite(session.startedAtMs)
+      ? session.startedAtMs
+      : nowMs;
+  const expiresAtMs =
+    typeof session.expiresAtMs === "number" && Number.isFinite(session.expiresAtMs)
+      ? session.expiresAtMs
+      : (startedAtMs + SESSION_TTL_MS);
+  const sessionId =
+    typeof session.sessionId === "string" && session.sessionId.trim()
+      ? session.sessionId
+      : createSessionIdentity(startedAtMs).sessionId;
+  return {
+    ...session,
+    sessionId,
+    startedAtMs,
+    expiresAtMs,
+  };
+}
+
+export function getRemainingSessionMs(session: PersistedSessionV1, nowMs = Date.now()): number {
+  const normalized = ensureSessionTiming(session, nowMs);
+  return Math.max(0, normalized.expiresAtMs! - nowMs);
+}
+
+export function isSessionExpired(session: PersistedSessionV1, nowMs = Date.now()): boolean {
+  return getRemainingSessionMs(session, nowMs) <= 0;
+}
 
 export function parseStepFromSearch(search: string): number | null {
   try {
@@ -103,31 +189,34 @@ export function parseStepFromSearch(search: string): number | null {
 }
 
 export function tryLoadSession(): PersistedSessionV1 | null {
-  if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(SESSION_KEY);
+    const raw = readStorageItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedSessionV1;
     if (!parsed || parsed.v !== 1) return null;
-    return parsed;
+    const withTiming = ensureSessionTiming(parsed);
+    if (isSessionExpired(withTiming)) {
+      clearSession();
+      return null;
+    }
+    return withTiming;
   } catch {
     return null;
   }
 }
 
 export function trySaveSession(session: PersistedSessionV1) {
-  if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    const withTiming = ensureSessionTiming(session);
+    writeStorageItem(SESSION_KEY, JSON.stringify(withTiming));
   } catch {
     // ignore quota / privacy mode
   }
 }
 
 export function clearSession() {
-  if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem(SESSION_KEY);
+    removeStorageItem(SESSION_KEY);
   } catch {
     // ignore
   }
