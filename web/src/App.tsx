@@ -117,22 +117,20 @@ const stepDescriptions: Partial<Record<number, string>> = {
 };
 
 const stepTips = [
-  "Server deletes all data after 8 hours to protect privacy.",
+  "Server deletes all data when your session timeout expires to protect privacy.",
   "If template parsing fails, try raising the color tolerance or lowering min-area in Custom options.",
   "Non-matching portrait filenames are skipped—check warnings to see which files weren't used.",
   "Missing quotes are allowed; configure a default quote as a fallback for students without entries.",
   "Save a config file occasionally so you can restore work after a refresh or long session.",
 ];
 
-const SESSION_WARNING_MS = 30 * 60 * 1000;
-const SESSION_DANGER_MS = 5 * 60 * 1000;
-
-const formatSessionCountdown = (remainingMs: number): string => {
-  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+const formatSessionDurationLabel = (ttlMs: number): string => {
+  const totalSeconds = Math.max(60, Math.floor(ttlMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
+  if (hours <= 0) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  if (minutes <= 0) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  return `${hours} hour${hours === 1 ? "" : "s"} ${minutes} minute${minutes === 1 ? "" : "s"}`;
 };
 
 type AppProps = {
@@ -149,6 +147,7 @@ export default function App({ embedded = false }: AppProps) {
   const activeStepRef = useRef(0);
   activeStepRef.current = activeStep;
   const [sessionIdentity, setSessionIdentity] = useState(() => createSessionIdentity());
+  const [sessionTtlMs, setSessionTtlMs] = useState<number>(SESSION_TTL_MS);
   const [sessionRemainingMs, setSessionRemainingMs] = useState<number>(SESSION_TTL_MS);
   const sessionExpiryHandledRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -255,6 +254,10 @@ export default function App({ embedded = false }: AppProps) {
           const legacy = Boolean(flags.enable_heavy_generation_ops);
           setBackgroundRemovalOpsEnabled(Boolean(flags.enable_background_removal_ops ?? legacy));
           setCenterOnFaceOpsEnabled(Boolean(flags.enable_center_on_face_ops ?? legacy));
+          const configuredTimeoutSeconds = Number(flags.tool_session_timeout_seconds ?? 0);
+          if (Number.isFinite(configuredTimeoutSeconds) && configuredTimeoutSeconds >= 60) {
+            setSessionTtlMs(Math.floor(configuredTimeoutSeconds * 1000));
+          }
         }
       } catch {
         if (!cancelled) {
@@ -267,6 +270,20 @@ export default function App({ embedded = false }: AppProps) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const now = Date.now();
+    setSessionIdentity((prev) => {
+      const startedAtMs = Number.isFinite(prev.startedAtMs) ? prev.startedAtMs : now;
+      const nextExpiresAtMs = startedAtMs + sessionTtlMs;
+      if (prev.expiresAtMs === nextExpiresAtMs && prev.startedAtMs === startedAtMs) return prev;
+      return {
+        ...prev,
+        startedAtMs,
+        expiresAtMs: nextExpiresAtMs,
+      };
+    });
+  }, [sessionTtlMs]);
 
   useEffect(() => {
     if (centerOnFaceOpsEnabled) return;
@@ -570,9 +587,9 @@ export default function App({ embedded = false }: AppProps) {
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     clearSession();
-    const nextIdentity = createSessionIdentity();
+    const nextIdentity = createSessionIdentity(Date.now(), sessionTtlMs);
     setSessionIdentity(nextIdentity);
-    setSessionRemainingMs(SESSION_TTL_MS);
+    setSessionRemainingMs(sessionTtlMs);
     sessionExpiryHandledRef.current = false;
   };
 
@@ -1115,9 +1132,9 @@ export default function App({ embedded = false }: AppProps) {
   // Restore persisted session (workspace + state) so users can resume without reuploading.
   useEffect(() => {
     try {
-      const saved = tryLoadSession();
+      const saved = tryLoadSession(sessionTtlMs);
       if (saved) {
-        const normalized = ensureSessionTiming(saved);
+        const normalized = ensureSessionTiming(saved, Date.now(), sessionTtlMs);
         if (isSessionExpired(normalized)) {
           clearSession();
         } else {
@@ -1233,6 +1250,19 @@ export default function App({ embedded = false }: AppProps) {
   }, [sessionIdentity.expiresAtMs]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("ymga:session-timing", {
+        detail: {
+          remainingMs: sessionRemainingMs,
+          expiresAtMs: sessionIdentity.expiresAtMs,
+          ttlMs: sessionTtlMs,
+        },
+      })
+    );
+  }, [sessionIdentity.expiresAtMs, sessionRemainingMs, sessionTtlMs]);
+
+  useEffect(() => {
     if (sessionRemainingMs > 0) {
       sessionExpiryHandledRef.current = false;
       return;
@@ -1240,9 +1270,9 @@ export default function App({ embedded = false }: AppProps) {
     if (sessionExpiryHandledRef.current) return;
     sessionExpiryHandledRef.current = true;
     handleReset();
-    setStatus("Session expired after 8 hours. Start a new session to continue.");
+    setStatus(`Session expired after ${formatSessionDurationLabel(sessionTtlMs)}. Start a new session to continue.`);
     setShowSaveConfigReminder(false);
-  }, [sessionRemainingMs]);
+  }, [sessionRemainingMs, sessionTtlMs]);
 
   // URL -> state: allow /app?step=N to jump to a step (and restore after navigating back).
   useEffect(() => {
@@ -1325,7 +1355,7 @@ export default function App({ embedded = false }: AppProps) {
       outputFormat,
       outputSize,
     };
-    trySaveSession(payload);
+    trySaveSession(payload, sessionTtlMs);
   }, [
     activeStep,
     workspaceId,
@@ -1370,6 +1400,7 @@ export default function App({ embedded = false }: AppProps) {
     peoplePerSpread,
     outputFormat,
     outputSize,
+    sessionTtlMs,
     sessionIdentity.expiresAtMs,
     sessionIdentity.sessionId,
     sessionIdentity.startedAtMs,
@@ -1425,12 +1456,6 @@ export default function App({ embedded = false }: AppProps) {
     return null;
   }, [status]);
 
-  const sessionCountdown = useMemo(() => formatSessionCountdown(sessionRemainingMs), [sessionRemainingMs]);
-  const sessionExpiryTimeLabel = useMemo(
-    () => new Date(sessionIdentity.expiresAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-    [sessionIdentity.expiresAtMs]
-  );
-
   // Gentle reminder to export a config after the session has been active for a while.
   useEffect(() => {
     if (!workspaceId) return;
@@ -1443,13 +1468,6 @@ export default function App({ embedded = false }: AppProps) {
 
   const toolMessages: ToolMessage[] = useMemo(() => {
     const out: ToolMessage[] = [];
-
-    out.push({
-      id: "session-expiry-countdown",
-      kind: sessionRemainingMs <= SESSION_DANGER_MS ? "error" : (sessionRemainingMs <= SESSION_WARNING_MS ? "warning" : "info"),
-      title: "Session expiry countdown",
-      body: `Time remaining: ${sessionCountdown}. Session expires at ${sessionExpiryTimeLabel}.`,
-    });
 
     if (insecureHttp) {
       out.push({
@@ -1504,7 +1522,7 @@ export default function App({ embedded = false }: AppProps) {
         body: renderFailedMessage,
       });
     }
-    return out.filter((m) => m.id === "session-expiry-countdown" || !dismissedToolMessageIds[m.id]);
+    return out.filter((m) => !dismissedToolMessageIds[m.id]);
   }, [
     activeStep,
     allowInsecureReviewResults,
@@ -1512,9 +1530,6 @@ export default function App({ embedded = false }: AppProps) {
     dismissedToolMessageIds,
     insecureHttp,
     renderFailedMessage,
-    sessionCountdown,
-    sessionExpiryTimeLabel,
-    sessionRemainingMs,
     showSaveConfigReminder,
   ]);
 
@@ -2251,15 +2266,17 @@ export default function App({ embedded = false }: AppProps) {
 
       {embedded ? (
         <>
-          <div className="page tool-messages-row">
-            <ToolMessages
-              messages={toolMessages}
-              onDismiss={(id) => {
-                setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
-                if (id === "save-config-reminder") setShowSaveConfigReminder(false);
-              }}
-            />
-          </div>
+          {toolMessages.length > 0 ? (
+            <div className="page tool-messages-row">
+              <ToolMessages
+                messages={toolMessages}
+                onDismiss={(id) => {
+                  setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+                  if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+                }}
+              />
+            </div>
+          ) : null}
           <section className="ss-steps">
             <div className="ss-steps-inner tool-steps-header">
               {stepsNav}
@@ -2279,15 +2296,17 @@ export default function App({ embedded = false }: AppProps) {
               </div>
             </header>
           </div>
-          <div className="page tool-messages-row">
-            <ToolMessages
-              messages={toolMessages}
-              onDismiss={(id) => {
-                setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
-                if (id === "save-config-reminder") setShowSaveConfigReminder(false);
-              }}
-            />
-          </div>
+          {toolMessages.length > 0 ? (
+            <div className="page tool-messages-row">
+              <ToolMessages
+                messages={toolMessages}
+                onDismiss={(id) => {
+                  setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+                  if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+                }}
+              />
+            </div>
+          ) : null}
           <section className="tool-steps-bar" aria-label="Tool steps">
             <div className="tool-steps-bar-inner">
               {stepsNav}

@@ -32,7 +32,7 @@ import { cropToPngBlob } from "../utils/image";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
-  "Server deletes all data after 8 hours to protect privacy.",
+  "Server deletes all data when your session timeout expires to protect privacy.",
   "Use background removal for cleaner cutouts, then set a fill color for the template mask.",
   "Center on face improves crops when baby photos are off-center.",
 ];

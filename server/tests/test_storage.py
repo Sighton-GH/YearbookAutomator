@@ -26,6 +26,12 @@ def test_touch_workspace_sets_session_expiry(tmp_path, monkeypatch):
 
     workspace_id = "abc123"
     now_ms = int(time.time() * 1000)
+
+    class _FakeSettings:
+        tool_session_timeout_seconds = 12 * 60 * 60
+
+    monkeypatch.setattr(storage, "_tool_session_ttl_seconds", lambda: _FakeSettings.tool_session_timeout_seconds)
+
     storage.touch_workspace(
         workspace_id,
         session_id="sess_test",
@@ -36,7 +42,7 @@ def test_touch_workspace_sets_session_expiry(tmp_path, monkeypatch):
     meta = storage.read_workspace_meta(workspace_id)
     assert meta.get("session_id") == "sess_test"
     assert float(meta.get("session_started_at")) == now_ms / 1000.0
-    assert float(meta.get("session_expires_at")) == (now_ms / 1000.0) + (8 * 60 * 60)
+    assert float(meta.get("session_expires_at")) == (now_ms / 1000.0) + (12 * 60 * 60)
 
 
 def test_cleanup_deletes_when_session_expired(tmp_path, monkeypatch):

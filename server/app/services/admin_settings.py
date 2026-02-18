@@ -21,6 +21,7 @@ class FaceDetectionSettings:
     enable_center_on_face_ops: bool = False
     admin_idle_timeout_seconds: int = 900
     admin_max_session_seconds: int = 28800
+    tool_session_timeout_seconds: int = 28800
     retinaface_model_path: str = ""
     retinaface_input_size: int = 640
     retinaface_confidence: float = 0.7
@@ -39,6 +40,7 @@ DEFAULT_SETTINGS = FaceDetectionSettings(
     yunet_model_path=_DEFAULT_YUNET_PATH,
     admin_idle_timeout_seconds=max(60, int(os.getenv("YMGA_ADMIN_IDLE_TIMEOUT_SECONDS", "900") or "900")),
     admin_max_session_seconds=max(60, int(os.getenv("YMGA_ADMIN_MAX_SESSION_SECONDS", "28800") or "28800")),
+    tool_session_timeout_seconds=max(60, int(os.getenv("YMGA_TOOL_SESSION_TIMEOUT_SECONDS", "28800") or "28800")),
 )
 
 
@@ -107,6 +109,11 @@ def get_face_detection_settings() -> FaceDetectionSettings:
         DEFAULT_SETTINGS.admin_max_session_seconds,
         minimum=idle_timeout,
     )
+    tool_timeout = _coerce_timeout(
+        raw.get("tool_session_timeout_seconds", DEFAULT_SETTINGS.tool_session_timeout_seconds),
+        DEFAULT_SETTINGS.tool_session_timeout_seconds,
+        minimum=60,
+    )
 
     return FaceDetectionSettings(
         admin_username=_coerce_non_empty_str(raw.get("admin_username", DEFAULT_SETTINGS.admin_username), DEFAULT_SETTINGS.admin_username),
@@ -115,6 +122,7 @@ def get_face_detection_settings() -> FaceDetectionSettings:
         enable_center_on_face_ops=center_enabled,
         admin_idle_timeout_seconds=idle_timeout,
         admin_max_session_seconds=max_timeout,
+        tool_session_timeout_seconds=tool_timeout,
         retinaface_model_path=str(raw.get("retinaface_model_path", DEFAULT_SETTINGS.retinaface_model_path) or ""),
         retinaface_input_size=_coerce_int(raw.get("retinaface_input_size", DEFAULT_SETTINGS.retinaface_input_size), DEFAULT_SETTINGS.retinaface_input_size),
         retinaface_confidence=_coerce_float(raw.get("retinaface_confidence", DEFAULT_SETTINGS.retinaface_confidence), DEFAULT_SETTINGS.retinaface_confidence),

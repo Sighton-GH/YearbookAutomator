@@ -5,9 +5,36 @@ import { withBase } from "../baseUrl";
 import { getStoredLicenseKey, validateLicenseKey } from "../licensing";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 
+type SessionTimingDetail = {
+  remainingMs: number;
+  expiresAtMs: number;
+  ttlMs: number;
+};
+
+const formatSessionCountdown = (remainingMs: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
+};
+
+const formatSessionExpiryTime = (expiresAtMs: number): string => {
+  return new Date(expiresAtMs).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
 export function ToolAppPage() {
   const [checking, setChecking] = useState(true);
   const [valid, setValid] = useState(false);
+  const [sessionTiming, setSessionTiming] = useState<SessionTimingDetail | null>(null);
+  const [sessionInfoCollapsed, setSessionInfoCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("ymga-session-info-collapsed") === "1";
+  });
   const [appTheme, setAppTheme] = useState<"light" | "dark">(() => {
     if (typeof window === "undefined") return "light";
     return window.localStorage.getItem("ymga-app-theme") === "dark" ? "dark" : "light";
@@ -52,6 +79,34 @@ export function ToolAppPage() {
     window.localStorage.setItem("ymga-app-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("ymga-session-info-collapsed", sessionInfoCollapsed ? "1" : "0");
+  }, [sessionInfoCollapsed]);
+
+  useEffect(() => {
+    const onSessionTiming = (event: Event) => {
+      const detail = (event as CustomEvent<SessionTimingDetail>).detail;
+      if (!detail || typeof detail !== "object") return;
+      if (!Number.isFinite(detail.remainingMs) || !Number.isFinite(detail.expiresAtMs) || !Number.isFinite(detail.ttlMs)) {
+        return;
+      }
+      setSessionTiming({
+        remainingMs: Math.max(0, Number(detail.remainingMs)),
+        expiresAtMs: Number(detail.expiresAtMs),
+        ttlMs: Math.max(60_000, Number(detail.ttlMs)),
+      });
+    };
+
+    window.addEventListener("ymga:session-timing", onSessionTiming as EventListener);
+    return () => {
+      window.removeEventListener("ymga:session-timing", onSessionTiming as EventListener);
+    };
+  }, []);
+
+  const remainingMs = sessionTiming?.remainingMs ?? 0;
+  const sessionToneClass = remainingMs <= 5 * 60 * 1000 ? " danger" : remainingMs <= 30 * 60 * 1000 ? " warn" : "";
+
   if (!checking && !valid) return <Navigate to="/tool" replace />;
 
   return (
@@ -83,6 +138,23 @@ export function ToolAppPage() {
                 Import
               </button>
             </div>
+            {sessionTiming ? (
+              <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite">
+                <span className="app-session-label">Session</span>
+                <span className="app-session-meta">
+                  Remaining: {formatSessionCountdown(sessionTiming.remainingMs)}
+                  {!sessionInfoCollapsed ? ` · Expires at ${formatSessionExpiryTime(sessionTiming.expiresAtMs)}` : ""}
+                </span>
+                <button
+                  type="button"
+                  className="app-session-toggle"
+                  onClick={() => setSessionInfoCollapsed((v) => !v)}
+                  aria-label={sessionInfoCollapsed ? "Expand session information" : "Collapse session information"}
+                >
+                  {sessionInfoCollapsed ? "Expand" : "Collapse"}
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="app-return-actions">
             <ToggleSwitch

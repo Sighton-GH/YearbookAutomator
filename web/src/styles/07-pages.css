@@ -755,6 +755,59 @@
   gap: 6px;
 }
 
+.app-session-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-quiet);
+  max-width: min(100%, 620px);
+}
+
+.app-session-inline.warn {
+  border-color: var(--border-warn);
+  background: var(--bg-warn);
+}
+
+.app-session-inline.danger {
+  border-color: var(--border-warn);
+  background: var(--bg-warn);
+}
+
+.app-session-label {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.app-session-meta {
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-session-toggle {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.app-session-toggle:hover {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
 .app-file-action {
   appearance: none;
   border: 1px solid transparent;

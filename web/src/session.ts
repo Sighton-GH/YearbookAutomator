@@ -129,28 +129,30 @@ const removeStorageItem = (key: string): void => {
   }
 };
 
-export function createSessionIdentity(nowMs = Date.now()): {
+export function createSessionIdentity(nowMs = Date.now(), ttlMs = SESSION_TTL_MS): {
   sessionId: string;
   startedAtMs: number;
   expiresAtMs: number;
 } {
   const rand = Math.random().toString(36).slice(2, 10);
+  const safeTtlMs = Math.max(60_000, Math.floor(ttlMs));
   return {
     sessionId: `sess_${nowMs}_${rand}`,
     startedAtMs: nowMs,
-    expiresAtMs: nowMs + SESSION_TTL_MS,
+    expiresAtMs: nowMs + safeTtlMs,
   };
 }
 
-export function ensureSessionTiming(session: PersistedSessionV1, nowMs = Date.now()): PersistedSessionV1 {
+export function ensureSessionTiming(session: PersistedSessionV1, nowMs = Date.now(), ttlMs = SESSION_TTL_MS): PersistedSessionV1 {
   const startedAtMs =
     typeof session.startedAtMs === "number" && Number.isFinite(session.startedAtMs)
       ? session.startedAtMs
       : nowMs;
+  const safeTtlMs = Math.max(60_000, Math.floor(ttlMs));
   const expiresAtMs =
     typeof session.expiresAtMs === "number" && Number.isFinite(session.expiresAtMs)
-      ? session.expiresAtMs
-      : (startedAtMs + SESSION_TTL_MS);
+      ? Math.min(session.expiresAtMs, startedAtMs + safeTtlMs)
+      : (startedAtMs + safeTtlMs);
   const sessionId =
     typeof session.sessionId === "string" && session.sessionId.trim()
       ? session.sessionId
@@ -188,13 +190,13 @@ export function parseStepFromSearch(search: string): number | null {
   }
 }
 
-export function tryLoadSession(): PersistedSessionV1 | null {
+export function tryLoadSession(ttlMs = SESSION_TTL_MS): PersistedSessionV1 | null {
   try {
     const raw = readStorageItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedSessionV1;
     if (!parsed || parsed.v !== 1) return null;
-    const withTiming = ensureSessionTiming(parsed);
+    const withTiming = ensureSessionTiming(parsed, Date.now(), ttlMs);
     if (isSessionExpired(withTiming)) {
       clearSession();
       return null;
@@ -205,9 +207,9 @@ export function tryLoadSession(): PersistedSessionV1 | null {
   }
 }
 
-export function trySaveSession(session: PersistedSessionV1) {
+export function trySaveSession(session: PersistedSessionV1, ttlMs = SESSION_TTL_MS) {
   try {
-    const withTiming = ensureSessionTiming(session);
+    const withTiming = ensureSessionTiming(session, Date.now(), ttlMs);
     writeStorageItem(SESSION_KEY, JSON.stringify(withTiming));
   } catch {
     // ignore quota / privacy mode

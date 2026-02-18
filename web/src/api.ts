@@ -69,6 +69,7 @@ export type AdminFeatureFlags = {
   enable_background_removal_ops?: boolean;
   enable_center_on_face_ops?: boolean;
   enable_heavy_generation_ops?: boolean;
+  tool_session_timeout_seconds?: number;
 };
 
 export async function getAdminFeatureFlags() {

@@ -15,7 +15,7 @@ import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
-  "Server deletes all data after 8 hours to protect privacy.",
+  "Server deletes all data when your session timeout expires to protect privacy.",
   "Missing quotes are allowed; configure a default quote as a fallback for students without entries.",
   "Advanced name matching helps align quotes to the correct student when names vary.",
 ];

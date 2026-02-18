@@ -8,7 +8,7 @@ from threading import Event
 from app.services import progress
 from app.services.storage import delete_workspace, list_workspace_ids, read_workspace_meta
 
-MAX_SESSION_TTL_SECONDS = 8 * 60 * 60
+DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -16,8 +16,8 @@ class CleanupConfig:
     # If a client requests end-session, we wait a short grace period.
     grace_seconds: int = 20
     # Safety net: delete abandoned workspaces even without an explicit end-session.
-    # Default now 8 hours from last_seen (session start/refresh) unless overridden by env.
-    ttl_seconds: int = 8 * 60 * 60
+    # Default now from admin-configured tool timeout (or 8 hours fallback).
+    ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS
     # How often the janitor loop runs.
     interval_seconds: int = 60
     # Treat jobs updated within this window as active.
@@ -34,10 +34,18 @@ def _config_from_env() -> CleanupConfig:
         except ValueError:
             return default
 
-    ttl_seconds = get_int("YMGA_WORKSPACE_TTL_SECONDS", 8 * 60 * 60)
+    def get_default_ttl_seconds() -> int:
+        try:
+            from app.services.admin_settings import get_face_detection_settings
+
+            s = get_face_detection_settings()
+            return max(60, int(getattr(s, "tool_session_timeout_seconds", DEFAULT_SESSION_TTL_SECONDS)))
+        except Exception:
+            return DEFAULT_SESSION_TTL_SECONDS
+
+    ttl_seconds = get_int("YMGA_WORKSPACE_TTL_SECONDS", get_default_ttl_seconds())
     if ttl_seconds <= 0:
-        ttl_seconds = 8 * 60 * 60
-    ttl_seconds = min(ttl_seconds, MAX_SESSION_TTL_SECONDS)
+        ttl_seconds = get_default_ttl_seconds()
 
     return CleanupConfig(
         grace_seconds=get_int("YMGA_WORKSPACE_GRACE_SECONDS", 20),

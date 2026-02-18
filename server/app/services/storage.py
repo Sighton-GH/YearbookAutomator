@@ -13,7 +13,18 @@ BASE_DATA.mkdir(exist_ok=True)
 
 # Accept hex IDs (default) and human-friendly IDs (tests/dev), alnum plus _ or -.
 _WORKSPACE_ID_RE = re.compile(r"^[0-9A-Za-z_-]{3,64}$")
-SESSION_TTL_SECONDS = 8 * 60 * 60
+DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
+
+
+def _tool_session_ttl_seconds() -> int:
+    try:
+        from app.services.admin_settings import get_face_detection_settings
+
+        settings = get_face_detection_settings()
+        ttl = int(getattr(settings, "tool_session_timeout_seconds", DEFAULT_SESSION_TTL_SECONDS))
+        return max(60, ttl)
+    except Exception:
+        return DEFAULT_SESSION_TTL_SECONDS
 
 
 class InvalidWorkspaceId(ValueError):
@@ -73,7 +84,7 @@ def touch_workspace(
 ) -> None:
     """Mark workspace as active and clear any pending end-session request.
 
-    Session expiry is hard-capped to 8 hours from session start.
+    Session expiry is capped by the admin-configured tool session timeout.
     """
     meta = read_workspace_meta(workspace_id)
     now_s = time.time()
@@ -96,8 +107,8 @@ def touch_workspace(
             session_started_at_s = now_s
         meta["session_started_at"] = session_started_at_s
 
-    # Expires at most 8h from session start (policy). Never extend beyond that.
-    hard_expiry_s = session_started_at_s + SESSION_TTL_SECONDS
+    # Expires at most timeout seconds from session start (policy). Never extend beyond that.
+    hard_expiry_s = session_started_at_s + _tool_session_ttl_seconds()
     candidate_expiry_s = hard_expiry_s
     if expires_at_ms is not None:
         try:

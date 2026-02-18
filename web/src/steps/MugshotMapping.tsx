@@ -18,7 +18,7 @@ import type { PersistedSessionV1 } from "../session";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 
 const sidebarTips = [
-  "Server deletes all data after 8 hours to protect privacy.",
+  "Server deletes all data when your session timeout expires to protect privacy.",
   "Non-matching portrait filenames are skipped—check warnings to see which files weren't used.",
   "Use the filename regex to match row numbers (rows are 1-based, header is ignored).",
 ];

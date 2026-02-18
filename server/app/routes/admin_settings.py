@@ -13,12 +13,13 @@ router = APIRouter()
 
 
 @router.get("/api/admin/settings/features")
-def admin_feature_flags() -> dict[str, bool]:
+def admin_feature_flags() -> dict[str, bool | int]:
     s = get_face_detection_settings()
     return {
         "enable_background_removal_ops": bool(s.enable_background_removal_ops),
         "enable_center_on_face_ops": bool(s.enable_center_on_face_ops),
         "enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops),
+        "tool_session_timeout_seconds": int(s.tool_session_timeout_seconds),
     }
 
 
@@ -80,6 +81,16 @@ def admin_settings(request: Request):
       <div class=\"muted\" style=\"margin-top:8px;\">
         Idle timeout logs out inactive admin sessions. Max age forces re-login even when active.
       </div>
+        <h3 style="margin-top: 14px;">Tool session timeout</h3>
+        <div class="row">
+          <div>
+            <label>Tool session timeout (seconds)</label>
+            <input name="tool_session_timeout_seconds" value="{s.tool_session_timeout_seconds}" />
+          </div>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          Controls how long the tool workspace session stays active before automatic expiry/cleanup.
+        </div>
 
       <div style=\"margin-top: 12px;\">
         <button type=\"submit\">Save feature settings</button>
@@ -180,6 +191,7 @@ def admin_settings_features(
     enable_center_on_face_ops: str | None = Form(None),
     admin_idle_timeout_seconds: str = Form(""),
     admin_max_session_seconds: str = Form(""),
+    tool_session_timeout_seconds: str = Form(""),
 ):
     def _parse_timeout(raw: str, default: int, minimum: int) -> int:
         try:
@@ -191,6 +203,7 @@ def admin_settings_features(
     current = get_face_detection_settings()
     idle = _parse_timeout(admin_idle_timeout_seconds, current.admin_idle_timeout_seconds, 60)
     max_age = _parse_timeout(admin_max_session_seconds, current.admin_max_session_seconds, idle)
+    tool_timeout = _parse_timeout(tool_session_timeout_seconds, current.tool_session_timeout_seconds, 60)
 
     update_face_detection_settings(
         {
@@ -199,6 +212,7 @@ def admin_settings_features(
             "enable_heavy_generation_ops": bool(enable_background_removal_ops and enable_center_on_face_ops),
             "admin_idle_timeout_seconds": idle,
             "admin_max_session_seconds": max_age,
+            "tool_session_timeout_seconds": tool_timeout,
         }
     )
     return RedirectResponse(url="/admin/settings?saved=features", status_code=303)
