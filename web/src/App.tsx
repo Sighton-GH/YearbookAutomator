@@ -135,10 +135,13 @@ const formatSessionDurationLabel = (ttlMs: number): string => {
 
 type AppProps = {
   embedded?: boolean;
+  initialWorkspaceId?: string | null;
+  initialLicenseType?: "personal" | "commercial" | null;
+  clientSessionId?: string | null;
 };
 
 
-export default function App({ embedded = false }: AppProps) {
+export default function App({ embedded = false, initialWorkspaceId = null, clientSessionId = null }: AppProps) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -146,9 +149,14 @@ export default function App({ embedded = false }: AppProps) {
   const [didRestoreSession, setDidRestoreSession] = useState(false);
   const activeStepRef = useRef(0);
   activeStepRef.current = activeStep;
-  const [sessionIdentity, setSessionIdentity] = useState(() => createSessionIdentity());
+  const [sessionIdentity, setSessionIdentity] = useState(() => {
+    const base = createSessionIdentity();
+    if (clientSessionId && clientSessionId.trim()) return { ...base, sessionId: clientSessionId.trim() };
+    return base;
+  });
   const [sessionTtlMs, setSessionTtlMs] = useState<number>(SESSION_TTL_MS);
   const [sessionRemainingMs, setSessionRemainingMs] = useState<number>(SESSION_TTL_MS);
+  const [workspaceHeartbeatSeconds, setWorkspaceHeartbeatSeconds] = useState<number>(20);
   const sessionExpiryHandledRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -257,6 +265,10 @@ export default function App({ embedded = false }: AppProps) {
           const configuredTimeoutSeconds = Number(flags.tool_session_timeout_seconds ?? 0);
           if (Number.isFinite(configuredTimeoutSeconds) && configuredTimeoutSeconds >= 60) {
             setSessionTtlMs(Math.floor(configuredTimeoutSeconds * 1000));
+          }
+          const configuredHeartbeatSeconds = Number(flags.workspace_heartbeat_interval_seconds ?? 0);
+          if (Number.isFinite(configuredHeartbeatSeconds) && configuredHeartbeatSeconds >= 5) {
+            setWorkspaceHeartbeatSeconds(Math.floor(configuredHeartbeatSeconds));
           }
         }
       } catch {
@@ -1051,7 +1063,7 @@ export default function App({ embedded = false }: AppProps) {
       if (canceled) return;
       try {
         await touchWorkspace(workspaceId, {
-          sessionId: sessionIdentity.sessionId,
+          sessionId: clientSessionId || sessionIdentity.sessionId,
           startedAtMs: sessionIdentity.startedAtMs,
           expiresAtMs: sessionIdentity.expiresAtMs,
         });
@@ -1063,13 +1075,13 @@ export default function App({ embedded = false }: AppProps) {
     void ping();
     const interval = window.setInterval(() => {
       void ping();
-    }, 20_000);
+    }, Math.max(5, workspaceHeartbeatSeconds) * 1000);
 
     return () => {
       canceled = true;
       window.clearInterval(interval);
     };
-  }, [workspaceId, sessionIdentity.expiresAtMs, sessionIdentity.sessionId, sessionIdentity.startedAtMs]);
+  }, [workspaceId, workspaceHeartbeatSeconds, clientSessionId, sessionIdentity.expiresAtMs, sessionIdentity.sessionId, sessionIdentity.startedAtMs]);
 
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
@@ -1147,8 +1159,10 @@ export default function App({ embedded = false }: AppProps) {
         }
       }
 
+      const shouldUseSavedWorkspace = !initialWorkspaceId || initialWorkspaceId === saved?.workspaceId;
+
       // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
-      if (saved && !(workspaceId || templateId || people.length || slots.length)) {
+      if (saved && shouldUseSavedWorkspace && !(workspaceId || templateId || people.length || slots.length)) {
         // Allow deep-linking: if /app?step=N is present, prefer that over the saved step.
         const urlStep =
           typeof window !== "undefined" && window.location.pathname === "/app"
@@ -1231,12 +1245,15 @@ export default function App({ embedded = false }: AppProps) {
           setAnnotatedPreviewUrl(`${templateAnnotatedUrl(saved.workspaceId)}&t=${Date.now()}`);
           setCleanPreviewUrl(`${templateCleanUrl(saved.workspaceId)}&t=${Date.now()}`);
         }
+      } else if (initialWorkspaceId) {
+        setWorkspaceId(initialWorkspaceId);
+        setTemplateId(initialWorkspaceId);
       }
     } finally {
       setDidRestoreSession(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialWorkspaceId]);
 
   useEffect(() => {
     const tick = () => {
@@ -1298,65 +1315,11 @@ export default function App({ embedded = false }: AppProps) {
 
   // Persist session as the user progresses.
   useEffect(() => {
-    const payload: PersistedSessionV1 = {
-      v: 1,
-      sessionId: sessionIdentity.sessionId,
-      startedAtMs: sessionIdentity.startedAtMs,
-      expiresAtMs: sessionIdentity.expiresAtMs,
-      activeStep,
-      workspaceId,
-      templateId,
-      skipQuotes,
-      skipBabyPhotos,
-      templateParse: {
-        mugshotColor: parseMugshotColor,
-        babyColor: parseBabyColor,
-        nameColor: parseNameColor,
-        quoteColor: parseQuoteColor,
-        minArea: parseMinArea,
-      },
-      slots,
-      parsedSlots,
-      templateSize,
-      portraitsIngest: {
-        namingPattern,
-        advancedNameMatch,
-        allowInsecureUploads,
-      },
-      people,
-      slotAssignments,
-      placementMode,
-      forceAlphabetical,
-      defaultQuote: defaultQuotes[0] ?? "404 quote not found",
-      defaultQuotes,
-      defaultQuotesRandomize,
-      defaultQuotesSeed,
-      defaultBabyFilename,
-      babyBackgroundColor,
-      centerBabyOnFace,
-      defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
-      defaultMugshotFilenames,
-      defaultMugshotRandomize,
-      defaultMugshotSeed,
-      lockedPeople: Object.keys(lockedPeople)
-        .map((k) => Number(k))
-        .filter((n) => Number.isFinite(n)),
-      nameFontFamily,
-      nameFontWeight,
-      nameFontSize,
-      nameAllCaps,
-      nameAlign,
-      quoteFontFamily,
-      quoteFontWeight,
-      quoteFontSize,
-      quoteAllCaps,
-      quoteAlign,
-      peoplePerSpread,
-      outputFormat,
-      outputSize,
-    };
+    if (!didRestoreSession) return;
+    const payload = buildSessionPayload();
     trySaveSession(payload, sessionTtlMs);
   }, [
+    didRestoreSession,
     activeStep,
     workspaceId,
     templateId,
@@ -1381,6 +1344,8 @@ export default function App({ embedded = false }: AppProps) {
     defaultQuotesRandomize,
     defaultQuotesSeed,
     defaultBabyFilename,
+    babyIngest,
+    babyEditHistory,
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotFilenames,

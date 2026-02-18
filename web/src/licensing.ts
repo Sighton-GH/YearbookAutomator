@@ -9,6 +9,7 @@ export type LicenseValidateResponse = {
 export const LICENSE_STORAGE_KEY = "ymga_license_key";
 export const DEVICE_ID_STORAGE_KEY = "ymga_device_id";
 export const LICENSE_CAPS_STORAGE_KEY = "ymga_license_caps";
+export const CLIENT_SESSION_STORAGE_KEY = "ymga_client_session_id";
 
 export type StoredLicenseCaps = {
   unlock_all_steps: boolean;
@@ -87,6 +88,18 @@ export function getOrCreateDeviceId(): string {
     return created;
   } catch {
     // If localStorage is unavailable, still return an in-memory id.
+    return _randomId();
+  }
+}
+
+export function getOrCreateClientSessionId(): string {
+  try {
+    const existing = sessionStorage.getItem(CLIENT_SESSION_STORAGE_KEY);
+    if (existing && existing.trim()) return existing.trim();
+    const created = _randomId();
+    sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, created);
+    return created;
+  } catch {
     return _randomId();
   }
 }

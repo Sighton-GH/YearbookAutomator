@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from threading import Event
 
 from app.services import progress
+from app.services.admin_settings import get_face_detection_settings
 from app.services.storage import delete_workspace, list_workspace_ids, read_workspace_meta
+from app.services.workspace_registry import unregister_workspace
 
 DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
 
@@ -22,6 +24,7 @@ class CleanupConfig:
     interval_seconds: int = 60
     # Treat jobs updated within this window as active.
     active_job_window_seconds: int = 5 * 60
+    auto_delete_expired: bool = True
 
 
 def _config_from_env() -> CleanupConfig:
@@ -43,6 +46,20 @@ def _config_from_env() -> CleanupConfig:
         except Exception:
             return DEFAULT_SESSION_TTL_SECONDS
 
+    def get_default_interval_seconds() -> int:
+        try:
+            s = get_face_detection_settings()
+            return max(10, int(getattr(s, "workspace_cleanup_interval_seconds", 60)))
+        except Exception:
+            return 60
+
+    def get_default_auto_delete_expired() -> bool:
+        try:
+            s = get_face_detection_settings()
+            return bool(getattr(s, "auto_delete_expired_workspaces", True))
+        except Exception:
+            return True
+
     ttl_seconds = get_int("YMGA_WORKSPACE_TTL_SECONDS", get_default_ttl_seconds())
     if ttl_seconds <= 0:
         ttl_seconds = get_default_ttl_seconds()
@@ -50,8 +67,9 @@ def _config_from_env() -> CleanupConfig:
     return CleanupConfig(
         grace_seconds=get_int("YMGA_WORKSPACE_GRACE_SECONDS", 20),
         ttl_seconds=ttl_seconds,
-        interval_seconds=get_int("YMGA_WORKSPACE_CLEANUP_INTERVAL_SECONDS", 60),
+        interval_seconds=get_int("YMGA_WORKSPACE_CLEANUP_INTERVAL_SECONDS", get_default_interval_seconds()),
         active_job_window_seconds=get_int("YMGA_WORKSPACE_ACTIVE_JOB_WINDOW_SECONDS", 5 * 60),
+        auto_delete_expired=get_default_auto_delete_expired(),
     )
 
 
@@ -82,7 +100,7 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
         session_expires_at = meta.get("session_expires_at")
 
         should_delete = False
-        if session_expires_at is not None:
+        if cfg.auto_delete_expired and session_expires_at is not None:
             try:
                 session_expires_at_f = float(session_expires_at)
             except (TypeError, ValueError):
@@ -101,6 +119,7 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
             should_delete = True
 
         if should_delete and delete_workspace(workspace_id):
+            unregister_workspace(workspace_id)
             deleted_count += 1
 
     return deleted_count

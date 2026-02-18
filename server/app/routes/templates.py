@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import io
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import FileResponse
 
 from app.models.schemas import TemplateParseResponse
 from app.services.storage import save_upload, workspace_dir
 from app.services.template_parser import extract_slots
+from app.services.workspace_registry import ensure_workspace_write_access
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ async def get_annotated_template(workspace_id: str):
 
 @router.post("/parse", response_model=TemplateParseResponse)
 async def parse_template(
+    request: Request,
     annotated_template: UploadFile | None = File(None),
     clean_template: UploadFile | None = File(None),
     workspace_id: str | None = Form(None),
@@ -42,6 +44,20 @@ async def parse_template(
     min_area: int = Form(400),
 ) -> TemplateParseResponse:
     try:
+        if workspace_id:
+            meta = getattr(request.state, "license_meta", None) or {}
+            license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
+            ok, reason = ensure_workspace_write_access(
+                workspace_id=workspace_id,
+                license_key=str(getattr(request.state, "license_key", "") or ""),
+                license_type=license_type,
+                device_id=getattr(request.state, "license_device_id", None),
+                session_id=getattr(request.state, "client_session_id", None),
+            )
+            if not ok:
+                status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
+                raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
+
         annotated_bytes: bytes | None = None
         clean_bytes: bytes | None = None
 

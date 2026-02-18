@@ -13,13 +13,20 @@ router = APIRouter()
 
 
 @router.get("/api/admin/settings/features")
-def admin_feature_flags() -> dict[str, bool | int]:
+def admin_feature_flags() -> dict[str, bool | int | str]:
     s = get_face_detection_settings()
     return {
         "enable_background_removal_ops": bool(s.enable_background_removal_ops),
         "enable_center_on_face_ops": bool(s.enable_center_on_face_ops),
         "enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops),
         "tool_session_timeout_seconds": int(s.tool_session_timeout_seconds),
+        "workspace_lock_timeout_seconds": int(s.workspace_lock_timeout_seconds),
+        "workspace_heartbeat_interval_seconds": int(s.workspace_heartbeat_interval_seconds),
+        "workspace_cleanup_interval_seconds": int(s.workspace_cleanup_interval_seconds),
+        "auto_delete_expired_workspaces": bool(s.auto_delete_expired_workspaces),
+        "enable_admin_workspace_takeover": bool(s.enable_admin_workspace_takeover),
+        "commercial_workspace_key_mode": str(s.commercial_workspace_key_mode),
+        "workspace_audit_retention_days": int(s.workspace_audit_retention_days),
     }
 
 
@@ -91,6 +98,45 @@ def admin_settings(request: Request):
         <div class="muted" style="margin-top:8px;">
           Controls how long the tool workspace session stays active before automatic expiry/cleanup.
         </div>
+
+      <h3 style="margin-top: 14px;">Workspace ownership + lock controls</h3>
+      <div class="row">
+        <div>
+          <label>Commercial workspace key mode</label>
+          <select name="commercial_workspace_key_mode">
+            <option value="license_only" {"selected" if s.commercial_workspace_key_mode == "license_only" else ""}>License only (shared across devices)</option>
+            <option value="license_and_device" {"selected" if s.commercial_workspace_key_mode == "license_and_device" else ""}>License + device (isolated per device)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Workspace lock timeout (seconds)</label>
+          <input name="workspace_lock_timeout_seconds" value="{s.workspace_lock_timeout_seconds}" />
+        </div>
+        <div>
+          <label>Workspace heartbeat interval (seconds)</label>
+          <input name="workspace_heartbeat_interval_seconds" value="{s.workspace_heartbeat_interval_seconds}" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Workspace cleanup interval (seconds)</label>
+          <input name="workspace_cleanup_interval_seconds" value="{s.workspace_cleanup_interval_seconds}" />
+        </div>
+        <div>
+          <label>Workspace audit retention (days)</label>
+          <input name="workspace_audit_retention_days" value="{s.workspace_audit_retention_days}" />
+        </div>
+      </div>
+      <label style="display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;">
+        <input type="checkbox" name="auto_delete_expired_workspaces" value="1" style="width:auto" {"checked" if s.auto_delete_expired_workspaces else ""} />
+        Auto-delete expired workspaces
+      </label>
+      <label style="display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;">
+        <input type="checkbox" name="enable_admin_workspace_takeover" value="1" style="width:auto" {"checked" if s.enable_admin_workspace_takeover else ""} />
+        Allow admin force-takeover for commercial workspace locks
+      </label>
 
       <div style=\"margin-top: 12px;\">
         <button type=\"submit\">Save feature settings</button>
@@ -192,6 +238,13 @@ def admin_settings_features(
     admin_idle_timeout_seconds: str = Form(""),
     admin_max_session_seconds: str = Form(""),
     tool_session_timeout_seconds: str = Form(""),
+    workspace_lock_timeout_seconds: str = Form(""),
+    workspace_heartbeat_interval_seconds: str = Form(""),
+    workspace_cleanup_interval_seconds: str = Form(""),
+    auto_delete_expired_workspaces: str | None = Form(None),
+    enable_admin_workspace_takeover: str | None = Form(None),
+    commercial_workspace_key_mode: str = Form("license_only"),
+    workspace_audit_retention_days: str = Form("30"),
 ):
     def _parse_timeout(raw: str, default: int, minimum: int) -> int:
         try:
@@ -204,6 +257,21 @@ def admin_settings_features(
     idle = _parse_timeout(admin_idle_timeout_seconds, current.admin_idle_timeout_seconds, 60)
     max_age = _parse_timeout(admin_max_session_seconds, current.admin_max_session_seconds, idle)
     tool_timeout = _parse_timeout(tool_session_timeout_seconds, current.tool_session_timeout_seconds, 60)
+    lock_timeout = _parse_timeout(workspace_lock_timeout_seconds, current.workspace_lock_timeout_seconds, 30)
+    heartbeat_interval = _parse_timeout(
+        workspace_heartbeat_interval_seconds,
+        current.workspace_heartbeat_interval_seconds,
+        5,
+    )
+    cleanup_interval = _parse_timeout(
+        workspace_cleanup_interval_seconds,
+        current.workspace_cleanup_interval_seconds,
+        10,
+    )
+    audit_retention_days = _parse_timeout(workspace_audit_retention_days, current.workspace_audit_retention_days, 1)
+    key_mode = (commercial_workspace_key_mode or "license_only").strip().lower()
+    if key_mode not in {"license_only", "license_and_device"}:
+        key_mode = "license_only"
 
     update_face_detection_settings(
         {
@@ -213,6 +281,13 @@ def admin_settings_features(
             "admin_idle_timeout_seconds": idle,
             "admin_max_session_seconds": max_age,
             "tool_session_timeout_seconds": tool_timeout,
+            "workspace_lock_timeout_seconds": lock_timeout,
+            "workspace_heartbeat_interval_seconds": heartbeat_interval,
+            "workspace_cleanup_interval_seconds": cleanup_interval,
+            "auto_delete_expired_workspaces": bool(auto_delete_expired_workspaces),
+            "enable_admin_workspace_takeover": bool(enable_admin_workspace_takeover),
+            "commercial_workspace_key_mode": key_mode,
+            "workspace_audit_retention_days": audit_retention_days,
         }
     )
     return RedirectResponse(url="/admin/settings?saved=features", status_code=303)

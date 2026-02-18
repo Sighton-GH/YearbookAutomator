@@ -26,6 +26,7 @@ from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
 from app.services.storage import workspace_dir
 from app.services.progress import start_job, update_job, get_job
+from app.services.workspace_registry import ensure_workspace_write_access
 
 router = APIRouter()
 
@@ -86,6 +87,19 @@ def _save_generation_request(payload: GenerationRequest) -> None:
 
 @router.post("/generate")
 async def generate(payload: GenerationRequest, request: Request) -> dict[str, Any]:
+    meta_from_guard = getattr(request.state, "license_meta", None) or {}
+    license_type = "commercial" if str(meta_from_guard.get("license_type") or "") == "commercial" else "personal"
+    access_ok, access_reason = ensure_workspace_write_access(
+        workspace_id=payload.workspace_id,
+        license_key=str(getattr(request.state, "license_key", "") or ""),
+        license_type=license_type,
+        device_id=getattr(request.state, "license_device_id", None),
+        session_id=getattr(request.state, "client_session_id", None),
+    )
+    if not access_ok:
+        status = 409 if access_reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
+        raise HTTPException(status_code=status, detail=access_reason or "workspace_write_not_allowed")
+
     feature_settings = get_face_detection_settings()
     if not feature_settings.enable_center_on_face_ops:
         payload.center_baby_on_face = False

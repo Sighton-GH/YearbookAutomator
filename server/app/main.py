@@ -195,6 +195,16 @@ async def license_guard(request: Request, call_next):
                 },
             )
 
+        # Expose validated license context for downstream handlers.
+        request.state.license_key = key
+        request.state.license_device_id = device_id
+        request.state.license_meta = meta
+        request.state.client_session_id = (
+            request.headers.get("x-client-session-id")
+            or request.headers.get("X-Client-Session-Id")
+            or qp.get("client_session_id")
+        )
+
     return await call_next(request)
 
 

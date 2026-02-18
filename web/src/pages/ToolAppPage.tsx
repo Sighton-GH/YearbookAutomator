@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import App from "../App";
 import { withBase } from "../baseUrl";
-import { getStoredLicenseKey, validateLicenseKey } from "../licensing";
+import { releaseWorkspace, resolveWorkspace } from "../api";
+import { getOrCreateClientSessionId, getStoredLicenseKey, validateLicenseKey } from "../licensing";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 
 type SessionTimingDetail = {
@@ -31,6 +32,11 @@ export function ToolAppPage() {
   const [checking, setChecking] = useState(true);
   const [valid, setValid] = useState(false);
   const [sessionTiming, setSessionTiming] = useState<SessionTimingDetail | null>(null);
+  const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState<string | null>(null);
+  const [resolvedLicenseType, setResolvedLicenseType] = useState<"personal" | "commercial" | null>(null);
+  const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null } | null>(null);
+  const [clientSessionId] = useState<string>(() => getOrCreateClientSessionId());
+  const [releasingWorkspace, setReleasingWorkspace] = useState(false);
   const [sessionInfoCollapsed, setSessionInfoCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("ymga-session-info-collapsed") === "1";
@@ -59,7 +65,31 @@ export function ToolAppPage() {
       try {
         const res = await validateLicenseKey(key);
         if (!active) return;
-        setValid(Boolean(res.valid));
+        const isValid = Boolean(res.valid);
+        setValid(isValid);
+        if (!isValid) return;
+
+        try {
+          const resolved = await resolveWorkspace(clientSessionId);
+          if (!active) return;
+          setResolvedWorkspaceId(resolved.workspace_id || null);
+          setResolvedLicenseType(resolved.license_type || null);
+          setLockConflict(null);
+        } catch (err: any) {
+          if (!active) return;
+          const code = err?.response?.data?.detail?.code;
+          if (code === "workspace_locked") {
+            const lockExpiresAt = Number(err?.response?.data?.detail?.lock_expires_at || 0) || null;
+            setLockConflict({
+              message:
+                "Workspace tied to this commercial license is already in use. Ask the other user to disconnect, release the workspace, or wait for lock timeout.",
+              lockExpiresAt,
+            });
+            setResolvedWorkspaceId(null);
+          } else {
+            setLockConflict({ message: "Could not resolve workspace for this license. Please refresh and try again." });
+          }
+        }
       } catch {
         if (!active) return;
         setValid(false);
@@ -109,6 +139,22 @@ export function ToolAppPage() {
 
   if (!checking && !valid) return <Navigate to="/tool" replace />;
 
+  const handleReleaseWorkspace = async () => {
+    if (!resolvedWorkspaceId || resolvedLicenseType !== "commercial") return;
+    try {
+      setReleasingWorkspace(true);
+      await releaseWorkspace(resolvedWorkspaceId, clientSessionId);
+      const resolved = await resolveWorkspace(clientSessionId);
+      setResolvedWorkspaceId(resolved.workspace_id || null);
+      setResolvedLicenseType(resolved.license_type || null);
+      setLockConflict(null);
+    } catch {
+      // keep UI quiet; user can retry
+    } finally {
+      setReleasingWorkspace(false);
+    }
+  };
+
   return (
     <div className={`app-shell${isDark ? " dark" : ""}`}>
       <div className="app-return-bar">
@@ -157,6 +203,16 @@ export function ToolAppPage() {
             ) : null}
           </div>
           <div className="app-return-actions">
+            {resolvedLicenseType === "commercial" && resolvedWorkspaceId ? (
+              <button
+                type="button"
+                className="app-file-action"
+                onClick={handleReleaseWorkspace}
+                disabled={checking || releasingWorkspace}
+              >
+                {releasingWorkspace ? "Releasing..." : "Release Workspace"}
+              </button>
+            ) : null}
             <ToggleSwitch
               className="app-theme-toggle-switch"
               checked={isDark}
@@ -169,8 +225,22 @@ export function ToolAppPage() {
       </div>
       {checking ? (
         <div className="app-loading">Validating license…</div>
+      ) : lockConflict ? (
+        <div className="app-loading" role="alert">
+          <div>{lockConflict.message}</div>
+          {lockConflict.lockExpiresAt ? (
+            <div style={{ marginTop: 6, opacity: 0.8 }}>
+              Lock expires at {new Date(lockConflict.lockExpiresAt * 1000).toLocaleTimeString()}.
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <App embedded />
+        <App
+          embedded
+          initialWorkspaceId={resolvedWorkspaceId}
+          initialLicenseType={resolvedLicenseType}
+          clientSessionId={clientSessionId}
+        />
       )}
       <footer className="app-footer">
         <div className="app-footer-inner" style={{ display: "flex", alignItems: "center", gap: 8 }}>

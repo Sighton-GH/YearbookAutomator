@@ -33,6 +33,7 @@ from app.services.background_jobs import (
 )
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import detect_face_center
+from app.services.workspace_registry import ensure_workspace_write_access
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
@@ -41,6 +42,21 @@ from threading import Thread
 import time
 
 router = APIRouter()
+
+
+def _enforce_workspace_write_access(request: Request, workspace_id: str) -> None:
+    meta = getattr(request.state, "license_meta", None) or {}
+    license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
+    ok, reason = ensure_workspace_write_access(
+        workspace_id=workspace_id,
+        license_key=str(getattr(request.state, "license_key", "") or ""),
+        license_type=license_type,
+        device_id=getattr(request.state, "license_device_id", None),
+        session_id=getattr(request.state, "client_session_id", None),
+    )
+    if not ok:
+        status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
+        raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
 
 
 def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[bytes, int]:
@@ -306,12 +322,15 @@ def _looks_like_quote(text: str) -> bool:
 
 @router.post("/ingest", response_model=SpreadsheetPreview)
 async def ingest(
+    request: Request,
     spreadsheet: UploadFile | None = File(None),
     workspace_id: str = Form(...),
     mugshots_zip: UploadFile | None = File(None),
     naming_pattern: str = Form(r"\d{3,4}"),
     advanced_name_match: bool = Form(False),
 ) -> SpreadsheetPreview:
+    _enforce_workspace_write_access(request, workspace_id)
+
     # If caller didn't re-upload inputs (e.g., after refresh), fall back to saved uploads.
     spreadsheet_file = spreadsheet.file if spreadsheet else None
     spreadsheet_name = spreadsheet.filename if spreadsheet else None
@@ -365,7 +384,9 @@ async def ingest(
 
 
 @router.post("/review", response_model=SpreadsheetPreview)
-async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
+async def review_mapping(payload: MappingRequest, request: Request) -> SpreadsheetPreview:
+    _enforce_workspace_write_access(request, payload.workspace_id)
+
     people = list(payload.people)
     apply_mapping_decisions(people, list(payload.decisions))
     return SpreadsheetPreview(workspace_id=payload.workspace_id, people=people)
@@ -373,12 +394,15 @@ async def review_mapping(payload: MappingRequest) -> SpreadsheetPreview:
 
 @router.post("/upload-image")
 async def upload_image(
+    request: Request,
     workspace_id: str = Form(...),
     kind: Literal["baby", "mugshot"] = Form(...),
     file: UploadFile = File(...),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
+    _enforce_workspace_write_access(request, workspace_id)
+
     feature_settings = get_face_detection_settings()
     if kind == "baby" and not feature_settings.enable_background_removal_ops:
         remove_background = False
@@ -406,11 +430,14 @@ async def upload_image(
 
 @router.post("/remove-background")
 async def remove_background_job(
+    request: Request,
     workspace_id: str = Form(...),
     kind: Literal["baby", "mugshot"] = Form(...),
     filename: str = Form(...),
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
+    _enforce_workspace_write_access(request, workspace_id)
+
     """Start a background-removal job for an already-uploaded image.
 
     This exists so the UI can show progress/ETA while the server runs segmentation.
@@ -462,12 +489,15 @@ async def remove_background_status(job_id: str):
 
 @router.post("/remove-background-preview")
 async def remove_background_preview_job(
+    request: Request,
     workspace_id: str = Form(...),
     kind: Literal["baby", "mugshot"] = Form(...),
     filename: str = Form(...),
     background_mode: BackgroundMode = Form("simple"),
     force: bool = Form(False),
 ) -> dict[str, str]:
+    _enforce_workspace_write_access(request, workspace_id)
+
     """Start a non-destructive background-removal job.
 
     Produces a PNG (with alpha) in-memory for preview in the editor.
@@ -543,6 +573,8 @@ async def upload_baby_zip(
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> SpreadsheetPreview:
+    _enforce_workspace_write_access(request, workspace_id)
+
     feature_settings = get_face_detection_settings()
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
@@ -689,11 +721,14 @@ async def upload_baby_zip(
 
 @router.post("/upload-quotes-spreadsheet", response_model=SpreadsheetPreview)
 async def upload_quotes_spreadsheet(
+    request: Request,
     workspace_id: str = Form(...),
     people_json: str = Form(...),
     quotes_spreadsheet: UploadFile | None = File(None),
     advanced_name_match: bool = Form(True),
 ) -> SpreadsheetPreview:
+    _enforce_workspace_write_access(request, workspace_id)
+
     people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
 
     data: bytes | None = None

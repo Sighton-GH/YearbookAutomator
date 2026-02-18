@@ -1,9 +1,10 @@
 import axios from "axios";
-import { getOrCreateDeviceId, getStoredLicenseKey } from "./licensing";
+import { getOrCreateClientSessionId, getOrCreateDeviceId, getStoredLicenseKey } from "./licensing";
 
 axios.interceptors.request.use((config) => {
   const key = getStoredLicenseKey();
   const deviceId = getOrCreateDeviceId();
+  const clientSessionId = getOrCreateClientSessionId();
   if (key) {
     config.headers = config.headers ?? {};
     config.headers["X-License-Key"] = key;
@@ -11,6 +12,10 @@ axios.interceptors.request.use((config) => {
   if (deviceId) {
     config.headers = config.headers ?? {};
     config.headers["X-Device-Id"] = deviceId;
+  }
+  if (clientSessionId) {
+    config.headers = config.headers ?? {};
+    config.headers["X-Client-Session-Id"] = clientSessionId;
   }
   return config;
 });
@@ -70,6 +75,22 @@ export type AdminFeatureFlags = {
   enable_center_on_face_ops?: boolean;
   enable_heavy_generation_ops?: boolean;
   tool_session_timeout_seconds?: number;
+  workspace_lock_timeout_seconds?: number;
+  workspace_heartbeat_interval_seconds?: number;
+  workspace_cleanup_interval_seconds?: number;
+  auto_delete_expired_workspaces?: boolean;
+  enable_admin_workspace_takeover?: boolean;
+  commercial_workspace_key_mode?: "license_only" | "license_and_device";
+  workspace_audit_retention_days?: number;
+};
+
+export type WorkspaceResolveResponse = {
+  ok: boolean;
+  workspace_id: string | null;
+  license_type: "personal" | "commercial";
+  created_new: boolean;
+  recreated_after_expiry: boolean;
+  state: "ready" | "expired_recreated";
 };
 
 export async function getAdminFeatureFlags() {
@@ -481,6 +502,20 @@ export async function touchWorkspace(
   }
   await axios.post("/api/workspaces/touch", form, {
     headers: { "Content-Type": "multipart/form-data" }
+  });
+}
+
+export async function resolveWorkspace(sessionId?: string): Promise<WorkspaceResolveResponse> {
+  const { data } = await axios.post<WorkspaceResolveResponse>("/api/workspaces/resolve", {
+    session_id: sessionId || null,
+  });
+  return data;
+}
+
+export async function releaseWorkspace(workspaceId: string, sessionId?: string): Promise<void> {
+  await axios.post("/api/workspaces/release", {
+    workspace_id: workspaceId,
+    session_id: sessionId || null,
   });
 }
 
