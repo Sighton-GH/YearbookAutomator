@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import App from "../App";
 import { withBase } from "../baseUrl";
@@ -37,6 +37,7 @@ export function ToolAppPage() {
   const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null } | null>(null);
   const [clientSessionId] = useState<string>(() => getOrCreateClientSessionId());
   const [releasingWorkspace, setReleasingWorkspace] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sessionInfoCollapsed, setSessionInfoCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("ymga-session-info-collapsed") === "1";
@@ -46,6 +47,8 @@ export function ToolAppPage() {
     return window.localStorage.getItem("ymga-app-theme") === "dark" ? "dark" : "light";
   });
   const isDark = appTheme === "dark";
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const sessionInfoRef = useRef<HTMLDivElement | null>(null);
 
   const triggerConfigAction = (kind: "export" | "import") => {
     if (typeof window === "undefined") return;
@@ -115,6 +118,62 @@ export function ToolAppPage() {
   }, [sessionInfoCollapsed]);
 
   useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(target)) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    const onDocKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (sessionInfoCollapsed) return;
+
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (sessionInfoRef.current && !sessionInfoRef.current.contains(target)) {
+        setSessionInfoCollapsed(true);
+      }
+    };
+
+    const onDocKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSessionInfoCollapsed(true);
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, [sessionInfoCollapsed]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) setMobileMenuOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  useEffect(() => {
     const onSessionTiming = (event: Event) => {
       const detail = (event as CustomEvent<SessionTimingDetail>).detail;
       if (!detail || typeof detail !== "object") return;
@@ -136,6 +195,7 @@ export function ToolAppPage() {
 
   const remainingMs = sessionTiming?.remainingMs ?? 0;
   const sessionToneClass = remainingMs <= 5 * 60 * 1000 ? " danger" : remainingMs <= 30 * 60 * 1000 ? " warn" : "";
+  const showSessionExpiry = Boolean(resolvedLicenseType === "commercial" && resolvedWorkspaceId);
 
   if (!checking && !valid) return <Navigate to="/tool" replace />;
 
@@ -181,60 +241,100 @@ export function ToolAppPage() {
               style={{ width: 28, height: 28, objectFit: "contain" }}
             />
             <span className="app-title">Custom Flow Automator</span>
-            <div className="app-file-actions" aria-label="Configuration">
-              <button
-                type="button"
-                className="app-file-action"
-                onClick={() => triggerConfigAction("export")}
-                disabled={checking}
-              >
-                Export
-              </button>
-              <button
-                type="button"
-                className="app-file-action"
-                onClick={() => triggerConfigAction("import")}
-                disabled={checking}
-              >
-                Import
-              </button>
-            </div>
-            {sessionTiming ? (
-              <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite">
-                <span className="app-session-label">Session</span>
-                <span className="app-session-meta">
-                  Remaining: {formatSessionCountdown(sessionTiming.remainingMs)}
-                  {!sessionInfoCollapsed ? ` · Expires at ${formatSessionExpiryTime(sessionTiming.expiresAtMs)}` : ""}
-                </span>
+          </div>
+          <button
+            type="button"
+            className="app-mobile-menu-btn"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMobileMenuOpen((v) => !v)}
+          >
+            {mobileMenuOpen ? "✕" : "☰"}
+          </button>
+          <div
+            className={`app-return-controls${mobileMenuOpen ? " open" : ""}`}
+            ref={mobileMenuRef}
+          >
+            <div className="app-return-left-group">
+              <div className="app-file-actions" aria-label="Configuration">
                 <button
                   type="button"
-                  className="app-session-toggle"
-                  onClick={() => setSessionInfoCollapsed((v) => !v)}
-                  aria-label={sessionInfoCollapsed ? "Expand session information" : "Collapse session information"}
+                  className="app-file-action"
+                  onClick={() => {
+                    triggerConfigAction("export");
+                    setMobileMenuOpen(false);
+                  }}
+                  disabled={checking}
                 >
-                  {sessionInfoCollapsed ? "Expand" : "Collapse"}
+                  Export
+                </button>
+                <button
+                  type="button"
+                  className="app-file-action"
+                  onClick={() => {
+                    triggerConfigAction("import");
+                    setMobileMenuOpen(false);
+                  }}
+                  disabled={checking}
+                >
+                  Import
                 </button>
               </div>
-            ) : null}
-          </div>
-          <div className="app-return-actions">
-            {resolvedLicenseType === "commercial" && resolvedWorkspaceId ? (
-              <button
-                type="button"
-                className="app-file-action"
-                onClick={handleReleaseWorkspace}
-                disabled={checking || releasingWorkspace}
+              {sessionTiming ? (
+                <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite" ref={sessionInfoRef}>
+                  <span className="app-session-meta">{formatSessionCountdown(sessionTiming.remainingMs)}</span>
+                  <button
+                    type="button"
+                    className="app-session-toggle"
+                    onClick={() => setSessionInfoCollapsed((v) => !v)}
+                    aria-label={sessionInfoCollapsed ? "Expand session information" : "Collapse session information"}
+                  >
+                    {sessionInfoCollapsed ? "Expand" : "Collapse"}
+                  </button>
+                  {!sessionInfoCollapsed ? (
+                    <div className="app-session-dropdown" role="dialog" aria-label="Session information">
+                      <div className="app-session-dropdown-row">
+                        <span className="app-session-label">Session</span>
+                      </div>
+                      <div className="app-session-dropdown-row">
+                        <span className="app-session-dropdown-key">Remaining</span>
+                        <span>{formatSessionCountdown(sessionTiming.remainingMs)}</span>
+                      </div>
+                      {showSessionExpiry ? (
+                        <div className="app-session-dropdown-row">
+                          <span className="app-session-dropdown-key">Expires at</span>
+                          <span>{formatSessionExpiryTime(sessionTiming.expiresAtMs)}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {resolvedLicenseType === "commercial" && resolvedWorkspaceId ? (
+                <button
+                  type="button"
+                  className="app-file-action"
+                  onClick={handleReleaseWorkspace}
+                  disabled={checking || releasingWorkspace}
+                >
+                  {releasingWorkspace ? "Releasing..." : "Release Workspace"}
+                </button>
+              ) : null}
+            </div>
+            <div className="app-return-actions">
+              <ToggleSwitch
+                className="app-theme-toggle-switch"
+                checked={isDark}
+                onChange={(next) => setAppTheme(next ? "dark" : "light")}
+                label="Dark mode"
+              />
+              <a
+                className="app-return-link"
+                href={withBase("/")}
+                onClick={() => setMobileMenuOpen(false)}
               >
-                {releasingWorkspace ? "Releasing..." : "Release Workspace"}
-              </button>
-            ) : null}
-            <ToggleSwitch
-              className="app-theme-toggle-switch"
-              checked={isDark}
-              onChange={(next) => setAppTheme(next ? "dark" : "light")}
-              label="Dark mode"
-            />
-            <a className="app-return-link" href={withBase("/")}>Back to main website</a>
+                Back to main website
+              </a>
+            </div>
           </div>
         </div>
       </div>

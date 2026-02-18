@@ -367,6 +367,150 @@
       "license_type": "commercial",
       "ts": 1771454546,
       "workspace_id": "0d857184271742728a7e6a0904471601"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455362,
+      "workspace_id": "0d857184271742728a7e6a0904471601"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_created",
+      "license_type": "commercial",
+      "ts": 1771455499,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455521,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455558,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455559,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455561,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455562,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455563,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_released",
+      "license_type": "commercial",
+      "ts": 1771455571,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455573,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455577,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455695,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455705,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455707,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455714,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455715,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455768,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1771455798,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
     }
   ]
 }

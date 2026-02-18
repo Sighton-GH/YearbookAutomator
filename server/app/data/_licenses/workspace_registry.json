@@ -1,19 +1,19 @@
 {
   "bindings": [
     {
-      "created_at": 1771454108,
-      "expires_at": 1771483553,
-      "last_seen": 1771454753,
+      "created_at": 1771455499,
+      "expires_at": 1771484598,
+      "last_seen": 1771455798,
       "license_type": "commercial",
       "lock": {
-        "acquired_at": 1771454546,
+        "acquired_at": 1771455798,
         "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
-        "expires_at": 1771454873,
-        "last_heartbeat_at": 1771454753,
-        "session_id": "4d7e0afe-3286-49be-949b-33656f1ae2f1"
+        "expires_at": 1771455918,
+        "last_heartbeat_at": 1771455798,
+        "session_id": "bb8e5232-a8e7-4e3a-b270-88c1a75923ac"
       },
       "owner_key": "comm:YMGA1-ZRBKU-HWVAI-3X5L4-URGFJ-E25HV-6OGDZ-7N443-HRAZH-BPCAB-R5VL3-3A",
-      "workspace_id": "0d857184271742728a7e6a0904471601"
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
     }
   ],
   "version": 1
