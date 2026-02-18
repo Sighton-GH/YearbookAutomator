@@ -380,7 +380,7 @@ async def upload_image(
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
     feature_settings = get_face_detection_settings()
-    if kind == "baby" and not feature_settings.enable_heavy_generation_ops:
+    if kind == "baby" and not feature_settings.enable_background_removal_ops:
         remove_background = False
 
     filename = Path(file.filename).name
@@ -415,6 +415,10 @@ async def remove_background_job(
 
     This exists so the UI can show progress/ETA while the server runs segmentation.
     """
+
+    feature_settings = get_face_detection_settings()
+    if kind == "baby" and not feature_settings.enable_background_removal_ops:
+        raise HTTPException(status_code=403, detail="Background removal is disabled by admin settings")
 
     # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
     subdir = "mugshots" if kind == "mugshot" else kind
@@ -469,6 +473,10 @@ async def remove_background_preview_job(
     Produces a PNG (with alpha) in-memory for preview in the editor.
     Nothing is written to disk unless the user later clicks Apply in the UI.
     """
+
+    feature_settings = get_face_detection_settings()
+    if kind == "baby" and not feature_settings.enable_background_removal_ops:
+        raise HTTPException(status_code=403, detail="Background removal is disabled by admin settings")
 
     subdir = "mugshots" if kind == "mugshot" else kind
     safe_name = Path(filename).name
@@ -536,7 +544,7 @@ async def upload_baby_zip(
     background_mode: BackgroundMode = Form("simple"),
 ) -> SpreadsheetPreview:
     feature_settings = get_face_detection_settings()
-    if not feature_settings.enable_heavy_generation_ops:
+    if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
     # Parse people passed from frontend (source of truth for indices/names).

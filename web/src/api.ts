@@ -66,7 +66,9 @@ export type FaceCenterResponse = {
 };
 
 export type AdminFeatureFlags = {
-  enable_heavy_generation_ops: boolean;
+  enable_background_removal_ops?: boolean;
+  enable_center_on_face_ops?: boolean;
+  enable_heavy_generation_ops?: boolean;
 };
 
 export async function getAdminFeatureFlags() {

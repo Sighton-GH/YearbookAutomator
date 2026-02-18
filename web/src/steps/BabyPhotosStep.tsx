@@ -58,7 +58,8 @@ export function BabyPhotosStep({
   onBabyBackgroundColor,
   centerBabyOnFace,
   onCenterBabyOnFace,
-  heavyGenerationOpsEnabled,
+  backgroundRemovalOpsEnabled,
+  centerOnFaceOpsEnabled,
   allowInsecureUploads,
   setStatus,
   setLoading,
@@ -93,7 +94,8 @@ export function BabyPhotosStep({
   onBabyBackgroundColor: (v: string) => void;
   centerBabyOnFace: boolean;
   onCenterBabyOnFace: (v: boolean) => void;
-  heavyGenerationOpsEnabled: boolean;
+  backgroundRemovalOpsEnabled: boolean;
+  centerOnFaceOpsEnabled: boolean;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   setLoading: (v: boolean) => void;
@@ -203,13 +205,19 @@ export function BabyPhotosStep({
   }, [babyIngest]);
 
   useEffect(() => {
-    if (heavyGenerationOpsEnabled) return;
-    if (removeBabyBackground) {
+    if (!backgroundRemovalOpsEnabled && removeBabyBackground) {
       setRemoveBabyBackground(false);
       onBabyIngest((prev) => ({ ...prev, removeBackground: false }));
     }
-    if (centerBabyOnFace) onCenterBabyOnFace(false);
-  }, [heavyGenerationOpsEnabled, removeBabyBackground, centerBabyOnFace, onBabyIngest, onCenterBabyOnFace]);
+    if (!centerOnFaceOpsEnabled && centerBabyOnFace) onCenterBabyOnFace(false);
+  }, [
+    backgroundRemovalOpsEnabled,
+    centerOnFaceOpsEnabled,
+    removeBabyBackground,
+    centerBabyOnFace,
+    onBabyIngest,
+    onCenterBabyOnFace,
+  ]);
 
   const thumbSizeForAspect = (maxSize: number, aspect: number) => {
     if (!Number.isFinite(aspect) || aspect <= 0) return { width: maxSize, height: maxSize };
@@ -1352,7 +1360,7 @@ export function BabyPhotosStep({
             </div>
 
             <ToggleSwitch
-              disabled={!heavyGenerationOpsEnabled}
+              disabled={!backgroundRemovalOpsEnabled}
               checked={removeBabyBackground}
               onChange={(checked) => {
                 setRemoveBabyBackground(checked);
@@ -1360,7 +1368,7 @@ export function BabyPhotosStep({
               }}
               label="Remove background from baby photos"
               description={
-                heavyGenerationOpsEnabled
+                backgroundRemovalOpsEnabled
                   ? "When enabled, uploads are saved with a transparent background."
                   : "Disabled by admin settings for this device/server."
               }
@@ -1407,12 +1415,12 @@ export function BabyPhotosStep({
             )}
 
             <ToggleSwitch
-              disabled={!heavyGenerationOpsEnabled}
+              disabled={!centerOnFaceOpsEnabled}
               checked={centerBabyOnFace}
               onChange={onCenterBabyOnFace}
               label="Center baby photo on face"
               description={
-                heavyGenerationOpsEnabled
+                centerOnFaceOpsEnabled
                   ? "During rendering, tries to detect a face in each baby photo and center it in the cutout. If background removal is enabled, centering uses the background-removed image."
                   : "Disabled by admin settings for this device/server."
               }

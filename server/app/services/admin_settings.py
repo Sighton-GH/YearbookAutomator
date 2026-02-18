@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,8 +15,12 @@ _SETTINGS_PATH = _SETTINGS_DIR / "settings.json"
 
 @dataclass(frozen=True)
 class FaceDetectionSettings:
+    admin_username: str = "admin"
     enable_yunet: bool = False
-    enable_heavy_generation_ops: bool = False
+    enable_background_removal_ops: bool = False
+    enable_center_on_face_ops: bool = False
+    admin_idle_timeout_seconds: int = 900
+    admin_max_session_seconds: int = 28800
     retinaface_model_path: str = ""
     retinaface_input_size: int = 640
     retinaface_confidence: float = 0.7
@@ -23,9 +28,18 @@ class FaceDetectionSettings:
     yunet_input_size: int = 320
     yunet_score_threshold: float = 0.7
 
+    @property
+    def enable_heavy_generation_ops(self) -> bool:
+        return bool(self.enable_background_removal_ops and self.enable_center_on_face_ops)
+
 
 _DEFAULT_YUNET_PATH = str((Path(__file__).resolve().parents[2] / "models" / "face" / "face_detection_yunet_2023mar.onnx"))
-DEFAULT_SETTINGS = FaceDetectionSettings(yunet_model_path=_DEFAULT_YUNET_PATH)
+DEFAULT_SETTINGS = FaceDetectionSettings(
+    admin_username=(os.getenv("YMGA_LICENSE_ADMIN_USERNAME", "admin") or "admin").strip() or "admin",
+    yunet_model_path=_DEFAULT_YUNET_PATH,
+    admin_idle_timeout_seconds=max(60, int(os.getenv("YMGA_ADMIN_IDLE_TIMEOUT_SECONDS", "900") or "900")),
+    admin_max_session_seconds=max(60, int(os.getenv("YMGA_ADMIN_MAX_SESSION_SECONDS", "28800") or "28800")),
+)
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -52,6 +66,18 @@ def _coerce_float(value: Any, default: float) -> float:
         return default
 
 
+def _coerce_non_empty_str(value: Any, default: str) -> str:
+    text = str(value or "").strip()
+    return text or default
+
+
+def _coerce_timeout(value: Any, default: int, *, minimum: int = 60) -> int:
+    out = _coerce_int(value, default)
+    if out < minimum:
+        return minimum
+    return out
+
+
 def _read_raw() -> dict:
     if not _SETTINGS_PATH.exists():
         return {}
@@ -66,11 +92,29 @@ def get_face_detection_settings() -> FaceDetectionSettings:
     yunet_default = DEFAULT_SETTINGS.yunet_model_path
     if yunet_default and not Path(yunet_default).exists():
         yunet_default = ""
+
+    legacy_heavy = _coerce_bool(raw.get("enable_heavy_generation_ops", False))
+    bg_enabled = _coerce_bool(raw.get("enable_background_removal_ops", legacy_heavy))
+    center_enabled = _coerce_bool(raw.get("enable_center_on_face_ops", legacy_heavy))
+
+    idle_timeout = _coerce_timeout(
+        raw.get("admin_idle_timeout_seconds", DEFAULT_SETTINGS.admin_idle_timeout_seconds),
+        DEFAULT_SETTINGS.admin_idle_timeout_seconds,
+        minimum=60,
+    )
+    max_timeout = _coerce_timeout(
+        raw.get("admin_max_session_seconds", DEFAULT_SETTINGS.admin_max_session_seconds),
+        DEFAULT_SETTINGS.admin_max_session_seconds,
+        minimum=idle_timeout,
+    )
+
     return FaceDetectionSettings(
+        admin_username=_coerce_non_empty_str(raw.get("admin_username", DEFAULT_SETTINGS.admin_username), DEFAULT_SETTINGS.admin_username),
         enable_yunet=_coerce_bool(raw.get("enable_yunet", DEFAULT_SETTINGS.enable_yunet)),
-        enable_heavy_generation_ops=_coerce_bool(
-            raw.get("enable_heavy_generation_ops", DEFAULT_SETTINGS.enable_heavy_generation_ops)
-        ),
+        enable_background_removal_ops=bg_enabled,
+        enable_center_on_face_ops=center_enabled,
+        admin_idle_timeout_seconds=idle_timeout,
+        admin_max_session_seconds=max_timeout,
         retinaface_model_path=str(raw.get("retinaface_model_path", DEFAULT_SETTINGS.retinaface_model_path) or ""),
         retinaface_input_size=_coerce_int(raw.get("retinaface_input_size", DEFAULT_SETTINGS.retinaface_input_size), DEFAULT_SETTINGS.retinaface_input_size),
         retinaface_confidence=_coerce_float(raw.get("retinaface_confidence", DEFAULT_SETTINGS.retinaface_confidence), DEFAULT_SETTINGS.retinaface_confidence),

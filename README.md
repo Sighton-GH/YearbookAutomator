@@ -72,9 +72,22 @@ The `/tool` page is locked behind a license key.
 
 ### Admin panel (create/revoke keys)
 
-- URL: http://127.0.0.1:8000/admin/licenses
-- Set an admin password (recommended): `YMGA_LICENSE_ADMIN_PASSWORD`
-	- If not set, the admin panel is accessible without a password and will display a warning banner.
+- Admin home URL: http://127.0.0.1:8000/
+- License admin URL: http://127.0.0.1:8000/admin/licenses
+- Admin settings URL: http://127.0.0.1:8000/admin/settings
+- Set admin username default: `YMGA_LICENSE_ADMIN_USERNAME` (default: `admin`)
+- Set admin password: `YMGA_LICENSE_ADMIN_PASSWORD`
+	- Admin pages trigger the browser login prompt immediately on first open in a browser/session.
+	- Username can be changed in the admin settings panel and is persisted server-side.
+	- `start-dev.cmd` sets local dev defaults: username `sighton_admin`, password `Sighton!2026`.
+- Admin session timeout controls:
+	- `YMGA_ADMIN_IDLE_TIMEOUT_SECONDS` (default: `900`)
+	- `YMGA_ADMIN_MAX_SESSION_SECONDS` (default: `28800`)
+	- Optional signing secret override: `YMGA_ADMIN_SESSION_SECRET`
+	- These can be adjusted in the admin settings panel and are persisted server-side.
+- Admin generation operations are controlled separately:
+	- Background removal operations
+	- Center-on-face operations
 
 ### License persistence & secrets
 

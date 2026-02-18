@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import html
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.routes.licensing import _require_admin
+from app.routes.licensing import _admin_layout
 from app.services.admin_settings import get_face_detection_settings, update_face_detection_settings
 
 
@@ -16,40 +15,72 @@ router = APIRouter()
 @router.get("/api/admin/settings/features")
 def admin_feature_flags() -> dict[str, bool]:
     s = get_face_detection_settings()
-    return {"enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops)}
+    return {
+        "enable_background_removal_ops": bool(s.enable_background_removal_ops),
+        "enable_center_on_face_ops": bool(s.enable_center_on_face_ops),
+        "enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops),
+    }
 
 
 @router.get("/admin/settings", response_class=HTMLResponse)
-def admin_settings(_: Annotated[None, Depends(_require_admin)]):
+def admin_settings(request: Request):
     s = get_face_detection_settings()
-    html_body = f"""<!doctype html>
-<html lang=\"en\">
-<head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>YMGA Admin Settings</title>
-  <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 20px; }}
-    .card {{ border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin-bottom: 14px; }}
-    label {{ display: block; margin: 8px 0 4px; font-weight: 600; }}
-    input {{ width: min(640px, 100%); padding: 8px; }}
-    button {{ padding: 10px 14px; font-weight: 700; }}
-    .row {{ display: flex; gap: 16px; flex-wrap: wrap; }}
-    .row > div {{ flex: 1 1 280px; }}
-    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-  </style>
-</head>
-<body>
+    saved = (request.query_params.get("saved") or "").strip().lower()
+    notice = ""
+    if saved == "features":
+        notice = "<div class='card success'><strong>Feature settings updated.</strong></div>"
+    elif saved == "face":
+        notice = "<div class='card success'><strong>Face-detection settings updated.</strong></div>"
+    elif saved == "auth":
+        notice = "<div class='card success'><strong>Admin username updated.</strong></div>"
+
+    content = f"""
   <h1>Admin Settings</h1>
-  <p><a href=\"/admin/licenses\">Back to license admin</a></p>
+  <p class='muted'>Manage admin access, generation controls, and face-detection behavior.</p>
+
+  {notice}
+
+  <div class=\"card\">
+    <h2>Admin Login Credentials</h2>
+    <form method=\"post\" action=\"/admin/settings/auth\">
+      <label>Admin username</label>
+      <input name=\"admin_username\" value=\"{html.escape(s.admin_username)}\" autocomplete=\"username\" />
+      <div class=\"muted\" style=\"margin-top:8px;\">
+        Password is controlled by <code>YMGA_LICENSE_ADMIN_PASSWORD</code> (environment variable).
+      </div>
+      <div style=\"margin-top: 12px;\">
+        <button type=\"submit\">Save login username</button>
+      </div>
+    </form>
+  </div>
 
   <div class=\"card\">
     <h2>Generation Features</h2>
     <form method=\"post\" action=\"/admin/settings/features\">
       <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
-        <input type=\"checkbox\" name=\"enable_heavy_generation_ops\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_heavy_generation_ops else ""} />
-        Enable heavy baby-photo operations (background removal and center-on-face)
+        <input type=\"checkbox\" name=\"enable_background_removal_ops\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_background_removal_ops else ""} />
+        Enable baby background removal operations
       </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_center_on_face_ops\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_center_on_face_ops else ""} />
+        Enable baby center-on-face operations
+      </label>
+
+      <h3 style=\"margin-top: 14px;\">Admin session security</h3>
+      <div class=\"row\">
+        <div>
+          <label>Idle timeout (seconds)</label>
+          <input name=\"admin_idle_timeout_seconds\" value=\"{s.admin_idle_timeout_seconds}\" />
+        </div>
+        <div>
+          <label>Max session age (seconds)</label>
+          <input name=\"admin_max_session_seconds\" value=\"{s.admin_max_session_seconds}\" />
+        </div>
+      </div>
+      <div class=\"muted\" style=\"margin-top:8px;\">
+        Idle timeout logs out inactive admin sessions. Max age forces re-login even when active.
+      </div>
+
       <div style=\"margin-top: 12px;\">
         <button type=\"submit\">Save feature settings</button>
       </div>
@@ -109,13 +140,19 @@ def admin_settings(_: Annotated[None, Depends(_require_admin)]):
       <li>Both models should be ONNX files compatible with OpenCV / ONNX Runtime.</li>
     </ul>
   </div>
-</body>
-</html>"""
-    return HTMLResponse(content=html_body, status_code=200)
+"""
+    return HTMLResponse(content=_admin_layout(title="YMGA Admin Settings", active="settings", content=content), status_code=200)
+
+
+@router.post("/admin/settings/auth")
+def admin_settings_auth(admin_username: str = Form("admin")):
+    username = (admin_username or "").strip() or "admin"
+    update_face_detection_settings({"admin_username": username})
+    return RedirectResponse(url="/admin/settings?saved=auth", status_code=303)
+
 
 @router.post("/admin/settings/face", response_class=HTMLResponse)
 def admin_settings_face(
-    _: Annotated[None, Depends(_require_admin)],
     enable_yunet: str | None = Form(None),
     retinaface_model_path: str = Form(""),
     retinaface_input_size: str = Form(""),
@@ -134,25 +171,34 @@ def admin_settings_face(
         "yunet_score_threshold": yunet_score_threshold.strip(),
     }
     update_face_detection_settings(updates)
-    return HTMLResponse(
-        content="""<html><body>
-        <p>Settings updated.</p>
-        <p><a href='/admin/settings'>Back to settings</a></p>
-        </body></html>""",
-        status_code=200,
-    )
+    return RedirectResponse(url="/admin/settings?saved=face", status_code=303)
 
 
 @router.post("/admin/settings/features", response_class=HTMLResponse)
 def admin_settings_features(
-    _: Annotated[None, Depends(_require_admin)],
-    enable_heavy_generation_ops: str | None = Form(None),
+    enable_background_removal_ops: str | None = Form(None),
+    enable_center_on_face_ops: str | None = Form(None),
+    admin_idle_timeout_seconds: str = Form(""),
+    admin_max_session_seconds: str = Form(""),
 ):
-    update_face_detection_settings({"enable_heavy_generation_ops": bool(enable_heavy_generation_ops)})
-    return HTMLResponse(
-        content="""<html><body>
-        <p>Feature settings updated.</p>
-        <p><a href='/admin/settings'>Back to settings</a></p>
-        </body></html>""",
-        status_code=200,
+    def _parse_timeout(raw: str, default: int, minimum: int) -> int:
+        try:
+            value = int((raw or "").strip())
+        except ValueError:
+            value = default
+        return max(minimum, value)
+
+    current = get_face_detection_settings()
+    idle = _parse_timeout(admin_idle_timeout_seconds, current.admin_idle_timeout_seconds, 60)
+    max_age = _parse_timeout(admin_max_session_seconds, current.admin_max_session_seconds, idle)
+
+    update_face_detection_settings(
+        {
+            "enable_background_removal_ops": bool(enable_background_removal_ops),
+            "enable_center_on_face_ops": bool(enable_center_on_face_ops),
+            "enable_heavy_generation_ops": bool(enable_background_removal_ops and enable_center_on_face_ops),
+            "admin_idle_timeout_seconds": idle,
+            "admin_max_session_seconds": max_age,
+        }
     )
+    return RedirectResponse(url="/admin/settings?saved=features", status_code=303)

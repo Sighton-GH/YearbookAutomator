@@ -225,7 +225,8 @@ export default function App({ embedded = false }: AppProps) {
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
   const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
-  const [heavyGenerationOpsEnabled, setHeavyGenerationOpsEnabled] = useState(false);
+  const [backgroundRemovalOpsEnabled, setBackgroundRemovalOpsEnabled] = useState(false);
+  const [centerOnFaceOpsEnabled, setCenterOnFaceOpsEnabled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,10 +234,15 @@ export default function App({ embedded = false }: AppProps) {
       try {
         const flags = await getAdminFeatureFlags();
         if (!cancelled) {
-          setHeavyGenerationOpsEnabled(Boolean(flags.enable_heavy_generation_ops));
+          const legacy = Boolean(flags.enable_heavy_generation_ops);
+          setBackgroundRemovalOpsEnabled(Boolean(flags.enable_background_removal_ops ?? legacy));
+          setCenterOnFaceOpsEnabled(Boolean(flags.enable_center_on_face_ops ?? legacy));
         }
       } catch {
-        if (!cancelled) setHeavyGenerationOpsEnabled(false);
+        if (!cancelled) {
+          setBackgroundRemovalOpsEnabled(false);
+          setCenterOnFaceOpsEnabled(false);
+        }
       }
     })();
     return () => {
@@ -245,9 +251,9 @@ export default function App({ embedded = false }: AppProps) {
   }, []);
 
   useEffect(() => {
-    if (heavyGenerationOpsEnabled) return;
+    if (centerOnFaceOpsEnabled) return;
     if (centerBabyOnFace) setCenterBabyOnFace(false);
-  }, [heavyGenerationOpsEnabled, centerBabyOnFace]);
+  }, [centerOnFaceOpsEnabled, centerBabyOnFace]);
 
   useEffect(() => {
     if (!templateSize) {
@@ -2213,7 +2219,7 @@ export default function App({ embedded = false }: AppProps) {
 
       <div
         className={clsx("page", {
-          "page-wide": activeStep === 3 || activeStep === 4 || activeStep === 6,
+          "page-wide": activeStep === 3 || activeStep === 4 || activeStep === 6 || (activeStep === 2 && people.length > 0),
         })}
       >
 
@@ -2571,7 +2577,8 @@ export default function App({ embedded = false }: AppProps) {
               onBabyBackgroundColor={setBabyBackgroundColor}
               centerBabyOnFace={centerBabyOnFace}
               onCenterBabyOnFace={setCenterBabyOnFace}
-              heavyGenerationOpsEnabled={heavyGenerationOpsEnabled}
+              backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
+              centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               setLoading={setLoading}

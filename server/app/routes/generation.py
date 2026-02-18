@@ -87,7 +87,7 @@ def _save_generation_request(payload: GenerationRequest) -> None:
 @router.post("/generate")
 async def generate(payload: GenerationRequest, request: Request) -> dict[str, Any]:
     feature_settings = get_face_detection_settings()
-    if not feature_settings.enable_heavy_generation_ops:
+    if not feature_settings.enable_center_on_face_ops:
         payload.center_baby_on_face = False
 
     usage_payload: dict[str, object] | None = None

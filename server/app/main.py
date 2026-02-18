@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse
 
 from app.routes import templates, mapping, generation, fonts
 from app.routes import workspaces
@@ -19,6 +20,13 @@ from app.services.licensing import (
     get_device_id_from_headers,
     get_required_license_key_from_headers,
     validate_license,
+)
+from app.routes.licensing import (
+    _encode_admin_session,
+    admin_basic_auth_valid,
+    clear_admin_session_cookie,
+    get_admin_session_state,
+    set_admin_session_cookie,
 )
 
 
@@ -146,8 +154,7 @@ async def license_guard(request: Request, call_next):
     # Allow licensing endpoints, admin panel, and health/docs.
     if (
         path.startswith("/api/licensing")
-        or path.startswith("/admin/licenses")
-        or path.startswith("/admin/settings")
+        or path.startswith("/admin")
         or path in {"/health", "/docs", "/openapi.json", "/redoc"}
     ):
         return await call_next(request)
@@ -189,6 +196,46 @@ async def license_guard(request: Request, call_next):
             )
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def admin_session_guard(request: Request, call_next):
+    path = request.url.path
+    is_admin_path = path.startswith("/admin") or path == "/"
+    if not is_admin_path:
+        return await call_next(request)
+
+    if path in {"/admin/logout"}:
+        return await call_next(request)
+
+    is_valid, reason, refreshed_token = get_admin_session_state(request)
+    if not is_valid:
+        if admin_basic_auth_valid(request):
+            response = await call_next(request)
+            token = _encode_admin_session(iat=int(time.time()), lat=int(time.time()))
+            set_admin_session_cookie(response, token, secure=(request.url.scheme == "https"))
+            return response
+
+        status_msg = "Admin authentication required"
+        if reason == "idle":
+            status_msg = "Admin session expired due to inactivity"
+        elif reason == "max_age":
+            status_msg = "Admin session expired"
+        elif reason == "invalid":
+            status_msg = "Invalid admin session"
+
+        resp = HTMLResponse(
+            content=status_msg,
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="YMGA Admin", charset="UTF-8"'},
+        )
+        clear_admin_session_cookie(resp)
+        return resp
+
+    response = await call_next(request)
+    if refreshed_token:
+        set_admin_session_cookie(response, refreshed_token, secure=(request.url.scheme == "https"))
+    return response
 
 
 @app.exception_handler(InvalidWorkspaceId)
