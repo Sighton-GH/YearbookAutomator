@@ -23,6 +23,7 @@ import {
   generationDownloadAllUrl,
   generationDownloadSpreadsheetUrl,
   generationStatus,
+  generationListOutputs,
   touchWorkspace,
   deleteWorkspace,
   getWorkspaceState,
@@ -747,6 +748,11 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
       peoplePerSpread,
       outputFormat,
       outputSize,
+      generationOutputs: {
+        previewPath,
+        outputPath,
+        outputPaths,
+      },
     };
   };
 
@@ -1263,6 +1269,43 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
           if (saved.outputSize && typeof saved.outputSize.width === "number" && typeof saved.outputSize.height === "number") {
             setOutputSize({ width: saved.outputSize.width, height: saved.outputSize.height });
           }
+          const savedGenerationOutputs = saved.generationOutputs;
+          if (savedGenerationOutputs?.previewPath) {
+            setPreviewPath(savedGenerationOutputs.previewPath);
+            setPreviewNonce((n) => n + 1);
+          }
+          const restoredOutputPaths = Array.isArray(savedGenerationOutputs?.outputPaths)
+            ? savedGenerationOutputs.outputPaths.filter((v) => typeof v === "string" && v.trim())
+            : [];
+          if (restoredOutputPaths.length > 0) {
+            setOutputPaths(restoredOutputPaths);
+          }
+          if (savedGenerationOutputs?.outputPath || restoredOutputPaths.length > 0) {
+            setOutputPath(savedGenerationOutputs?.outputPath || restoredOutputPaths[0] || null);
+            setOutputNonce((n) => n + 1);
+          }
+        }
+
+        try {
+          const listed = await generationListOutputs(workspaceId);
+          if (canceled) return;
+
+          const listedPreview = (listed.preview || "").trim() || null;
+          const listedOutputs = Array.isArray(listed.outputs)
+            ? listed.outputs.filter((v) => typeof v === "string" && v.trim())
+            : [];
+
+          if (listedPreview) {
+            setPreviewPath(listedPreview);
+            setPreviewNonce((n) => n + 1);
+          }
+          if (listedOutputs.length > 0) {
+            setOutputPaths(listedOutputs);
+            setOutputPath(listedOutputs[0] || null);
+            setOutputNonce((n) => n + 1);
+          }
+        } catch {
+          // Non-blocking: snapshot/local state still allows continuing the workflow.
         }
       } catch {
         // If this fails, keep local state behavior unchanged.
@@ -1431,6 +1474,21 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         if (saved.outputSize && typeof saved.outputSize.width === "number" && typeof saved.outputSize.height === "number") {
           setOutputSize({ width: saved.outputSize.width, height: saved.outputSize.height });
         }
+        const savedGenerationOutputs = saved.generationOutputs;
+        if (savedGenerationOutputs?.previewPath) {
+          setPreviewPath(savedGenerationOutputs.previewPath);
+          setPreviewNonce((n) => n + 1);
+        }
+        const restoredOutputPaths = Array.isArray(savedGenerationOutputs?.outputPaths)
+          ? savedGenerationOutputs.outputPaths.filter((v) => typeof v === "string" && v.trim())
+          : [];
+        if (restoredOutputPaths.length > 0) {
+          setOutputPaths(restoredOutputPaths);
+        }
+        if (savedGenerationOutputs?.outputPath || restoredOutputPaths.length > 0) {
+          setOutputPath(savedGenerationOutputs?.outputPath || restoredOutputPaths[0] || null);
+          setOutputNonce((n) => n + 1);
+        }
 
         if (saved.workspaceId) {
           // Use server-stored template for preview after refresh.
@@ -1594,6 +1652,9 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     peoplePerSpread,
     outputFormat,
     outputSize,
+    previewPath,
+    outputPath,
+    outputPaths,
     sessionTtlMs,
     sessionIdentity.expiresAtMs,
     sessionIdentity.sessionId,
@@ -1689,6 +1750,9 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     peoplePerSpread,
     outputFormat,
     outputSize,
+    previewPath,
+    outputPath,
+    outputPaths,
     sessionTtlMs,
     sessionIdentity.expiresAtMs,
     sessionIdentity.sessionId,

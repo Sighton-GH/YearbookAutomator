@@ -75,6 +75,11 @@ export type PersistedSessionV1 = {
   peoplePerSpread: number;
   outputFormat?: "png" | "pdf" | "tiff";
   outputSize?: { width: number; height: number } | null;
+  generationOutputs?: {
+    previewPath?: string | null;
+    outputPath?: string | null;
+    outputPaths?: string[];
+  };
 };
 
 export const isPersistedSessionV1 = (x: unknown): x is PersistedSessionV1 => {

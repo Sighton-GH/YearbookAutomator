@@ -101,6 +101,12 @@ export type WorkspaceStateResponse = {
   session_updated_at_ms?: number | null;
 };
 
+export type GenerationOutputsResponse = {
+  workspace_id: string;
+  preview: string | null;
+  outputs: string[];
+};
+
 export async function getAdminFeatureFlags() {
   const { data } = await axios.get<AdminFeatureFlags>("/api/admin/settings/features");
   return data;
@@ -406,6 +412,13 @@ export async function generationStatus(jobId: string) {
     updated_at?: number;
     workspace_id?: string;
   }>("/api/generation/status", { params: { job_id: jobId } });
+  return data;
+}
+
+export async function generationListOutputs(workspaceId: string): Promise<GenerationOutputsResponse> {
+  const { data } = await axios.get<GenerationOutputsResponse>("/api/generation/outputs", {
+    params: { workspace_id: workspaceId },
+  });
   return data;
 }
 

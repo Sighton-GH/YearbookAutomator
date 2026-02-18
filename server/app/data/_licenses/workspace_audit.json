@@ -511,6 +511,22 @@
       "license_type": "commercial",
       "ts": 1771455798,
       "workspace_id": "33972f503b304159ad32c8baa6b80e45"
+    },
+    {
+      "detail": "",
+      "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
+      "event": "workspace_created",
+      "license_type": "commercial",
+      "ts": 1771456291,
+      "workspace_id": "6b3fdb7409e94a879f55cb21cf7c07e5"
+    },
+    {
+      "detail": "",
+      "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
+      "event": "workspace_legacy_bound",
+      "license_type": "commercial",
+      "ts": 1771456298,
+      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
     }
   ]
 }

@@ -53,6 +53,14 @@ def _list_output_files(root) -> list:
     return spread_files
 
 
+def _find_preview_file(root) -> str | None:
+    for ext in sorted(_OUTPUT_EXTS):
+        preview = root / f"preview{ext}"
+        if preview.exists():
+            return preview.name
+    return None
+
+
 def _safe_basename(name: str) -> str:
     base = (name or "").split("/")[-1].split("\\")[-1].strip()
     if not base:
@@ -167,6 +175,17 @@ async def download(workspace_id: str, filename: str = "output.png"):
     if not path.exists():
         return {"error": "file not found"}
     return FileResponse(path)
+
+
+@router.get("/outputs")
+async def outputs(workspace_id: str) -> dict[str, Any]:
+    root = workspace_dir(workspace_id)
+    spread_files = _list_output_files(root)
+    return {
+        "workspace_id": workspace_id,
+        "preview": _find_preview_file(root),
+        "outputs": [p.name for p in spread_files],
+    }
 
 
 @router.get("/download-all")
