@@ -143,13 +143,28 @@ export function ToolAppPage() {
     if (!resolvedWorkspaceId || resolvedLicenseType !== "commercial") return;
     try {
       setReleasingWorkspace(true);
+
+      // Flush the latest in-memory session edits to server before releasing lock.
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          window.dispatchEvent(
+            new CustomEvent("ymga:flush-workspace-state", {
+              detail: { resolve, reject },
+            }),
+          );
+        }),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 2000)),
+      ]);
+
       await releaseWorkspace(resolvedWorkspaceId, clientSessionId);
-      const resolved = await resolveWorkspace(clientSessionId);
-      setResolvedWorkspaceId(resolved.workspace_id || null);
-      setResolvedLicenseType(resolved.license_type || null);
-      setLockConflict(null);
+      setResolvedWorkspaceId(null);
+      setLockConflict({
+        message: "Workspace released for this session. Close this tab or return to the main site so another device can access it.",
+      });
     } catch {
-      // keep UI quiet; user can retry
+      setLockConflict({
+        message: "Could not release workspace right now. Please try again.",
+      });
     } finally {
       setReleasingWorkspace(false);
     }

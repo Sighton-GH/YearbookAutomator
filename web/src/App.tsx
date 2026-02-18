@@ -25,6 +25,8 @@ import {
   generationStatus,
   touchWorkspace,
   deleteWorkspace,
+  getWorkspaceState,
+  setWorkspaceState,
   startRemoveBackgroundPreviewJob,
   removeBackgroundPreviewStatus,
   fetchRemoveBackgroundPreviewResult,
@@ -351,6 +353,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [workspaceDefaultsHydrated, setWorkspaceDefaultsHydrated] = useState(false);
+  const lastServerSyncedSnapshotRef = useRef<string>("");
 
   const importLowResResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
   const importPortraitReviewResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
@@ -358,9 +362,46 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
 
+  const isServerProvidedDefaultBaby = (filename: string | null | undefined): boolean => {
+    const name = String(filename || "").toLowerCase();
+    return name.startsWith("default_baby_abc_blocks");
+  };
+
+  const isServerProvidedDefaultMugshot = (filename: string | null | undefined): boolean => {
+    const name = String(filename || "").toLowerCase();
+    return name.startsWith("default_eagle");
+  };
+
+  const workspaceAssetExists = async (
+    kind: "baby" | "mugshot",
+    filename: string | null | undefined,
+  ): Promise<boolean> => {
+    if (!workspaceId) return false;
+    const safeName = String(filename || "").trim();
+    if (!safeName) return false;
+    const url = `${assetUrl(workspaceId, kind, safeName)}&cache_bust=${Date.now()}`;
+    try {
+      let resp = await fetch(url, { method: "HEAD" });
+      if (resp.status === 405) {
+        resp = await fetch(url, { method: "GET", cache: "no-store" });
+      }
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  };
+
   const ensureDefaultBabyAbcBlocks = async (): Promise<string | null> => {
     if (!workspaceId) return null;
-    if (defaultBabyFilename) return defaultBabyFilename;
+
+    if (defaultBabyFilename) {
+      const exists = await workspaceAssetExists("baby", defaultBabyFilename);
+      if (exists) return defaultBabyFilename;
+      if (!isServerProvidedDefaultBaby(defaultBabyFilename)) {
+        return defaultBabyFilename;
+      }
+      setDefaultBabyFilename(null);
+    }
 
     if (!defaultBabyUploadInFlight.current) {
       defaultBabyUploadInFlight.current = (async () => {
@@ -384,7 +425,23 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
 
   const ensureDefaultMugshotEagle = async (): Promise<string | null> => {
     if (!workspaceId) return null;
-    if (defaultMugshotFilenames.length > 0) return defaultMugshotFilenames[0] ?? null;
+
+    if (defaultMugshotFilenames.length > 0) {
+      const next: string[] = [];
+      for (const filename of defaultMugshotFilenames) {
+        if (!isServerProvidedDefaultMugshot(filename)) {
+          next.push(filename);
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const exists = await workspaceAssetExists("mugshot", filename);
+        if (exists) next.push(filename);
+      }
+      if (next.length !== defaultMugshotFilenames.length) {
+        setDefaultMugshotFilenames(next);
+      }
+      if (next.length > 0) return next[0] ?? null;
+    }
 
     if (!defaultMugshotUploadInFlight.current) {
       defaultMugshotUploadInFlight.current = (async () => {
@@ -436,6 +493,32 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
       defaultMugshotUploadInFlight.current = null;
     }
   };
+
+  useEffect(() => {
+    if (!workspaceId || !workspaceDefaultsHydrated) return;
+
+    let canceled = false;
+    (async () => {
+      try {
+        if (defaultBabyFilename && isServerProvidedDefaultBaby(defaultBabyFilename)) {
+          const ok = await workspaceAssetExists("baby", defaultBabyFilename);
+          if (!ok && !canceled) {
+            await ensureDefaultBabyAbcBlocks();
+          }
+        }
+
+        if (defaultMugshotFilenames.some((f) => isServerProvidedDefaultMugshot(f))) {
+          await ensureDefaultMugshotEagle();
+        }
+      } catch {
+        // Non-blocking self-heal path.
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [workspaceId, workspaceDefaultsHydrated, defaultBabyFilename, defaultMugshotFilenames]);
 
   const confirmResetAll = () => {
     setShowResetConfirm(true);
@@ -1083,6 +1166,116 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     };
   }, [workspaceId, workspaceHeartbeatSeconds, clientSessionId, sessionIdentity.expiresAtMs, sessionIdentity.sessionId, sessionIdentity.startedAtMs]);
 
+  // Hydrate workspace-scoped session/default state so another device opening the
+  // same commercial workspace can continue with identical data.
+  useEffect(() => {
+    setWorkspaceDefaultsHydrated(false);
+    if (!workspaceId) return;
+
+    let canceled = false;
+    (async () => {
+      try {
+        const state = await getWorkspaceState(workspaceId);
+        if (canceled) return;
+
+        const nextBaby = (state.default_baby_filename || null);
+        const nextMugshots = Array.isArray(state.default_mugshot_filenames)
+          ? state.default_mugshot_filenames.filter((v) => typeof v === "string" && v.trim())
+          : [];
+        const snap = state.session_snapshot;
+
+        if (nextBaby) {
+          setDefaultBabyFilename((prev) => prev || nextBaby);
+        }
+        if (nextMugshots.length > 0) {
+          setDefaultMugshotFilenames((prev) => {
+            if (prev.length > 0) return prev;
+            return nextMugshots;
+          });
+        }
+
+        if (snap && isPersistedSessionV1(snap)) {
+          const saved = snap;
+          setActiveStep(Math.max(0, Math.min(7, saved.activeStep ?? 0)));
+          setSkipQuotes(Boolean(saved.skipQuotes));
+          setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
+          setParseMugshotColor(saved.templateParse?.mugshotColor ?? "");
+          setParseBabyColor(saved.templateParse?.babyColor ?? "");
+          setParseNameColor(saved.templateParse?.nameColor ?? "");
+          setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
+          setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
+          setSlots(saved.slots ?? []);
+          setParsedSlots(saved.parsedSlots ?? []);
+          setTemplateSize(saved.templateSize ?? null);
+          setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
+          setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
+          setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
+          setPeople(saved.people ?? []);
+          setSlotAssignments(saved.slotAssignments ?? {});
+          setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
+          setForceAlphabetical(Boolean(saved.forceAlphabetical));
+          const savedDefaultQuotes =
+            Array.isArray(saved.defaultQuotes) && saved.defaultQuotes.length > 0
+              ? saved.defaultQuotes
+              : (saved.defaultQuote ? [saved.defaultQuote] : ["404 quote not found"]);
+          setDefaultQuotes(savedDefaultQuotes);
+          setDefaultQuotesRandomize(Boolean(saved.defaultQuotesRandomize));
+          setDefaultQuotesSeed(typeof saved.defaultQuotesSeed === "number" ? saved.defaultQuotesSeed : 0);
+          setDefaultBabyFilename(saved.defaultBabyFilename ?? (nextBaby || null));
+          setBabyIngest({
+            advancedNameMatch: Boolean(saved.babyIngest?.advancedNameMatch ?? true),
+            partialNameMatch: Boolean(saved.babyIngest?.partialNameMatch ?? true),
+            convertPdfs: Boolean(saved.babyIngest?.convertPdfs ?? true),
+            removeBackground: Boolean(saved.babyIngest?.removeBackground ?? false),
+            backgroundMode: (saved.babyIngest?.backgroundMode as BackgroundMode) ?? "simple",
+            allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
+          });
+          setBabyEditHistory((saved.babyEditHistory ?? []) as any);
+          setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+          setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
+          const savedDefaultMugshots =
+            Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
+              ? saved.defaultMugshotFilenames
+              : (saved.defaultMugshotFilename ? [saved.defaultMugshotFilename] : nextMugshots);
+          setDefaultMugshotFilenames(savedDefaultMugshots);
+          setDefaultMugshotRandomize(Boolean(saved.defaultMugshotRandomize));
+          setDefaultMugshotSeed(typeof saved.defaultMugshotSeed === "number" ? saved.defaultMugshotSeed : 0);
+          setLockedPeople(
+            (saved.lockedPeople ?? []).reduce((acc, n) => {
+              if (Number.isFinite(n)) acc[Number(n)] = true;
+              return acc;
+            }, {} as Record<number, true>)
+          );
+          setNameFontFamily(saved.nameFontFamily ?? "Inter, system-ui, sans-serif");
+          setNameFontWeight((saved.nameFontWeight as FontWeight) ?? "normal");
+          setNameFontSize(typeof saved.nameFontSize === "number" ? saved.nameFontSize : 40);
+          setNameAllCaps(Boolean(saved.nameAllCaps));
+          setNameAlign((saved.nameAlign as Align) ?? "left");
+          setQuoteFontFamily(saved.quoteFontFamily ?? "Inter, system-ui, sans-serif");
+          setQuoteFontWeight((saved.quoteFontWeight as FontWeight) ?? "normal");
+          setQuoteFontSize(typeof saved.quoteFontSize === "number" ? saved.quoteFontSize : 40);
+          setQuoteAllCaps(Boolean(saved.quoteAllCaps));
+          setQuoteAlign((saved.quoteAlign as Align) ?? "left");
+          setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
+          if (saved.outputFormat === "png" || saved.outputFormat === "pdf" || saved.outputFormat === "tiff") {
+            setOutputFormat(saved.outputFormat);
+          }
+          if (saved.outputSize && typeof saved.outputSize.width === "number" && typeof saved.outputSize.height === "number") {
+            setOutputSize({ width: saved.outputSize.width, height: saved.outputSize.height });
+          }
+        }
+      } catch {
+        // If this fails, keep local state behavior unchanged.
+      } finally {
+        if (!canceled) setWorkspaceDefaultsHydrated(true);
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [workspaceId]);
+
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
     if (!showConfigModal) return;
@@ -1318,6 +1511,42 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     if (!didRestoreSession) return;
     const payload = buildSessionPayload();
     trySaveSession(payload, sessionTtlMs);
+
+    if (!workspaceId || !workspaceDefaultsHydrated) return;
+
+    const syncPayload = JSON.stringify({
+      workspaceId,
+      defaultBabyFilename,
+      defaultMugshotFilenames,
+      session: payload,
+    });
+    if (syncPayload === lastServerSyncedSnapshotRef.current) return;
+
+    let canceled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await setWorkspaceState({
+            workspaceId,
+            defaultBabyFilename,
+            defaultMugshotFilenames,
+            sessionSnapshot: payload as unknown as Record<string, unknown>,
+            sessionUpdatedAtMs: Date.now(),
+          });
+          if (!canceled) {
+            lastServerSyncedSnapshotRef.current = syncPayload;
+          }
+        } catch {
+          if (canceled) return;
+          // Non-blocking; local session still works.
+        }
+      })();
+    }, 300);
+
+    return () => {
+      canceled = true;
+      window.clearTimeout(timer);
+    };
   }, [
     didRestoreSession,
     activeStep,
@@ -1349,6 +1578,101 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotFilenames,
+    defaultMugshotRandomize,
+    defaultMugshotSeed,
+    lockedPeople,
+    nameFontFamily,
+    nameFontWeight,
+    nameFontSize,
+    nameAllCaps,
+    nameAlign,
+    quoteFontFamily,
+    quoteFontWeight,
+    quoteFontSize,
+    quoteAllCaps,
+    quoteAlign,
+    peoplePerSpread,
+    outputFormat,
+    outputSize,
+    sessionTtlMs,
+    sessionIdentity.expiresAtMs,
+    sessionIdentity.sessionId,
+    sessionIdentity.startedAtMs,
+    workspaceDefaultsHydrated,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onFlush = (event: Event) => {
+      const detail = (event as CustomEvent<{ resolve?: () => void; reject?: (err?: unknown) => void }>).detail;
+
+      if (!didRestoreSession || !workspaceId || !workspaceDefaultsHydrated) {
+        detail?.resolve?.();
+        return;
+      }
+
+      const payload = buildSessionPayload();
+      const syncPayload = JSON.stringify({
+        workspaceId,
+        defaultBabyFilename,
+        defaultMugshotFilenames,
+        session: payload,
+      });
+
+      void (async () => {
+        try {
+          await setWorkspaceState({
+            workspaceId,
+            defaultBabyFilename,
+            defaultMugshotFilenames,
+            sessionSnapshot: payload as unknown as Record<string, unknown>,
+            sessionUpdatedAtMs: Date.now(),
+          });
+          lastServerSyncedSnapshotRef.current = syncPayload;
+          detail?.resolve?.();
+        } catch (err) {
+          detail?.reject?.(err);
+        }
+      })();
+    };
+
+    window.addEventListener("ymga:flush-workspace-state", onFlush as EventListener);
+    return () => {
+      window.removeEventListener("ymga:flush-workspace-state", onFlush as EventListener);
+    };
+  }, [
+    didRestoreSession,
+    workspaceId,
+    workspaceDefaultsHydrated,
+    defaultBabyFilename,
+    defaultMugshotFilenames,
+    activeStep,
+    templateId,
+    skipQuotes,
+    skipBabyPhotos,
+    parseMugshotColor,
+    parseBabyColor,
+    parseNameColor,
+    parseQuoteColor,
+    parseMinArea,
+    slots,
+    parsedSlots,
+    templateSize,
+    namingPattern,
+    advancedNameMatch,
+    allowInsecureUploads,
+    people,
+    slotAssignments,
+    placementMode,
+    forceAlphabetical,
+    defaultQuotes,
+    defaultQuotesRandomize,
+    defaultQuotesSeed,
+    babyIngest,
+    babyEditHistory,
+    babyBackgroundColor,
+    centerBabyOnFace,
     defaultMugshotRandomize,
     defaultMugshotSeed,
     lockedPeople,

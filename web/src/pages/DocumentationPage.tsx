@@ -6,13 +6,14 @@ const ASSETS = {
   templateAnnotated: withBase("assets/Annotated Sample.webp"),
 };
 
-type Section = "getting-started" | "template-setup" | "data-preparation" | "workflow" | "styling" | "save-load-config" | "background-removal" | "troubleshooting" | "tips";
+type Section = "getting-started" | "licensing-sessions" | "template-setup" | "data-preparation" | "workflow" | "styling" | "save-load-config" | "background-removal" | "troubleshooting" | "tips";
 
 export function DocumentationPage() {
   const [activeSection, setActiveSection] = useState<Section>("getting-started");
 
   const sections: { id: Section; title: string; category: string }[] = [
     { id: "getting-started", title: "Getting Started", category: "Fundamentals" },
+    { id: "licensing-sessions", title: "Licensing & Sessions", category: "Fundamentals" },
     { id: "template-setup", title: "Template Setup", category: "Fundamentals" },
     { id: "data-preparation", title: "Data Preparation", category: "Preparation" },
     { id: "workflow", title: "Step-by-Step Workflow", category: "Workflow" },
@@ -27,6 +28,8 @@ export function DocumentationPage() {
     switch (activeSection) {
       case "getting-started":
         return <GettingStartedSection />;
+      case "licensing-sessions":
+        return <LicensingSessionsSection />;
       case "template-setup":
         return <TemplateSetupSection />;
       case "data-preparation":
@@ -81,6 +84,121 @@ export function DocumentationPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function LicensingSessionsSection() {
+  return (
+    <div className="panel">
+      <div className="ss-kicker">Fundamentals</div>
+      <h2>Understanding Licensing & Workspaces</h2>
+      <p className="muted">
+        When you use the Yearbook Grad Mugshot Automator, the tool creates a private <strong>workspace</strong> for your project. A workspace is an isolated folder that stores your templates, student data, images, and styling choices. Understanding how workspaces work helps you get the most out of the tool, especially when using multiple devices or sharing a license.
+      </p>
+
+      <h3>What is a Workspace?</h3>
+      <p className="muted">
+        Think of a workspace like a project folder on your computer. It contains:
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li>Your template images (clean and annotated)</li>
+        <li>Student roster and portrait files</li>
+        <li>Baby photos and quotes</li>
+        <li>Your styling choices (fonts, sizes, colours)</li>
+        <li>Generated output files (PNGs)</li>
+      </ul>
+      <p className="muted" style={{ marginTop: 12 }}>
+        By default, workspaces stay active for up to 8 hours of activity. If you step away and come back later, your workspace is still there with all your work preserved. If a workspace expires from inactivity, the data is preserved and can be recovered, but you'll create a fresh new workspace on your next visit.
+      </p>
+
+      <h3>Personal License: Device-Locked Workspaces</h3>
+      <p className="muted">
+        With a <strong>free personal license</strong>, each device you use gets its own completely separate workspace. The license is locked to the device, meaning:
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>Device-specific:</strong> Your laptop has its own workspace, your phone has a completely different one, your desktop has another—they are entirely independent</li>
+        <li><strong>No shared access:</strong> You cannot access the same workspace on different devices. Each device maintains its own templates, settings, and project data</li>
+        <li><strong>Perfect for solo users:</strong> Work on different projects from different devices without complications or interference</li>
+        <li><strong>No waiting:</strong> You can switch devices instantly without worrying about locks or conflicts</li>
+      </ul>
+      <p className="muted" style={{ marginTop: 12 }}>
+        Example: You design templates on your laptop (stored in laptop workspace). When you switch to your desktop, you start fresh with a new workspace. If you want to reuse the templates, you'll need to re-upload them. Each device is completely independent.
+      </p>
+
+      <h3>Commercial License: Shared Collaborative Workspace</h3>
+      <p className="muted">
+        With a <strong>commercial license</strong>, your team gets one shared workspace that serves as the single source of truth for your entire yearbook project. Multiple team members can contribute to the same workspace, making it perfect for collaborative environments.
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>Centralized project:</strong> Everyone works from the same templates, settings, and student data. No duplication, no version confusion</li>
+        <li><strong>Safe collaboration:</strong> Only one person works in the workspace at a time to prevent conflicts. Safe handoffs mean Person A can finish, Person B takes over seamlessly</li>
+        <li><strong>Shared templates & styling:</strong> Once your yearbook design and styling are perfected, every team member uses the exact same setup</li>
+        <li><strong>Organized workspace:</strong> All work stays in one place; everyone accessing the license sees the same templates and settings</li>
+        <li><strong>Team efficiency:</strong> Perfect for workstations where multiple staff members take shifts or collaborate on yearbook generation</li>
+      </ul>
+
+      <h3>Multi-Device Scenarios</h3>
+
+      <h4>Scenario 1: Personal License, Multiple Devices</h4>
+      <p className="muted">
+        You have a personal (free) license and use it on your laptop, desktop, and tablet.
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>Laptop workspace:</strong> Design templates and finalize styling (stored on laptop)</li>
+        <li><strong>Desktop workspace:</strong> Completely separate—start fresh or re-upload templates (stored on desktop)</li>
+        <li><strong>Tablet workspace:</strong> Another independent workspace for mobile work (stored on tablet)</li>
+      </ul>
+      <p className="muted" style={{ marginTop: 12 }}>
+        Each device maintains its own completely separate workspace. To use the same templates across devices, you'd need to save/load your config file and upload it to each device. Perfect for flexibility—no waiting or conflicts, but not shared between devices.
+      </p>
+
+      <h4>Scenario 2: Commercial License, Shared Across Team</h4>
+      <p className="muted">
+        Your school has one commercial license assigned to the yearbook lab. Multiple staff members collaborate and take shifts on the same yearbook project.
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>9 AM:</strong> Staff member A opens the lab workstation, accesses the shared workspace, generates spreads for students 1-100</li>
+        <li><strong>12 PM:</strong> Staff member A finishes and closes the tool, releasing the workspace</li>
+        <li><strong>1 PM:</strong> Staff member B opens the tool on the same lab workstation and accesses the exact same workspace with all templates, styling, and student data</li>
+        <li><strong>Result:</strong> Both team members contributed to one cohesive yearbook project without duplication or rework</li>
+      </ul>
+      <p className="muted" style={{ marginTop: 12 }}>
+        The workspace contains all templates and styling set up once during initial configuration. Every team member who accesses the license uses the same design, ensuring consistency across the entire yearbook.
+      </p>
+
+      <h4>Scenario 3: Commercial License, Multiple Workstations</h4>
+      <p className="muted">
+        Your school has one commercial license but wants to use it from different computers (e.g., the lab and the library).
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>Lab workstation:</strong> Opens the tool with the commercial license. Workspace locks to this computer.</li>
+        <li><strong>Library computer:</strong> Someone tries to open the tool with the same license. They see "workspace locked" (because lab is actively using it)</li>
+        <li><strong>Resolution:</strong> They wait ~2 minutes for the lab's lock to expire, then try again. Or the lab user closes their browser/finishes faster to release the lock.</li>
+      </ul>
+      <p className="muted" style={{ marginTop: 12 }}>
+        This design prevents accidental data loss from multiple people editing the same workspace simultaneously.
+      </p>
+
+      <h3>Session Duration & Expiry</h3>
+      <p className="muted">
+        Sessions stay active while you're using the tool. If you're idle for more than 8 hours, the session expires. Here's what happens:
+      </p>
+      <ul className="muted" style={{ marginTop: 6 }}>
+        <li><strong>Workspace is preserved:</strong> All your templates, data, and settings remain on the server</li>
+        <li><strong>Next time you visit:</strong> You can create a new workspace and all previous work is accessible if needed</li>
+        <li><strong>No data loss:</strong> Nothing is deleted; it's just a way to keep things organized</li>
+        <li><strong>Personal licenses:</strong> Get a fresh workspace per device automatically</li>
+        <li><strong>Commercial licenses:</strong> Maintain the same exclusive workspace, just with a refreshed lock timer</li>
+      </ul>
+
+      <h3>Workspace Tips & Best Practices</h3>
+      <ul className="muted" style={{ marginTop: 12 }}>
+        <li><strong>Save your config:</strong> After perfecting your templates and styling, save the workspace config to reuse across years or share with team members</li>
+        <li><strong>Close gracefully:</strong> When done, close the browser tab or use the end-session button for cleaner workspace cleanup</li>
+        <li><strong>Plan for lock timeouts:</strong> With commercial licenses, locks expire after ~2 minutes of inactivity. If switching devices, wait a moment before trying the new one</li>
+        <li><strong>Monitor device usage:</strong> If your commercial license seems stuck, ensure the other device isn't still holding the lock in a background tab</li>
+      </ul>
+    </div>
   );
 }
 

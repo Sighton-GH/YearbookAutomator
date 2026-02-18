@@ -71,8 +71,29 @@ def _write_workspace_meta(workspace_id: str, meta: dict) -> None:
     root = workspace_dir(workspace_id)
     path = root / "meta.json"
     tmp = root / "meta.json.tmp"
-    tmp.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
+
+
+def write_workspace_meta(workspace_id: str, meta: dict) -> None:
+    """Persist complete workspace metadata payload."""
+    _write_workspace_meta(workspace_id, meta)
+
+
+def merge_workspace_meta(workspace_id: str, updates: dict) -> dict:
+    """Merge keys into workspace metadata and persist.
+
+    Keys with value None are removed from metadata.
+    Returns the updated metadata payload.
+    """
+    meta = read_workspace_meta(workspace_id)
+    for key, value in (updates or {}).items():
+        if value is None:
+            meta.pop(key, None)
+        else:
+            meta[key] = value
+    _write_workspace_meta(workspace_id, meta)
+    return meta
 
 
 def touch_workspace(

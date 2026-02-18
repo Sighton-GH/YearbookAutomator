@@ -93,6 +93,14 @@ export type WorkspaceResolveResponse = {
   state: "ready" | "expired_recreated";
 };
 
+export type WorkspaceStateResponse = {
+  workspace_id: string;
+  default_baby_filename: string | null;
+  default_mugshot_filenames: string[];
+  session_snapshot?: Record<string, unknown> | null;
+  session_updated_at_ms?: number | null;
+};
+
 export async function getAdminFeatureFlags() {
   const { data } = await axios.get<AdminFeatureFlags>("/api/admin/settings/features");
   return data;
@@ -517,6 +525,30 @@ export async function releaseWorkspace(workspaceId: string, sessionId?: string):
     workspace_id: workspaceId,
     session_id: sessionId || null,
   });
+}
+
+export async function getWorkspaceState(workspaceId: string): Promise<WorkspaceStateResponse> {
+  const { data } = await axios.get<WorkspaceStateResponse>("/api/workspaces/state", {
+    params: { workspace_id: workspaceId },
+  });
+  return data;
+}
+
+export async function setWorkspaceState(params: {
+  workspaceId: string;
+  defaultBabyFilename: string | null;
+  defaultMugshotFilenames: string[];
+  sessionSnapshot?: Record<string, unknown> | null;
+  sessionUpdatedAtMs?: number | null;
+}): Promise<WorkspaceStateResponse> {
+  const { data } = await axios.post<WorkspaceStateResponse>("/api/workspaces/state", {
+    workspace_id: params.workspaceId,
+    default_baby_filename: params.defaultBabyFilename || null,
+    default_mugshot_filenames: params.defaultMugshotFilenames,
+    session_snapshot: params.sessionSnapshot || null,
+    session_updated_at_ms: params.sessionUpdatedAtMs || null,
+  });
+  return data;
 }
 
 export async function deleteWorkspace(workspaceId: string): Promise<boolean> {
