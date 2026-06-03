@@ -1,35 +1,4 @@
 {
-  "bindings": [
-    {
-      "created_at": 1771456291,
-      "expires_at": 1771485097,
-      "last_seen": 1771456297,
-      "license_type": "commercial",
-      "lock": {
-        "acquired_at": 1771456291,
-        "device_id": "d74ca9b625c211ca5593d6c1fea7ece4",
-        "expires_at": 1771456417,
-        "last_heartbeat_at": 1771456297,
-        "session_id": "f8c61f29cfa98e425bd518196e315cfc"
-      },
-      "owner_key": "comm:YMGA1-ZRBKU-HWVAI-3X5L4-URGFJ-E25HV-6OGDZ-7N443-HRAZH-BPCAB-R5VL3-3A",
-      "workspace_id": "6b3fdb7409e94a879f55cb21cf7c07e5"
-    },
-    {
-      "created_at": 1771456298,
-      "expires_at": 1771485098,
-      "last_seen": 1771456298,
-      "license_type": "commercial",
-      "lock": {
-        "acquired_at": 1771456298,
-        "device_id": "687669ba-c337-41ff-aa6f-0be04ba8399a",
-        "expires_at": 1771456418,
-        "last_heartbeat_at": 1771456298,
-        "session_id": "bb8e5232-a8e7-4e3a-b270-88c1a75923ac"
-      },
-      "owner_key": "comm:YMGA1-ZRBKU-HWVAI-3X5L4-URGFJ-E25HV-6OGDZ-7N443-HRAZH-BPCAB-R5VL3-3A",
-      "workspace_id": "33972f503b304159ad32c8baa6b80e45"
-    }
-  ],
+  "bindings": [],
   "version": 1
 }
