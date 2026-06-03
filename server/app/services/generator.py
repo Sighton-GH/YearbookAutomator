@@ -174,13 +174,17 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
         if loaded is not None:
             return loaded
 
-    # Robust fallbacks: common Windows fonts, then Pillow-bundled DejaVu.
+    # Robust fallbacks: common Linux/cross-platform fonts first, then Windows fonts.
     for fallback in [
+        "DejaVuSans.ttf",
+        "LiberationSans-Regular.ttf",
+        "DejaVuSerif.ttf",
+        "LiberationSerif-Regular.ttf",
+        "DejaVuSansMono.ttf",
         "segoeui.ttf",
         "arial.ttf",
         "calibri.ttf",
         "times.ttf",
-        "DejaVuSans.ttf",
     ]:
         loaded = _try_truetype(fallback, size=size)
         if loaded is not None:

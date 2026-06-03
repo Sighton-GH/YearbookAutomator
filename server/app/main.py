@@ -4,6 +4,7 @@ import time
 import os
 from threading import Event, Thread
 
+import cv2
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
@@ -72,6 +73,9 @@ def _license_hint(reason: str | None) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Let OpenCV use all available CPU cores for image operations.
+    cv2.setNumThreads(0)
+
     # Local/dev convenience: wipe uploaded data on server start.
     # Set YMGA_CLEAR_WORKSPACES_ON_STARTUP=false to preserve workspaces.
     # Note: internal underscore-prefixed folders under `server/app/data/` (e.g. `_licenses`)

@@ -23,6 +23,7 @@ It is built with FastAPI (Python backend) and React/Vite (frontend), and is desi
 
 **Important:** Use Python 3.12 (not 3.13+) to avoid dependency compatibility issues.
 
+#### Windows
 ```sh
 cd server
 py -3.12 -m venv .venv
@@ -35,6 +36,35 @@ py -3.12 -m venv .venv
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+#### Linux
+```sh
+cd server
+python3.12 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**One-line start (after venv is set up):**
+```sh
+cd server && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Or use the combined startup script (starts both frontend and backend):**
+```sh
+bash start-dev.sh
+```
+
+**Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv/bin/python` explicitly to ensure uvicorn subprocesses use the correct Python version.
+
+**GPU acceleration on Linux (NVIDIA):**
+The Linux requirements automatically install `onnxruntime-gpu`. For CUDA-accelerated background removal and face detection, ensure you have the matching CUDA toolkit and cuDNN runtime installed. Verify GPU is detected at runtime:
+```sh
+python -c "import onnxruntime; print(onnxruntime.get_available_providers())"
+# Should include: CUDAExecutionProvider
+```
+To force CUDA at runtime: `YMGA_REMBG_PROVIDER=CUDAExecutionProvider`
 
 **Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
@@ -52,9 +82,14 @@ npm install
 npm run dev
 ```
 
-**One-line start (after npm install):**
+**One-line start — Windows (after npm install):**
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web"; npm run dev
+```
+
+**One-line start — Linux (after npm install):**
+```sh
+cd web && npm run dev
 ```
 
 The frontend runs at http://localhost:5173 (also accessible via Tailscale at `http://<your-tailscale-ip>:5173`) and proxies `/api` to the backend.

@@ -9,8 +9,10 @@ from fontTools.ttLib import TTFont
 from app.services.storage import workspace_dir
 
 SYSTEM_FONTS_DIRS = [
-    Path("C:/Windows/Fonts"),
     Path("/usr/share/fonts"),
+    Path("/usr/local/share/fonts"),
+    Path.home() / ".local/share/fonts",
+    Path("C:/Windows/Fonts"),
     Path("/System/Library/Fonts"),
     Path("/Library/Fonts"),
 ]

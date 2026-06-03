@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -548,28 +549,33 @@ def detect_face_box_for_editor_with_meta(img_rgb: Image.Image) -> Optional[tuple
         return box, detector, 0
 
     candidates: list[tuple[FaceBox, str, int]] = []
-    for rotation_cw in (90, 270, 180):
+
+    def _try_rotation(rotation_cw: int) -> tuple[FaceBox, str, int] | None:
         rotated = _rotate_for_detection(img_rgb, rotation_cw)
         best_rot = _detect_editor_box_single_orientation_with_meta(rotated, settings)
         if best_rot is None:
-            continue
-
+            return None
         rot_box, detector = best_rot
         mapped = _map_box_to_original(rot_box, rotation_cw, image_w, image_h)
         rotation_penalty = 0.02
-        candidates.append(
-            (
-                FaceBox(
-                    x=mapped.x,
-                    y=mapped.y,
-                    w=mapped.w,
-                    h=mapped.h,
-                    score=max(0.0, float(mapped.score) - rotation_penalty),
-                ),
-                detector,
-                rotation_cw,
-            )
+        return (
+            FaceBox(
+                x=mapped.x,
+                y=mapped.y,
+                w=mapped.w,
+                h=mapped.h,
+                score=max(0.0, float(mapped.score) - rotation_penalty),
+            ),
+            detector,
+            rotation_cw,
         )
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {pool.submit(_try_rotation, r): r for r in (90, 270, 180)}
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                candidates.append(result)
 
     if not candidates:
         return None

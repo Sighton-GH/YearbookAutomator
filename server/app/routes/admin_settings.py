@@ -155,7 +155,7 @@ def admin_settings(request: Request):
       <div class=\"row\">
         <div>
           <label>RetinaFace ONNX path</label>
-          <input name=\"retinaface_model_path\" value=\"{html.escape(s.retinaface_model_path)}\" placeholder=\"e.g. D:\\models\\retinaface.onnx\" />
+          <input name="retinaface_model_path" value="{html.escape(s.retinaface_model_path)}" placeholder="e.g. /path/to/models/retinaface.onnx" />
         </div>
         <div>
           <label>RetinaFace input size</label>
@@ -170,7 +170,7 @@ def admin_settings(request: Request):
       <div class=\"row\">
         <div>
           <label>YuNet ONNX path</label>
-          <input name=\"yunet_model_path\" value=\"{html.escape(s.yunet_model_path)}\" placeholder=\"e.g. D:\\models\\yunet.onnx\" />
+          <input name="yunet_model_path" value="{html.escape(s.yunet_model_path)}" placeholder="e.g. /path/to/models/yunet.onnx" />
         </div>
         <div>
           <label>YuNet input size</label>

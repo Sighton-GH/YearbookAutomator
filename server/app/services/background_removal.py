@@ -121,8 +121,9 @@ def _get_rembg_pool_max(providers: list[str] | None) -> int:
         except ValueError:
             pass
 
-    # Default: single session to avoid resource contention; opt-in for parallelism.
-    return 1
+    # Default: auto-scale on Linux (up to 3 sessions); single session on Windows to
+    # avoid DirectML resource contention. Override with YMGA_REMBG_POOL_SIZE.
+    return min(os.cpu_count() or 1, 3)
 
 
 def _acquire_rembg_session() -> object:
