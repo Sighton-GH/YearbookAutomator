@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -570,12 +570,15 @@ def detect_face_box_for_editor_with_meta(img_rgb: Image.Image) -> Optional[tuple
             rotation_cw,
         )
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {pool.submit(_try_rotation, r): r for r in (90, 270, 180)}
-        for future in as_completed(futures):
-            result = future.result()
-            if result is not None:
-                candidates.append(result)
+    # Run rotations concurrently, but collect results in a deterministic order
+    # (90, 270, 180) so ties between equally-scored candidates resolve the same
+    # way every run — matching the original sequential behaviour.
+    rotations = (90, 270, 180)
+    with ThreadPoolExecutor(max_workers=len(rotations)) as pool:
+        results = list(pool.map(_try_rotation, rotations))
+    for result in results:
+        if result is not None:
+            candidates.append(result)
 
     if not candidates:
         return None
