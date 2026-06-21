@@ -8,13 +8,13 @@ export YMGA_LICENSE_ADMIN_PASSWORD=Sighton!2026
 
 # Start frontend in the background
 echo "Starting frontend..."
-cd "$ROOT/web"
+cd "$ROOT/tool/web"
 npm run dev &
 FRONTEND_PID=$!
 
 # Start backend (prefer venv Python to avoid missing uvicorn)
 echo "Starting backend..."
-cd "$ROOT/server"
+cd "$ROOT/tool/server"
 if [ -f ".venv/bin/python" ]; then
     PYTHON=".venv/bin/python"
 else

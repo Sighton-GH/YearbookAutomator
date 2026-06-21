@@ -1,4 +1,23 @@
 {
-  "bindings": [],
+  "bindings": [
+    {
+      "created_at": 1782068395,
+      "expires_at": 1782099621,
+      "last_seen": 1782070821,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-FS3N4-UV7ZH-NR7QG-2FYN5-YBYDT-GBPIC-VGIJI-GE4NG-T74MI-GVQKV-4Q:6bbed2fd-a383-4f71-ba92-97308fe95592",
+      "workspace_id": "44254b69d1024c01b0f9722018bf821e"
+    },
+    {
+      "created_at": 1782070219,
+      "expires_at": 1782099021,
+      "last_seen": 1782070221,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-TYE5Z-UFKAV-SKPHM-CNUHB-AK6AB-GFU46-PYQBC-IZKAI-WKDAL-SOMGZ-JA:eee28163-ba43-4e82-9072-e7141f19c82e",
+      "workspace_id": "32429aa825ac44bab798c4b332283cc9"
+    }
+  ],
   "version": 1
 }

@@ -1,0 +1,189 @@
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page.page-wide {
+  max-width: 100%;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tool-topbar {
+  margin-bottom: 8px;
+}
+
+.topbar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.topbar-actions {
+  align-self: center;
+}
+
+.topbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tool-steps-bar {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-steps-bar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-quiet);
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.step.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.step.active { background: var(--accent); color: #fff; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: #fff;
+  font-size: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 16px;
+}
+
+.layout-single {
+  grid-template-columns: 1fr;
+}
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.preview .canvas {
+  height: 420px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: linear-gradient(135deg, #f7fdf9 0%, #dff3e3 100%);
+}
+
+.full-preview .canvas {
+  height: 520px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 14px;
+}
+
+.preview-left, .preview-right {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.grid.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.section-header .stack {
+  flex: 1;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .steps { justify-content: flex-start; }
+
+  .preview-grid { grid-template-columns: 1fr; }
+  .full-preview .canvas { height: 420px; }
+
+  .section-header {
+    flex-direction: column;
+  }
+
+  .section-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "events": [
+    {
+      "detail": "",
+      "device_id": "6bbed2fd-a383-4f71-ba92-97308fe95592",
+      "event": "workspace_created",
+      "license_type": "personal",
+      "ts": 1782047584,
+      "workspace_id": "b34239a11ffa46d6b96af131b132608d"
+    }
+  ]
+}

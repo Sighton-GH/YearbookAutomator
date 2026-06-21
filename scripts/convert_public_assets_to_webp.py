@@ -40,12 +40,16 @@ def convert_to_webp(src: Path, *, quality: int = 82, method: int = 6) -> Convert
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
-    assets_dir = repo_root / "web" / "public" / "assets"
+    assets_dirs = [
+        d
+        for d in (repo_root / "tool" / "web" / "public" / "assets", repo_root / "website" / "public" / "assets")
+        if d.is_dir()
+    ]
 
-    if not assets_dir.is_dir():
-        raise SystemExit(f"Assets folder not found: {assets_dir}")
+    if not assets_dirs:
+        raise SystemExit("No assets folders found under tool/web/public/assets or website/public/assets")
 
-    targets = sorted([p for p in assets_dir.iterdir() if p.is_file()])
+    targets = sorted(p for d in assets_dirs for p in d.iterdir() if p.is_file())
 
     results: list[ConvertResult] = []
     for src in targets:

@@ -15,6 +15,15 @@ This app takes:
 
 It is built with FastAPI (Python backend) and React/Vite (frontend), and is designed to be **local-first** (student data stays on your machine in normal use).
 
+## Repo layout
+
+This repo has two independently-deployable halves:
+
+- [`tool/`](tool/) — the actual product: FastAPI backend (`tool/server/`) + React/Vite frontend (`tool/web/`). This is what the rest of this README documents.
+- [`website/`](website/) — the marketing/info site (About, Documentation, Pricing, License, Privacy pages), built with Astro. It's a static site with no backend of its own and no license logic — every "Tool" link/CTA just points at wherever `tool/web` is deployed. Meant to be deployed separately, to Cloudflare Workers (static assets, via `wrangler deploy`). See [website/README.md](website/README.md) for its own quickstart.
+
+The two only talk to each other over absolute URLs configured via `.env` files (see `tool/web/.env.example` and `website/.env.example`) — there is no shared build step.
+
 ---
 
 ## Quickstart
@@ -25,7 +34,7 @@ It is built with FastAPI (Python backend) and React/Vite (frontend), and is desi
 
 #### Windows
 ```sh
-cd server
+cd tool\server
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -34,12 +43,12 @@ py -3.12 -m venv .venv
 
 **One-line start (after venv is set up):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 #### Linux
 ```sh
-cd server
+cd tool/server
 python3.12 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
@@ -48,7 +57,7 @@ python3.12 -m venv .venv
 
 **One-line start (after venv is set up):**
 ```sh
-cd server && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd tool/server && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **Or use the combined startup script (starts both frontend and backend):**
@@ -77,31 +86,33 @@ To force DirectML at runtime, set:
 ### 2. Frontend (React/Vite)
 
 ```sh
-cd web
+cd tool/web
 npm install
 npm run dev
 ```
 
 **One-line start — Windows (after npm install):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web"; npm run dev
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\web"; npm run dev
 ```
 
 **One-line start — Linux (after npm install):**
 ```sh
-cd web && npm run dev
+cd tool/web && npm run dev
 ```
 
 The frontend runs at http://localhost:5173 (also accessible via Tailscale at `http://<your-tailscale-ip>:5173`) and proxies `/api` to the backend.
+
+This is the tool's interactive app (the stepper UI), mounted at its own root rather than embedded in the marketing site. License key entry and validation happen here, not on the website — every "Tool" link/CTA on the marketing website (see [website/](website/)) is a plain link to wherever this is deployed (`PUBLIC_TOOL_URL` in [website/.env.example](website/.env.example)); the "back to main site" link here points the other way (`VITE_WEBSITE_URL` in [tool/web/.env.example](tool/web/.env.example)).
 
 ---
 
 ## Licensing (Tool Lock)
 
-The `/tool` page is locked behind a license key.
+The tool app (`tool/web`) is locked behind a license key — the website carries no licensing code at all, it just links to the tool.
 
 - The UI prompts for a key the first time you open the Tool.
-- You can request a **free personal (non-commercial)** key from the popup.
+- You can request a **free personal (non-commercial)** key from that same screen.
 	- This creates (or reuses) a **unique personal key** tied to your device.
 - The backend also enforces licensing: tool APIs require an `X-License-Key` header.
 
@@ -127,8 +138,8 @@ The `/tool` page is locked behind a license key.
 ### License persistence & secrets
 
 - Recommended: set `YMGA_LICENSE_SECRET` to keep keys stable across restarts.
-- If `YMGA_LICENSE_SECRET` is not set, the server generates a secret once and stores it at `server/app/data/_licenses/secret.txt`.
-- License records are stored at `server/app/data/_licenses/licenses.json`.
+- If `YMGA_LICENSE_SECRET` is not set, the server generates a secret once and stores it at `tool/server/app/data/_licenses/secret.txt`.
+- License records are stored at `tool/server/app/data/_licenses/licenses.json`.
 	- Note: license keys are stored in plaintext in this file so they can be recovered/viewed in the admin panel.
 - For tests or custom deployments, you can override the store directory with `YMGA_LICENSE_STORE_DIR`.
 
@@ -136,7 +147,7 @@ The `/tool` page is locked behind a license key.
 
 - The backend middleware records usage each time a protected tool API endpoint is called with a valid key.
 - Personal keys are limited to **5 uses per month** by default (configurable via `YMGA_PERSONAL_MONTHLY_LIMIT`).
-- The admin panel shows the **last 500 usage events**; the backend retains the **last 2000** in `server/app/data/_licenses/usage.json`.
+- The admin panel shows the **last 500 usage events**; the backend retains the **last 2000** in `tool/server/app/data/_licenses/usage.json`.
 - You can optionally set per-key max uses from the admin panel when creating a key.
 
 ---
@@ -179,10 +190,10 @@ The app is split into a backend “engine” and a frontend “wizard”:
 
 The two talk over HTTP. In local development, the browser talks to Vite (`localhost:5173`) and Vite proxies API calls to FastAPI (`127.0.0.1:8000`).
 
-- **Backend**: FastAPI app in `server/app/main.py` wires routers under `server/app/routes/`. Core logic lives in `server/app/services/`.
-- **Frontend**: React app in `web/src/App.tsx` implements a stepper UI, calling backend APIs via `web/src/api.ts`.
-- **Data Model**: Shared Pydantic models in `server/app/models/schemas.py` define slots, people, mapping, and generation payloads. API contracts are tightly aligned with frontend types.
-- **Storage**: Each workspace lives in `server/app/data/<workspace_id>/` with subfolders for mugshots, baby, fonts, masks, and uploads.
+- **Backend**: FastAPI app in `tool/server/app/main.py` wires routers under `tool/server/app/routes/`. Core logic lives in `tool/server/app/services/`.
+- **Frontend**: React app in `tool/web/src/App.tsx` implements a stepper UI, calling backend APIs via `tool/web/src/api.ts`.
+- **Data Model**: Shared Pydantic models in `tool/server/app/models/schemas.py` define slots, people, mapping, and generation payloads. API contracts are tightly aligned with frontend types.
+- **Storage**: Each workspace lives in `tool/server/app/data/<workspace_id>/` with subfolders for mugshots, baby, fonts, masks, and uploads.
 
 ### Key concept: workspaces
 
@@ -245,19 +256,19 @@ If you have more students than fit in one spread, the frontend chunks the people
 
 If you’re trying to understand the codebase quickly, these files are the main landmarks:
 
-- `server/app/routes/*.py`: API endpoints (FastAPI routers)
-- `server/app/services/template_parser.py`: colour detection + slot extraction
-- `server/app/services/spreadsheet.py`: roster/quotes parsing + name normalization
-- `server/app/services/generator.py`: image/text compositing pipeline
-- `server/app/services/placement.py`: ordering/placement logic for slots/people
-- `server/app/services/progress.py`: in-memory job status for generation
-- `server/app/services/storage.py`: workspace paths + saving uploads
-- `web/src/App.tsx`: the stepper UI (states, uploads, review, generate)
-- `web/src/api.ts`: typed API client used by the UI
+- `tool/server/app/routes/*.py`: API endpoints (FastAPI routers)
+- `tool/server/app/services/template_parser.py`: colour detection + slot extraction
+- `tool/server/app/services/spreadsheet.py`: roster/quotes parsing + name normalization
+- `tool/server/app/services/generator.py`: image/text compositing pipeline
+- `tool/server/app/services/placement.py`: ordering/placement logic for slots/people
+- `tool/server/app/services/progress.py`: in-memory job status for generation
+- `tool/server/app/services/storage.py`: workspace paths + saving uploads
+- `tool/web/src/App.tsx`: the stepper UI (states, uploads, review, generate)
+- `tool/web/src/api.ts`: typed API client used by the UI
 
 ### Storage Layout
 
-- `server/app/data/<workspace_id>/`
+- `tool/server/app/data/<workspace_id>/`
 	- `template_clean.png` — Clean template image
 	- `uploads/` — All uploaded files (annotated/clean templates, mugshots.zip, baby.zip, spreadsheets)
 	- `mugshots/` — Extracted mugshot images
@@ -273,7 +284,7 @@ If you’re trying to understand the codebase quickly, these files are the main 
 ### Backend
 **Setup (one-time):**
 ```powershell
-cd server
+cd tool\server
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -281,41 +292,52 @@ py -3.12 -m venv .venv
 
 **Start server (one-line):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **External PowerShell window:**
 ```powershell
-Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
 ```
 
 ### Frontend
 **Setup (one-time):**
 ```powershell
-cd web
+cd tool\web
 npm install
 ```
 
 **Start dev server (one-line):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web"; npm run dev
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\web"; npm run dev
 ```
 
 **External PowerShell window:**
 ```powershell
-Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\web''; npm run dev'
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\web''; npm run dev'
 ```
 
 Vite binds to `0.0.0.0` (accessible via Tailscale) and proxies `/api` to backend.
 
 **Build for production:**
 ```powershell
-cd web
+cd tool\web
 npm run build
 ```
 
+### Website (Astro, deploys to Cloudflare Workers)
+```sh
+cd website
+npm install
+npm run dev      # http://localhost:4321
+npm run build    # outputs website/dist
+npm run cf:dev   # build, then serve through the actual Workers runtime locally (:8788)
+npm run deploy   # build, then `wrangler deploy` (run `npx wrangler login` once first)
+```
+See [website/README.md](website/README.md) for the full Cloudflare Workers deployment notes, including the build-time-vs-runtime env var caveat for `PUBLIC_TOOL_URL`.
+
 ### Testing
-- `cd server && pytest` — Tests cover template parsing, progress tracking, and edge cases. See `server/tests/` for examples.
+- `cd tool/server && pytest` — Tests cover template parsing, progress tracking, and edge cases. See `tool/server/tests/` for examples.
 
 ---
 
@@ -331,12 +353,12 @@ npm run build
 
 ## Codebase Reference
 
-- **Backend Entrypoint**: `server/app/main.py`
-- **API Routers**: `server/app/routes/`
-- **Core Services**: `server/app/services/`
-- **Models/Schemas**: `server/app/models/schemas.py`
-- **Frontend Entrypoint**: `web/src/App.tsx`
-- **API Types/Helpers**: `web/src/api.ts`
+- **Backend Entrypoint**: `tool/server/app/main.py`
+- **API Routers**: `tool/server/app/routes/`
+- **Core Services**: `tool/server/app/services/`
+- **Models/Schemas**: `tool/server/app/models/schemas.py`
+- **Frontend Entrypoint**: `tool/web/src/App.tsx`
+- **API Types/Helpers**: `tool/web/src/api.ts`
 
 ---
 

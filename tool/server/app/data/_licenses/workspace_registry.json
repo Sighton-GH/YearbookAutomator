@@ -1,0 +1,14 @@
+{
+  "bindings": [
+    {
+      "created_at": 1782047584,
+      "expires_at": 1782076604,
+      "last_seen": 1782047804,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-U6FE3-7LIIJ-GUEYO-X62XJ-ZATEX-FLI2H-VLWXM-X3VYL-CPFU7-2JPIQ-5A:6bbed2fd-a383-4f71-ba92-97308fe95592",
+      "workspace_id": "b34239a11ffa46d6b96af131b132608d"
+    }
+  ],
+  "version": 1
+}

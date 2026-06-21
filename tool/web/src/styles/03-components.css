@@ -1,0 +1,382 @@
+h1 { margin: 0 0 4px; }
+h2 { margin: 0 0 12px; }
+h3 { margin: 0 0 8px; }
+
+.muted { color: var(--muted); }
+
+.prewrap {
+  white-space: pre-wrap;
+}
+
+.stack { display: grid; gap: 12px; }
+
+.upload,
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+/* Custom file control used by UploadDropLabel */
+.upload-file-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: var(--bg-panel);
+}
+
+.upload:not(.disabled):hover .upload-file-row {
+  border-color: var(--accent);
+  background: var(--bg-quiet);
+}
+
+.upload-native-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.upload.disabled .upload-native-input {
+  cursor: not-allowed;
+}
+
+.upload-file-ui {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.upload-file-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* Some browsers don't reliably inherit cursor into nested SVG/text.
+   Force the hand cursor over the whole upload button area. */
+.upload-file-button * {
+  cursor: pointer;
+}
+
+.upload:not(.disabled):hover .upload-file-button {
+  border-color: var(--accent);
+}
+
+.upload-file-icon {
+  flex: 0 0 auto;
+}
+
+.upload-file-button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.upload-file-name {
+  overflow-wrap: anywhere;
+}
+
+.upload-file-tip {
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.upload-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.upload-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.upload.dragover {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.upload.dragover input[type="file"],
+.upload.dragover input,
+.upload.dragover select,
+.upload.dragover textarea {
+  border-color: var(--accent);
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.upload input,
+.field input,
+.field textarea,
+.field select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+input[type="color"].color-swatch {
+  padding: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  cursor: pointer;
+}
+
+input[type="color"].color-swatch::-webkit-color-swatch-wrapper {
+  padding: 4px;
+}
+
+input[type="color"].color-swatch::-webkit-color-swatch {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.color-overrides {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.color-override {
+  flex: 0 0 auto;
+  width: 260px;
+}
+
+.color-override .inline {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.color-override input[type="text"] {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  .color-overrides {
+    flex-direction: column;
+  }
+
+  .color-override {
+    width: 100%;
+  }
+
+  .color-override .inline {
+    flex-wrap: wrap;
+  }
+}
+
+.checkbox { display: flex; align-items: center; gap: 8px; }
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.switch-ui {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-quiet);
+  display: flex;
+  align-items: center;
+  transition: background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  transform: translateX(0);
+  transition: transform 160ms ease;
+}
+
+.switch input:checked + .switch-ui {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch input:checked + .switch-ui .switch-thumb {
+  transform: translateX(20px);
+  border-color: var(--accent);
+}
+
+.switch input:focus-visible + .switch-ui {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch input:disabled + .switch-ui {
+  opacity: 0.55;
+}
+
+.switch-text {
+  display: grid;
+  gap: 2px;
+}
+
+.switch-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: var(--bg-quiet);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+button.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.callout {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f1faf3;
+}
+
+.callout.danger {
+  background: var(--bg-panel);
+  border-color: var(--danger);
+}
+
+.callout.warn {
+  background: var(--bg-warn);
+  border-color: var(--border-warn);
+}
+
+.callout.success {
+  background: #ecfdf3;
+  border-color: #4ade80;
+}
+
+.warn-icon {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-quiet);
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+.progress {
+  margin-top: 8px;
+  height: 8px;
+  background: #d1e3d4;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+  animation: slide 1.2s linear infinite;
+}
+
+.progress.determinate {
+  margin-top: 0;
+}
+
+.progress-bar.determinate {
+  animation: none;
+  transform: none;
+}
+
+.hint { color: var(--accent); font-weight: 600; }
+
+.small { font-size: 12px; }
+
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(20%); }
+  100% { transform: translateX(120%); }
+}

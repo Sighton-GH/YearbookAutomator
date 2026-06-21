@@ -1,0 +1,82 @@
+{
+  "last_seen": 1782070821.6762552,
+  "session_started_at": 1782068395.0,
+  "session_expires_at": 1782076384.694,
+  "session_id": "8ad83b11-57f3-4910-b248-b3176331d2db",
+  "tool_state": {
+    "default_baby_filename": null,
+    "default_mugshot_filenames": [],
+    "session_snapshot": {
+      "v": 1,
+      "sessionId": "4ba587e6-bbd3-40a9-a4ef-e91065b5c1c1",
+      "startedAtMs": 1782047584694,
+      "expiresAtMs": 1782076384694,
+      "activeStep": 0,
+      "workspaceId": "44254b69d1024c01b0f9722018bf821e",
+      "templateId": "44254b69d1024c01b0f9722018bf821e",
+      "skipQuotes": false,
+      "skipBabyPhotos": false,
+      "templateParse": {
+        "mugshotColor": "",
+        "babyColor": "",
+        "nameColor": "",
+        "quoteColor": "",
+        "minArea": 800
+      },
+      "slots": [],
+      "parsedSlots": [],
+      "templateSize": null,
+      "portraitsIngest": {
+        "namingPattern": "\\d{3,4}",
+        "advancedNameMatch": true,
+        "allowInsecureUploads": false
+      },
+      "people": [],
+      "slotAssignments": {},
+      "placementMode": "left_then_right",
+      "forceAlphabetical": false,
+      "defaultQuote": "404 quote not found",
+      "defaultQuotes": [
+        "404 quote not found"
+      ],
+      "defaultQuotesRandomize": false,
+      "defaultQuotesSeed": 0,
+      "defaultBabyFilename": null,
+      "babyIngest": {
+        "advancedNameMatch": true,
+        "partialNameMatch": true,
+        "convertPdfs": true,
+        "removeBackground": false,
+        "backgroundMode": "simple",
+        "allowInsecureUploads": false
+      },
+      "babyEditHistory": [],
+      "babyBackgroundColor": "",
+      "centerBabyOnFace": false,
+      "defaultMugshotFilename": null,
+      "defaultMugshotFilenames": [],
+      "defaultMugshotRandomize": false,
+      "defaultMugshotSeed": 0,
+      "lockedPeople": [],
+      "nameFontFamily": "Inter, system-ui, sans-serif",
+      "nameFontWeight": "normal",
+      "nameFontSize": 40,
+      "nameAllCaps": false,
+      "nameAlign": "left",
+      "quoteFontFamily": "Inter, system-ui, sans-serif",
+      "quoteFontWeight": "normal",
+      "quoteFontSize": 40,
+      "quoteAllCaps": false,
+      "quoteAlign": "left",
+      "peoplePerSpread": 16,
+      "outputFormat": "png",
+      "outputSize": null,
+      "generationOutputs": {
+        "previewPath": null,
+        "outputPath": null,
+        "outputPaths": []
+      }
+    },
+    "session_updated_at_ms": 1782070203001
+  }
+}

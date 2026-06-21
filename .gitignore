@@ -9,13 +9,20 @@ __pycache__/
 
 # Virtual environments
 .venv/
-server/.venv/
+tool/server/.venv/
 venv/
 ENV/
 
-# --- Node / Vite ---
-web/node_modules/
-web/dist/
+# --- Node / Vite / Astro ---
+tool/web/node_modules/
+tool/web/dist/
+tool/web/.env
+website/node_modules/
+website/dist/
+website/.astro/
+website/.wrangler/
+website/.env
+website/.env.production
 
 # --- OS / Editor ---
 .DS_Store
@@ -24,19 +31,19 @@ Thumbs.db
 .vscode/
 
 # --- App: user/workspace data (DO NOT COMMIT) ---
-# All per-workspace data lives under server/app/data/<workspace_id>/
+# All per-workspace data lives under tool/server/app/data/<workspace_id>/
 # This includes uploads, spreadsheets, portraits, extracted images, masks, fonts, and outputs.
-server/app/data/**
+tool/server/app/data/**
 
 # Keep licensing/assets that are intended to be versioned
-!server/app/data/_licenses/
-!server/app/data/_licenses/**
+!tool/server/app/data/_licenses/
+!tool/server/app/data/_licenses/**
 
 # But don't commit secrets even if they live in _licenses
-server/app/data/_licenses/secret.txt
+tool/server/app/data/_licenses/secret.txt
 
 # Runtime usage log (do not commit)
-server/app/data/_licenses/usage.json
+tool/server/app/data/_licenses/usage.json
 
 # --- Optional: logs ---
 *.log
