@@ -1,8 +1,9 @@
 import type React from "react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
 import { withBase } from "./baseUrl";
 import {
   applyMapping,
@@ -59,16 +60,14 @@ import {
 import { getLicenseUnlockAllStepsEnabled } from "./licensing";
 
 import { ToggleSwitch } from "./components/ToggleSwitch";
-import { UploadDropLabel } from "./components/UploadDropLabel";
-import { FontPick } from "./components/FontPick";
 import { ProgressBar } from "./components/ProgressBar";
-import { SlotEditor } from "./components/SlotEditor";
-import { TemplatePreview } from "./components/TemplatePreview";
 import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { NoticeDialog } from "./components/NoticeDialog";
 import { TipsBox } from "./components/TipsBox";
+import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/RoadmapRail";
+import { TabBar, type TabBarItem } from "./components/TabBar";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
 import { comparePeopleByLastName, computeSlotNumberToIndex } from "./utils/placement";
@@ -82,42 +81,29 @@ import {
   getRemainingSessionMs,
   isSessionExpired,
   isPersistedSessionV1,
+  migrateActiveStep,
   parseStepFromSearch,
   SESSION_TTL_MS,
   tryLoadSession,
   trySaveSession,
+  type EditTab,
   type PersistedSessionV1,
+  type TopStep,
 } from "./session";
 
 import type { Align, FontWeight, PlacementMode } from "./types";
 
-import { TemplateParsing as TemplateParsingStep } from "./steps/TemplateParsing";
-import { MugshotMapping as MugshotMappingStep } from "./steps/MugshotMapping";
-import { QuotesStep as QuotesStepStep } from "./steps/QuotesStep";
-import { BabyPhotosStep as BabyPhotosStepStep } from "./steps/BabyPhotosStep";
-import { StylingStep } from "./steps/StylingStep";
-import { ReviewStep } from "./steps/ReviewStep";
-import { ResultsStep } from "./steps/ResultsStep";
-import { ParsingReview } from "./steps/ParsingReview";
-import { RenderPreflight } from "./steps/RenderPreflight";
+import { ImportStep } from "./steps/ImportStep";
+import { EditStep } from "./steps/edit/EditStep";
+import { FinalizeStep } from "./steps/FinalizeStep";
 
-const steps = [
-  "Import Template",
-  "Review Parsing",
-  "Portraits",
-  "Quotes",
-  "Baby Photos",
-  "Styling",
-  "Review",
-  "Results",
+const TOP_STEPS: { id: TopStep; label: string; description: string; optional?: boolean; icon: React.ReactNode }[] = [
+  { id: "template", label: "Template", description: "Upload your layout & confirm the detected slots", icon: <LayoutTemplate size={15} /> },
+  { id: "roster", label: "Uploads", description: "Upload your roster, portraits, quotes & baby photos", icon: <Upload size={15} /> },
+  { id: "people", label: "People", description: "Review every student's portrait, quote & baby photo", icon: <Users size={15} /> },
+  { id: "style", label: "Style", description: "Fonts & text styling for names and quotes", icon: <Type size={15} /> },
+  { id: "generate", label: "Generate", description: "Render and download your finished pages", icon: <Sparkles size={15} /> },
 ];
-
-const stepDescriptions: Partial<Record<number, string>> = {
-  0: "Upload the annotated template (coloured blocks for portrait/baby/name/quote) and the clean template to be modified.",
-  5: "Name and quote can be styled independently. Default size is 40pt. Font size bounds: 1–100.",
-  6: "Preview one page, confirm people, then render all.",
-  7: "Results from the latest render.",
-};
 
 const stepTips = [
   "Server deletes all data when your session timeout expires to protect privacy.",
@@ -148,9 +134,12 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState<TopStep>("template");
+  const [editTab, setEditTab] = useState<EditTab>("layout");
+  // Template step has two sub-views the user toggles between: upload the template, or review the parse.
+  const [templateView, setTemplateView] = useState<"upload" | "review">("upload");
   const [didRestoreSession, setDidRestoreSession] = useState(false);
-  const activeStepRef = useRef(0);
+  const activeStepRef = useRef<TopStep>("template");
   activeStepRef.current = activeStep;
   const [sessionIdentity, setSessionIdentity] = useState(() => {
     const base = createSessionIdentity();
@@ -177,6 +166,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
+  const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
 
   const setPeopleSorted = (next: PersonRecord[]) => {
     // Preserve the user's chosen order. Alphabetical ordering (when desired)
@@ -235,7 +225,6 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
-  const [reviewPanel, setReviewPanel] = useState<"preview" | "people">("preview");
   const [progress, setProgress] = useState(0);
   const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
   const [annotatedPreviewUrl, setAnnotatedPreviewUrl] = useState<string | null>(null);
@@ -244,7 +233,6 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [cleanFile, setCleanFile] = useState<File | null>(null);
   const [previewMode, setPreviewMode] = useState<"clean" | "annotated">("clean");
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [swapMode, setSwapMode] = useState(false);
   const [allowInsecureReviewResults, setAllowInsecureReviewResults] = useState(false);
   const [peoplePerSpread, setPeoplePerSpread] = useState<number>(16);
   const [outputFormat, setOutputFormat] = useState<"png" | "pdf" | "tiff">("png");
@@ -530,82 +518,64 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     if (!confirmResetAll()) return;
   };
 
-  // Quotes/baby photos can be disabled entirely; in that case we skip parsing those slots
-  // and also skip the related steps.
-  const isStepSkipped = (stepIndex: number) => {
-    if (stepIndex === 3) return Boolean(skipQuotes);
-    if (stepIndex === 4) return Boolean(skipBabyPhotos);
-    return false;
-  };
-
-  const clampStep = (n: number) => Math.max(0, Math.min(steps.length - 1, n));
-
-  const nearestNonSkipped = (target: number, direction: 1 | -1) => {
-    let t = clampStep(target);
-    for (let i = 0; i < steps.length; i++) {
-      if (!isStepSkipped(t)) return t;
-      t = clampStep(t + direction);
-    }
-    return clampStep(target);
-  };
-
-  const nextStepFrom = (from: number) => {
-    if (from === 2) {
-      if (skipQuotes) return skipBabyPhotos ? 5 : 4;
-      return 3;
-    }
-    if (from === 3) return skipBabyPhotos ? 5 : 4;
-    return nearestNonSkipped(from + 1, 1);
-  };
-
-  const prevStepFrom = (from: number) => {
-    if (from === 5) {
-      if (skipBabyPhotos) return skipQuotes ? 2 : 3;
-      return 4;
-    }
-    if (from === 4) return skipQuotes ? 2 : 3;
-    return nearestNonSkipped(from - 1, -1);
-  };
-
-  const stepReady = (stepIndex: number) => {
-    if (isStepSkipped(stepIndex)) return false;
-
-    // If this license is configured (in admin) to unlock all steps, allow access.
+  const editTabReady = (tab: EditTab): boolean => {
     if (getLicenseUnlockAllStepsEnabled()) return true;
-    
-    if (stepIndex <= 0) return true;
-    if (stepIndex === 1) return Boolean(workspaceId && slots.length);
-    if (stepIndex === 2) return Boolean(workspaceId && slots.length);
-    if (stepIndex === 3) return people.length > 0;
-    if (stepIndex === 4) return people.length > 0;
-    if (stepIndex === 5) return people.length > 0;
-    if (stepIndex === 6) return Boolean(people.length && slots.length);
-    if (stepIndex === 7) return Boolean(workspaceId && (outputPaths.length > 0 || outputPath));
-    return true;
+    if (tab === "layout") return Boolean(workspaceId && slots.length);
+    if (tab === "people") return Boolean(workspaceId && slots.length);
+    return people.length > 0; // "style"
   };
 
-  const goToStep = (target: number) => {
+  const templateReady = Boolean(workspaceId && slots.length);
+  const rosterReady = Boolean(workspaceId && slots.length && people.length);
+
+  const topStepReady = (step: TopStep): boolean => {
+    if (getLicenseUnlockAllStepsEnabled()) return true;
+    switch (step) {
+      case "template":
+        return true;
+      case "roster":
+        return templateReady;
+      case "people":
+        return rosterReady;
+      case "style":
+      case "generate":
+        return rosterReady;
+    }
+  };
+
+  // Per-step completion (for the roadmap rail's done/current markers), independent of gating.
+  const topStepComplete = (step: TopStep): boolean => {
+    switch (step) {
+      case "template":
+        return templateReady;
+      case "roster":
+        return rosterReady;
+      case "people":
+        return rosterReady;
+      case "style":
+        return rosterReady;
+      case "generate":
+        return Boolean(outputPaths.length || outputPath);
+    }
+  };
+
+  const goToStep = (target: TopStep) => {
     if (loading) {
       setStatus("Please wait for the current operation to finish");
       return;
     }
-    if (isStepSkipped(target)) {
-      // If the user tries to jump to a disabled step, redirect to the nearest available step.
-      const direction: 1 | -1 = target >= activeStep ? 1 : -1;
-      target = nearestNonSkipped(target, direction);
-    }
-    if (!stepReady(target)) {
+    if (!topStepReady(target)) {
       setStatus("Complete the previous steps before jumping ahead");
       return;
     }
     setActiveStep(target);
   };
 
-  useEffect(() => {
-    if (!isStepSkipped(activeStep)) return;
-    setActiveStep(nearestNonSkipped(activeStep, 1));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStep, skipBabyPhotos, skipQuotes]);
+  const stepIndex = (s: TopStep): number => TOP_STEPS.findIndex((t) => t.id === s);
+  const goToAdjacentStep = (dir: -1 | 1) => {
+    const next = TOP_STEPS[stepIndex(activeStep) + dir];
+    if (next) goToStep(next.id);
+  };
 
   const handleReset = () => {
     const toDelete = workspaceId;
@@ -669,7 +639,6 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setOutputNonce(0);
     setPreviewPath(null);
     setPreviewNonce(0);
-    setReviewPanel("preview");
     setProgress(0);
     setTemplatePreviewUrl(null);
     setAnnotatedPreviewUrl(null);
@@ -678,10 +647,13 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setCleanFile(null);
     setPreviewMode("clean");
     setSelectedSlot(null);
-    setSwapMode(false);
     setPeoplePerSpread(16);
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
+    setOriginalBabyPeople(null);
+    setActiveStep("template");
+    setEditTab("layout");
+    setTemplateView("upload");
     clearSession();
     const nextIdentity = createSessionIdentity(Date.now(), sessionTtlMs);
     setSessionIdentity(nextIdentity);
@@ -696,6 +668,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
       startedAtMs: sessionIdentity.startedAtMs,
       expiresAtMs: sessionIdentity.expiresAtMs,
       activeStep,
+      editTab,
       workspaceId,
       templateId,
       skipQuotes,
@@ -861,7 +834,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setAnnotatedPreviewUrl(`${templateAnnotatedUrl(newWorkspaceId)}&t=${Date.now()}`);
     setCleanPreviewUrl(`${templateCleanUrl(newWorkspaceId)}&t=${Date.now()}`);
 
-    setActiveStep(Math.max(0, Math.min(7, session.activeStep ?? 0)));
+    setActiveStep(migrateActiveStep(session.activeStep));
+    setEditTab(session.editTab ?? "layout");
   };
 
   const computeMissingAssets = async (session: PersistedSessionV1, ws: string): Promise<MissingAsset | null> => {
@@ -1202,7 +1176,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
 
         if (snap && isPersistedSessionV1(snap)) {
           const saved = snap;
-          setActiveStep(Math.max(0, Math.min(7, saved.activeStep ?? 0)));
+          setActiveStep(migrateActiveStep(saved.activeStep));
+          setEditTab(saved.editTab ?? "layout");
           setSkipQuotes(Boolean(saved.skipQuotes));
           setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
           setParseMugshotColor(saved.templateParse?.mugshotColor ?? "");
@@ -1405,7 +1380,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
             ? parseStepFromSearch(window.location.search)
             : null;
 
-        setActiveStep(Math.max(0, Math.min(7, urlStep ?? (saved.activeStep ?? 0))));
+        setActiveStep(urlStep ?? migrateActiveStep(saved.activeStep));
+        setEditTab(saved.editTab ?? "layout");
         setWorkspaceId(saved.workspaceId);
         setTemplateId(saved.templateId);
         setSkipQuotes(Boolean(saved.skipQuotes));
@@ -1608,6 +1584,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   }, [
     didRestoreSession,
     activeStep,
+    editTab,
     workspaceId,
     templateId,
     skipQuotes,
@@ -1709,6 +1686,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     defaultBabyFilename,
     defaultMugshotFilenames,
     activeStep,
+    editTab,
     templateId,
     skipQuotes,
     skipBabyPhotos,
@@ -1786,14 +1764,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setCleanPreviewUrl(file ? URL.createObjectURL(file) : null);
   };
 
-  const canContinue = useMemo(() => {
-    if (activeStep === 0) return Boolean(workspaceId && slots.length);
-    if (activeStep === 1) return Boolean(slots.length);
-    if (activeStep === 2) return people.length > 0;
-    if (activeStep === 6) return Boolean(people.length && slots.length);
-    if (activeStep === 7) return Boolean(outputPaths.length > 0 || outputPath);
-    return true;
-  }, [activeStep, workspaceId, slots, people, outputPaths.length, outputPath]);
+  // Gates Finalize's "Render preview"/"Render all" buttons (the only remaining consumer).
+  const canContinue = useMemo(() => Boolean(people.length && slots.length), [people, slots]);
 
   const insecureHttp =
     typeof window !== "undefined" &&
@@ -1838,7 +1810,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         ),
       });
 
-      if (activeStep === 6) {
+      if (activeStep === "generate") {
         out.push({
           id: "insecure-http-results",
           kind: "warning",
@@ -1889,10 +1861,6 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const slotNumberToIndex = useMemo(() => {
     return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);
   }, [slots, placementMode, templateSize?.width]);
-
-  useEffect(() => {
-    if (forceAlphabetical) setSwapMode(false);
-  }, [forceAlphabetical]);
 
   const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
 
@@ -2250,52 +2218,85 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setLoading(false);
     setProgress(100);
     setStatus("Generation complete");
-    setActiveStep(7);
   };
 
   useEffect(() => {
-    if (activeStep !== 6) return;
+    if (activeStep !== "generate") return;
     if (!workspaceId || !templateId) return;
     if (!people.length || !slots.length) return;
     if (loading) return;
     if (previewPath) return;
-    // Auto-render the one-page preview the first time you reach Review & generate.
+    // Auto-render the one-page preview the first time you reach Finalize.
     handleRenderPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, workspaceId, templateId, people.length, slots.length]);
 
-  const stepsForNav = useMemo(() => steps, []);
+  const roadmapItems: RoadmapItem<TopStep>[] = TOP_STEPS.map((s): RoadmapItem<TopStep> => {
+    const ready = topStepReady(s.id);
+    const status: RoadmapStatus =
+      activeStep === s.id ? "current" : topStepComplete(s.id) ? "done" : "upcoming";
+    return {
+      id: s.id,
+      label: s.label,
+      description: s.description,
+      icon: s.icon,
+      status,
+      optional: s.optional,
+      disabled: !ready || loading,
+      disabledReason: !ready ? "Complete the previous step first" : loading ? "Please wait…" : undefined,
+    };
+  });
 
   const stepsNav = (
-    <div className={clsx("steps", embedded && "fullwidth")} aria-label="Tool steps">
-      {stepsForNav.map((step, idx) => (
-        <div
-          key={step}
-          className={clsx("step", { active: idx === activeStep, disabled: !stepReady(idx) || loading })}
-          role="button"
-          tabIndex={0}
-          onClick={() => goToStep(idx)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              goToStep(idx);
-            }
-          }}
-          aria-disabled={!stepReady(idx) || loading}
-          title={
-            !stepReady(idx)
-                ? "Complete earlier steps first"
-                : loading
-                  ? "Busy"
-                  : "Go to step"
-          }
-        >
-          <span className="badge">{idx + 1}</span>
-          <span>{step}</span>
-        </div>
-      ))}
-    </div>
+    <RoadmapRail items={roadmapItems} active={activeStep} onSelect={goToStep} ariaLabel="Workflow steps" />
   );
+
+  const activeStepMeta = TOP_STEPS.find((s) => s.id === activeStep) ?? TOP_STEPS[0];
+
+  // Which pipeline cards / edit surface the current step exposes.
+  //  - Template: an "Upload" sub-view (template upload card) and a "Review" sub-view (slot editor).
+  //  - Uploads: all four upload cards (portraits + quotes + baby; the roster spreadsheet rides with portraits).
+  //  - People: just the people review grid.
+  //  - Style / Generate: a single surface each.
+  const importSections: Array<"template" | "portraits" | "quotes" | "baby"> | null =
+    activeStep === "template"
+      ? templateView === "upload"
+        ? ["template"]
+        : null
+      : activeStep === "roster"
+      ? ["portraits", "quotes", "baby"]
+      : null;
+  const showImportStep = importSections !== null;
+
+  const editTabForStep: EditTab | null =
+    activeStep === "template"
+      ? templateView === "review"
+        ? "layout"
+        : null
+      : activeStep === "people"
+      ? "people"
+      : activeStep === "style"
+      ? "style"
+      : null;
+  const showEditStep =
+    editTabForStep !== null &&
+    (editTabForStep !== "layout" || templateReady) &&
+    (editTabForStep !== "people" || rosterReady);
+
+  const templateTabs: TabBarItem<"upload" | "review">[] = [
+    { id: "upload", label: "Upload template", icon: <Upload size={14} /> },
+    {
+      id: "review",
+      label: "Review parsing",
+      icon: <Eye size={14} />,
+      disabled: !templateReady,
+      disabledReason: "Parse a template first",
+    },
+  ];
+
+  const isFirstStep = stepIndex(activeStep) === 0;
+  const isLastStep = stepIndex(activeStep) === TOP_STEPS.length - 1;
+  const nextStepMeta = TOP_STEPS[stepIndex(activeStep) + 1] ?? null;
 
   const configActions = (
     <div className="tool-actions topbar-actions" aria-label="Configuration">
@@ -2337,6 +2338,75 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
       window.removeEventListener("ymga:upload-config", onUpload);
     };
     // These handlers intentionally call refs to avoid re-subscribing every render.
+  }, []);
+
+  // "Load sample project" (from the Help panel): runs a small bundled template + roster + portraits
+  // through the real pipeline so a first-time user instantly sees a populated, working project.
+  const loadSampleRef = useRef<(() => void) | null>(null);
+  loadSampleRef.current = () => {
+    void (async () => {
+      const fetchFile = async (url: string, name: string, type: string): Promise<File> => {
+        const blob = await (await fetch(url)).blob();
+        return new File([blob], name, { type });
+      };
+      const fetchAsPng = async (url: string, name: string): Promise<File> => {
+        const blob = await (await fetch(url)).blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+        bitmap.close?.();
+        const png = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+        if (!png) throw new Error("Could not prepare sample template");
+        return new File([png], name, { type: "image/png" });
+      };
+      try {
+        setLoading(true);
+        setProgress(0);
+        setStatus("Loading sample project — preparing template…");
+        const annotated = await fetchAsPng(withBase("assets/Annotated Sample.webp"), "sample-annotated.png");
+        const clean = await fetchAsPng(withBase("assets/Clean Sample.webp"), "sample-clean.png");
+        updateAnnotatedFile(annotated);
+        updateCleanFile(clean);
+        setStatus("Loading sample project — detecting layout…");
+        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea });
+        setWorkspaceId(parsed.template_id);
+        setTemplateId(parsed.template_id);
+        setSlots(parsed.slots);
+        setParsedSlots(parsed.slots.map((s) => ({ ...s })));
+        setTemplateSize({ width: parsed.width, height: parsed.height });
+        setTemplatePreviewUrl(`${templateCleanUrl(parsed.template_id)}&t=${Date.now()}`);
+
+        setStatus("Loading sample project — matching photos…");
+        const roster = await fetchFile(withBase("assets/sample/sample-roster.csv"), "sample-roster.csv", "text/csv");
+        const portraits = await fetchFile(withBase("assets/sample/sample-portraits.zip"), "sample-portraits.zip", "application/zip");
+        const ingest = await ingestSpreadsheet(parsed.template_id, roster, portraits, {
+          namingPattern,
+          advancedNameMatch: true,
+        });
+        setPeople(ingest.people);
+        setOriginalPeople(ingest.people.map((p) => ({ ...p })));
+        setTemplateView("review");
+        setActiveStep("people");
+        setStatus("Sample project loaded — explore the People step, then Style and Generate.");
+      } catch (err) {
+        setStatus(`Could not load the sample project. ${err instanceof Error ? err.message : ""}`.trim());
+      } finally {
+        setLoading(false);
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("ymga:load-sample-done"));
+      }
+    })();
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onLoadSample = () => {
+      if (window.location.pathname !== "/") return;
+      loadSampleRef.current?.();
+    };
+    window.addEventListener("ymga:load-sample", onLoadSample);
+    return () => window.removeEventListener("ymga:load-sample", onLoadSample);
   }, []);
 
 
@@ -2617,146 +2687,62 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         </div>
       )}
 
-      {embedded ? (
-        <>
-          {toolMessages.length > 0 ? (
-            <div className="page tool-messages-row">
-              <ToolMessages
-                messages={toolMessages}
-                onDismiss={(id) => {
-                  setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
-                  if (id === "save-config-reminder") setShowSaveConfigReminder(false);
-                }}
-              />
-            </div>
-          ) : null}
-          <section className="ss-steps">
-            <div className="ss-steps-inner tool-steps-header">
-              {stepsNav}
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <div className="page">
-            <header className="topbar tool-topbar">
-              <div>
-                <div className="topbar-title-row">
-                  <h1>Custom Flow Automator</h1>
-                  {configActions}
-                </div>
-                <p className="muted">Developed by Sighton Innovations — local-first, ready to host later.</p>
+      {!embedded && (
+        <div className="page">
+          <header className="topbar tool-topbar">
+            <div>
+              <div className="topbar-title-row">
+                <h1>Custom Flow Automator</h1>
+                {configActions}
               </div>
-            </header>
-          </div>
-          {toolMessages.length > 0 ? (
-            <div className="page tool-messages-row">
-              <ToolMessages
-                messages={toolMessages}
-                onDismiss={(id) => {
-                  setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
-                  if (id === "save-config-reminder") setShowSaveConfigReminder(false);
-                }}
-              />
+              <p className="muted">Turn a template, roster, and photos into print-ready yearbook spreads.</p>
             </div>
-          ) : null}
-          <section className="tool-steps-bar" aria-label="Tool steps">
-            <div className="tool-steps-bar-inner">
-              {stepsNav}
-            </div>
-          </section>
-        </>
+          </header>
+        </div>
       )}
+      {toolMessages.length > 0 ? (
+        <div className="page tool-messages-row">
+          <ToolMessages
+            messages={toolMessages}
+            onDismiss={(id) => {
+              setDismissedToolMessageIds((prev) => ({ ...prev, [id]: true }));
+              if (id === "save-config-reminder") setShowSaveConfigReminder(false);
+            }}
+          />
+        </div>
+      ) : null}
 
-      <div
-        className={clsx("page", {
-          "page-wide": activeStep === 3 || activeStep === 4 || activeStep === 6 || (activeStep === 2 && people.length > 0),
-        })}
-      >
-
-      <main
-        className={clsx("layout", {
-          "layout-single":
-            activeStep === 0 ||
-            activeStep === 1 ||
-            activeStep === 2 ||
-            activeStep === 3 ||
-            activeStep === 4 ||
-            activeStep === 5 ||
-            activeStep === 6 ||
-            activeStep === 7,
-        })}
-      >
-        {activeStep !== 1 && activeStep !== 2 && activeStep !== 3 && activeStep !== 4 && (
-          <section className="panel">
-          {activeStep === 6 || activeStep === 7 ? (
-            <div className="section-header">
-              <div className="stack" style={{ gap: 4 }}>
-                <div className="inline" style={{ alignItems: "center", gap: 6 }}>
-                  <h2>{steps[activeStep]}</h2>
-                  {stepDescriptions[activeStep] ? (
-                    <InfoPopover
-                      content={stepDescriptions[activeStep]}
-                      ariaLabel={`${steps[activeStep]} description`}
-                      position="below"
-                    />
-                  ) : null}
-                </div>
-                {activeStep === 6 && (
-                  <div className="stack" style={{ gap: 6 }}>
-                    {status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
-                    {loading && progress > 0 && <ProgressBar progress={progress} />}
-                    <div className="review-tabs" role="tablist" aria-label="Review panels">
-                      <button
-                        type="button"
-                        className={clsx("review-tab", { active: reviewPanel === "preview" })}
-                        onClick={() => setReviewPanel("preview")}
-                        aria-pressed={reviewPanel === "preview"}
-                      >
-                        Preview & settings
-                      </button>
-                      <button
-                        type="button"
-                        className={clsx("review-tab", { active: reviewPanel === "people" })}
-                        onClick={() => setReviewPanel("people")}
-                        aria-pressed={reviewPanel === "people"}
-                      >
-                        People cards
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="section-actions">
-                <button disabled={loading} onClick={() => setActiveStep((s) => prevStepFrom(s))}>
-                  Back
-                </button>
-                {activeStep === 6 ? (
-                  <button className="primary" disabled={loading || !canContinue} onClick={handleRenderAll}>
-                    {loading ? "Rendering..." : "Render all"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="inline" style={{ alignItems: "center", gap: 6 }}>
-              <h2>{steps[activeStep]}</h2>
-              {stepDescriptions[activeStep] ? (
-                <InfoPopover content={stepDescriptions[activeStep]} ariaLabel={`${steps[activeStep]} description`} />
-              ) : null}
+      <div className="app-workspace">
+        {stepsNav}
+        <section className="app-canvas" aria-label={`${activeStepMeta.label} step`}>
+          <div className="canvas-head">
+            <h2 className="canvas-title">{activeStepMeta.label}</h2>
+            <p className="canvas-sub">{activeStepMeta.description}</p>
+          </div>
+          {activeStep === "template" && (
+            <div className="canvas-subnav">
+              <TabBar
+                items={templateTabs}
+                active={templateView}
+                onSelect={setTemplateView}
+                size="small"
+                ariaLabel="Template view"
+              />
             </div>
           )}
-          {activeStep === 0 && (
-            <TemplateParsingStep
+          {showImportStep && (
+            <ImportStep
+              sections={importSections!}
               workspaceId={workspaceId}
               onParsed={(resp) => {
                 setWorkspaceId(resp.template_id);
                 setTemplateId(resp.template_id);
                 setSlots(resp.slots);
-                setParsedSlots(resp.slots.map(s => ({ ...s })));
+                setParsedSlots(resp.slots.map((s) => ({ ...s })));
                 setTemplateSize({ width: resp.width, height: resp.height });
                 setTemplatePreviewUrl(`${templateCleanUrl(resp.template_id)}&t=${Date.now()}`);
-                setActiveStep(1);
+                // Surface the result immediately by flipping the Template step to its Review sub-view.
+                setTemplateView("review");
               }}
               skipQuotes={skipQuotes}
               onSkipQuotes={setSkipQuotes}
@@ -2766,6 +2752,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
               setLoading={setLoading}
               setProgress={setProgress}
               loading={loading}
+              status={status}
+              progress={progress}
               annotated={annotatedFile}
               clean={cleanFile}
               annotatedPreview={annotatedPreviewUrl}
@@ -2790,10 +2778,96 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
                 setTemplatePreviewUrl(clean ?? annotated ?? null);
               }}
               onRawDebug={setRawDebug}
+              namingPattern={namingPattern}
+              setNamingPattern={setNamingPattern}
+              advancedNameMatch={advancedNameMatch}
+              setAdvancedNameMatch={setAdvancedNameMatch}
+              allowInsecureUploads={allowInsecureUploads}
+              portraitWarnings={portraitWarnings}
+              onPortraitWarnings={setPortraitWarnings}
+              portraitWarningsOpen={portraitWarningsOpen}
+              onPortraitWarningsOpen={setPortraitWarningsOpen}
+              portraitCompletedErrorCount={portraitCompletedErrorCount}
+              onPortraitCompletedErrorCount={setPortraitCompletedErrorCount}
+              people={people}
+              setPeople={setPeople}
+              setOriginalPeople={setOriginalPeople}
+              quotesWarnings={quotesWarnings}
+              onQuotesWarnings={setQuotesWarnings}
+              quotesWarningsOpen={quotesWarningsOpen}
+              onQuotesWarningsOpen={setQuotesWarningsOpen}
+              quotesCompletedErrorCount={quotesCompletedErrorCount}
+              onQuotesCompletedErrorCount={setQuotesCompletedErrorCount}
+              defaultBabyFilename={defaultBabyFilename}
+              onDefaultBabyFilename={setDefaultBabyFilename}
+              babyZipWarnings={babyZipWarnings}
+              onBabyZipWarnings={setBabyZipWarnings}
+              babyZipWarningsOpen={babyZipWarningsOpen}
+              onBabyZipWarningsOpen={setBabyZipWarningsOpen}
+              babyCompletedErrorCount={babyCompletedErrorCount}
+              onBabyCompletedErrorCount={setBabyCompletedErrorCount}
+              babyIngest={babyIngest}
+              onBabyIngest={setBabyIngest}
+              setOriginalBabyPeople={setOriginalBabyPeople}
+              babyBackgroundColor={babyBackgroundColor}
+              onBabyBackgroundColor={setBabyBackgroundColor}
+              centerBabyOnFace={centerBabyOnFace}
+              onCenterBabyOnFace={setCenterBabyOnFace}
+              backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
+              centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
+              onContinue={() => goToAdjacentStep(1)}
             />
           )}
-          {activeStep === 5 && (
-            <StylingStep
+
+          {showEditStep && (
+            <EditStep
+              editTab={editTabForStep ?? editTab}
+              onEditTab={setEditTab}
+              editTabReady={editTabReady}
+              hideTabs
+              skipQuotes={skipQuotes}
+              skipBabyPhotos={skipBabyPhotos}
+              slots={slots}
+              templateSize={templateSize}
+              onSlots={setSlots}
+              previewMode={previewMode}
+              onPreviewMode={setPreviewMode}
+              annotatedPreviewUrl={annotatedPreviewUrl}
+              cleanPreviewUrl={cleanPreviewUrl}
+              templatePreviewUrl={templatePreviewUrl}
+              selectedSlot={selectedSlot}
+              onSelectedSlot={setSelectedSlot}
+              peoplePerSpread={peoplePerSpread}
+              parsedSlots={parsedSlots}
+              rawDebug={rawDebug}
+              workspaceId={workspaceId}
+              people={people}
+              setPeople={setPeople}
+              originalPeople={originalPeople}
+              setOriginalPeople={setOriginalPeople}
+              originalBabyPeople={originalBabyPeople}
+              lockedPeople={lockedPeople}
+              onLockedPeople={setLockedPeople}
+              defaultMugshotFilenames={defaultMugshotFilenames}
+              onDefaultMugshotFilenames={setDefaultMugshotFilenames}
+              defaultMugshotRandomize={defaultMugshotRandomize}
+              onDefaultMugshotRandomize={setDefaultMugshotRandomize}
+              defaultMugshotAssignments={defaultMugshotAssignments}
+              ensureDefaultMugshotEagle={ensureDefaultMugshotEagle}
+              defaultQuotes={defaultQuotes}
+              onDefaultQuotes={setDefaultQuotes}
+              defaultQuotesRandomize={defaultQuotesRandomize}
+              onDefaultQuotesRandomize={setDefaultQuotesRandomize}
+              defaultQuoteAssignments={defaultQuoteAssignments}
+              defaultQuoteFallback={defaultQuoteFallback}
+              defaultBabyFilename={defaultBabyFilename}
+              babyBackgroundColor={babyBackgroundColor}
+              babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
+              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
+              babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
+              allowInsecureUploads={allowInsecureUploads}
+              setStatus={setStatus}
+              loading={loading}
               nameFontFamily={nameFontFamily}
               nameFontWeight={nameFontWeight}
               nameFontSize={nameFontSize}
@@ -2814,24 +2888,25 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
               onQuoteFontSize={setQuoteFontSize}
               onQuoteAllCaps={setQuoteAllCaps}
               onQuoteAlign={setQuoteAlign}
-              workspaceId={workspaceId}
               availableFonts={availableFonts}
               setAvailableFonts={setAvailableFonts}
             />
           )}
-          {activeStep === 6 && (
-            <>
-            {reviewPanel === "preview" && insecureHttp && !allowInsecureReviewResults ? (
+
+          {activeStep === "generate" && (
+            insecureHttp && !allowInsecureReviewResults ? (
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
-            ) : reviewPanel === "preview" ? (
-              <RenderPreflight
+            ) : (
+              <FinalizeStep
                 people={people}
                 peoplePerSpread={peoplePerSpread}
+                skipQuotes={skipQuotes}
+                skipBabyPhotos={skipBabyPhotos}
                 templateSize={templateSize}
-                outputFormat={outputFormat}
-                onOutputFormat={setOutputFormat}
                 outputSize={outputSize}
                 onOutputSize={setOutputSize}
+                outputFormat={outputFormat}
+                onOutputFormat={setOutputFormat}
                 placementMode={placementMode}
                 onPlacementMode={setPlacementMode}
                 forceAlphabetical={forceAlphabetical}
@@ -2839,236 +2914,47 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
                 loading={loading}
                 canContinue={canContinue}
                 handleRenderPreview={handleRenderPreview}
+                handleRenderAll={handleRenderAll}
                 workspaceId={workspaceId}
                 previewPath={previewPath}
                 previewNonce={previewNonce}
-                layout="split"
+                outputPath={outputPath}
+                outputPaths={outputPaths}
+                outputNonce={outputNonce}
+                usageInfo={usageInfo}
               />
-            ) : (
-              <ReviewStep
-                people={people}
-                workspaceId={workspaceId}
-                babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
-                defaultBabyFilename={defaultBabyFilename}
-                defaultQuoteFallback={defaultQuoteFallback}
-                defaultQuoteAssignments={defaultQuoteAssignments}
-                defaultMugshotAssignments={defaultMugshotAssignments}
-                perSpread={Math.max(1, Math.min(peoplePerSpread || 1, slots.length || 1))}
-                swapMode={swapMode}
-                swapDisabled={forceAlphabetical}
-                onToggleSwapMode={() => setSwapMode((v) => !v)}
-                onSwapPositions={(a, b) => {
-                  setPeople((prev) => {
-                    if (a === b) return prev;
-                    if (a < 0 || b < 0 || a >= prev.length || b >= prev.length) return prev;
-                    const next = [...prev];
-                    const tmp = next[a];
-                    next[a] = next[b];
-                    next[b] = tmp;
-                    return next;
-                  });
-                  setSlotAssignments({});
-                }}
-              />
-            )}
-            </>
+            )
           )}
-          {activeStep === 7 && (
-              <ResultsStep
-              outputPath={outputPath}
-              outputPaths={outputPaths}
-              workspaceId={workspaceId}
-              outputNonce={outputNonce}
-              usageInfo={usageInfo}
-            />
-          )}
-          {activeStep !== 1 && activeStep !== 6 && activeStep !== 7 && (
-            <div className="actions">
-              <button
-                disabled={activeStep === 0}
-                onClick={() => setActiveStep((s) => prevStepFrom(s))}
-              >
-                Back
-              </button>
-              <button type="button" className="danger" onClick={requestResetAll} disabled={loading}>
+
+          <div className="canvas-footer">
+            <button className="ghost" disabled={isFirstStep || loading} onClick={() => goToAdjacentStep(-1)}>
+              <ArrowLeft size={15} /> Back
+            </button>
+            <div className="footer-right">
+              <button type="button" className="danger ghost" onClick={requestResetAll} disabled={loading}>
                 Reset all
               </button>
-              {activeStep < steps.length - 1 ? (
+              {!isLastStep && (
                 <button
                   className="primary"
-                  disabled={!canContinue || loading}
-                  onClick={() => setActiveStep((s) => nextStepFrom(s))}
+                  disabled={loading || !nextStepMeta || !topStepReady(nextStepMeta.id)}
+                  onClick={() => goToAdjacentStep(1)}
                 >
-                  Continue
-                </button>
-              ) : (
-                <button className="primary" disabled={loading || !canContinue} onClick={handleRenderAll}>
-                  {loading ? "Rendering..." : "Render all"}
+                  Continue{nextStepMeta ? ` to ${nextStepMeta.label}` : ""} <ArrowRight size={15} />
                 </button>
               )}
             </div>
+          </div>
+          {!showImportStep && status && !renderFailedMessage && (
+            <p className="muted prewrap canvas-status">{prefixServerMessage(status)}</p>
           )}
-          {activeStep !== 6 && activeStep !== 7 && status && !renderFailedMessage && <p className="muted prewrap">{prefixServerMessage(status)}</p>}
-          {activeStep <= 4 && (
+          {!showImportStep && loading && progress > 0 && <ProgressBar progress={progress} />}
+          {activeStep === "template" && (
             <div className="tool-tips-center">
               <TipsBox tips={stepTips} />
             </div>
           )}
-          {activeStep !== 6 && activeStep !== 7 && loading && progress > 0 && <ProgressBar progress={progress} />}
-          </section>
-        )}
-
-        {activeStep === 2 && (
-          <section className="mapping-step">
-            <MugshotMappingStep
-              workspaceId={workspaceId}
-                babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
-              defaultMugshotFilenames={defaultMugshotFilenames}
-              onDefaultMugshotFilenames={setDefaultMugshotFilenames}
-              defaultMugshotRandomize={defaultMugshotRandomize}
-              onDefaultMugshotRandomize={setDefaultMugshotRandomize}
-              defaultMugshotAssignments={defaultMugshotAssignments}
-              defaultBabyFilename={defaultBabyFilename}
-              babyBackgroundColor={babyBackgroundColor}
-              babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
-              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
-              defaultQuoteAssignments={defaultQuoteAssignments}
-              defaultQuoteFallback={defaultQuoteFallback}
-              lockedPeople={lockedPeople}
-              onLockedPeople={setLockedPeople}
-              ensureDefaultMugshotEagle={ensureDefaultMugshotEagle}
-              namingPattern={namingPattern}
-              setNamingPattern={setNamingPattern}
-              advancedNameMatch={advancedNameMatch}
-              setAdvancedNameMatch={setAdvancedNameMatch}
-              allowInsecureUploads={allowInsecureUploads}
-              warnings={portraitWarnings}
-              onWarnings={setPortraitWarnings}
-              warningsOpen={portraitWarningsOpen}
-              onWarningsOpen={setPortraitWarningsOpen}
-              completedErrorCount={portraitCompletedErrorCount}
-              onCompletedErrorCount={setPortraitCompletedErrorCount}
-              onMapped={setPeople}
-              setStatus={setStatus}
-              setLoading={setLoading}
-              setProgress={setProgress}
-              loading={loading}
-              people={people}
-              setPeople={setPeople}
-              originalPeople={originalPeople}
-              setOriginalPeople={setOriginalPeople}
-              status={status}
-              progress={progress}
-              canContinue={canContinue}
-              onBack={() => setActiveStep(1)}
-              onReset={requestResetAll}
-              onContinue={() => setActiveStep(nextStepFrom(2))}
-            />
-          </section>
-        )}
-
-        {activeStep === 3 && (
-          <section className="mapping-step">
-            <QuotesStepStep
-              defaultQuotes={defaultQuotes}
-              onDefaultQuotes={setDefaultQuotes}
-              defaultQuotesRandomize={defaultQuotesRandomize}
-              onDefaultQuotesRandomize={setDefaultQuotesRandomize}
-              defaultQuoteAssignments={defaultQuoteAssignments}
-              defaultMugshotAssignments={defaultMugshotAssignments}
-              defaultBabyFilename={defaultBabyFilename}
-              babyBackgroundColor={babyBackgroundColor}
-              babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
-              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
-              babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
-              quotesWarnings={quotesWarnings}
-              onQuotesWarnings={setQuotesWarnings}
-              quotesWarningsOpen={quotesWarningsOpen}
-              onQuotesWarningsOpen={setQuotesWarningsOpen}
-              quotesCompletedErrorCount={quotesCompletedErrorCount}
-              onQuotesCompletedErrorCount={setQuotesCompletedErrorCount}
-              workspaceId={workspaceId}
-              allowInsecureUploads={allowInsecureUploads}
-              setStatus={setStatus}
-              setLoading={setLoading}
-              setProgress={setProgress}
-              people={people}
-              setPeople={setPeople}
-              loading={loading}
-              status={status}
-              progress={progress}
-              canContinue={canContinue}
-              onBack={() => setActiveStep(2)}
-              onReset={requestResetAll}
-              onContinue={() => setActiveStep(nextStepFrom(3))}
-            />
-          </section>
-        )}
-
-        {activeStep === 4 && (
-          <section className="mapping-step">
-            <BabyPhotosStepStep
-              workspaceId={workspaceId}
-              babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
-              defaultBabyFilename={defaultBabyFilename}
-              defaultQuoteFallback={defaultQuoteFallback}
-              defaultQuoteAssignments={defaultQuoteAssignments}
-              defaultMugshotAssignments={defaultMugshotAssignments}
-              onDefaultBabyFilename={setDefaultBabyFilename}
-              babyZipWarnings={babyZipWarnings}
-              onBabyZipWarnings={setBabyZipWarnings}
-              babyZipWarningsOpen={babyZipWarningsOpen}
-              onBabyZipWarningsOpen={setBabyZipWarningsOpen}
-              babyCompletedErrorCount={babyCompletedErrorCount}
-              onBabyCompletedErrorCount={setBabyCompletedErrorCount}
-              babyIngest={babyIngest}
-              onBabyIngest={setBabyIngest}
-              onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
-              babyBackgroundColor={babyBackgroundColor}
-              onBabyBackgroundColor={setBabyBackgroundColor}
-              centerBabyOnFace={centerBabyOnFace}
-              onCenterBabyOnFace={setCenterBabyOnFace}
-              backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
-              centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
-              allowInsecureUploads={allowInsecureUploads}
-              setStatus={setStatus}
-              setLoading={setLoading}
-              setProgress={setProgress}
-              people={people}
-              setPeople={setPeople}
-              loading={loading}
-              status={status}
-              progress={progress}
-              canContinue={canContinue}
-              onBack={() => setActiveStep(prevStepFrom(4))}
-              onReset={requestResetAll}
-              onContinue={() => setActiveStep(5)}
-            />
-          </section>
-        )}
-
-        {activeStep === 1 && (
-          <ParsingReview
-            slots={slots}
-            templateSize={templateSize}
-            onSlots={setSlots}
-            previewMode={previewMode}
-            onPreviewMode={setPreviewMode}
-            annotatedPreviewUrl={annotatedPreviewUrl}
-            cleanPreviewUrl={cleanPreviewUrl}
-            templatePreviewUrl={templatePreviewUrl}
-            selectedSlot={selectedSlot}
-            onSelectedSlot={setSelectedSlot}
-            peoplePerSpread={peoplePerSpread}
-            parsedSlots={parsedSlots}
-            rawDebug={rawDebug}
-            loading={loading}
-            onBack={() => setActiveStep(0)}
-            onReset={requestResetAll}
-            onContinue={() => setActiveStep(2)}
-          />
-        )}
-      </main>
+        </section>
       </div>
     </>
   );

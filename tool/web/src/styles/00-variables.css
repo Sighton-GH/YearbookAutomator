@@ -1,16 +1,110 @@
 :root {
-  color: #0f172a;
-  background-color: #f7fdf9;
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-  line-height: 1.6;
-  --accent: #16a34a;
-  --accent-strong: #15803d;
+  font-family: var(--font-sans);
+  line-height: var(--lh-base);
+  --mono-font: var(--font-mono);
+}
+
+/* =========================================================================
+   DARK (default) — deeper, layered neutrals for real depth, teal accent.
+   Legacy names (--bg-panel, --bg-quiet, --muted…) kept as aliases so existing
+   component CSS keeps working while new code uses the semantic --surface-* set.
+   ========================================================================= */
+[data-theme="dark"] {
+  --text: #e8eef2;
+  --text-soft: #b7c4ca;
+  --text-muted: #8a9aa0;
+  --muted: #8a9aa0; /* legacy alias */
+
+  --bg-app: #090d11;
+  --surface: #11171d;
+  --surface-raised: #161e25;
+  --surface-sunken: #0c1217;
+  --surface-hover: #1a242b;
+  --bg-panel: #11171d;   /* legacy alias -> surface */
+  --bg-quiet: #0e141a;   /* legacy alias -> sunken-ish */
+  --inspector-bg: #0d141a;
+
+  --border-subtle: #1b242b;
+  --border: #25323a;
+  --border-strong: #34454e;
+
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-hover: #5eead4;
+  --accent-contrast: #042925;
+  --accent-soft: rgba(45, 212, 191, 0.14);
+  --accent-line: rgba(45, 212, 191, 0.42);
+
+  --danger: #f87171;
+  --danger-strong: #ef4444;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --danger-contrast: #2a0c0c;
+
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.13);
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+
+  --bg-warn: #241d08;
+  --border-warn: #5a4313;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.46);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.52);
+  --focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.34);
+  --scrim: rgba(3, 6, 9, 0.66);
+}
+
+/* =========================================================================
+   LIGHT — airy, restrained, same teal accent family.
+   ========================================================================= */
+[data-theme="light"] {
+  --text: #0e1a1c;
+  --text-soft: #41535a;
+  --text-muted: #647079;
+  --muted: #647079; /* legacy alias */
+
+  --bg-app: #f3f7f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef4f3;
+  --surface-hover: #e9f1ef;
+  --bg-panel: #ffffff;   /* legacy alias */
+  --bg-quiet: #eef4f3;   /* legacy alias */
+  --inspector-bg: #f4f9f8;
+
+  --border-subtle: #e4ecea;
+  --border: #d4e1de;
+  --border-strong: #b9cbc7;
+
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-hover: #0b7d73;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  --accent-line: rgba(13, 148, 136, 0.4);
+
   --danger: #dc2626;
   --danger-strong: #b91c1c;
-  --muted: #64748b;
-  --border: #d1e3d4;
-  --bg-panel: #ffffff;
-  --bg-quiet: #eef7ef;
-  --bg-warn: #fff7d6;
-  --border-warn: #f3d28c;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --danger-contrast: #ffffff;
+
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.1);
+  --success: #047857;
+  --success-soft: rgba(4, 120, 87, 0.1);
+
+  --bg-warn: #fff7e6;
+  --border-warn: #f0cf8c;
+
+  --shadow-1: 0 1px 2px rgba(15, 35, 32, 0.06);
+  --shadow-2: 0 8px 22px rgba(15, 35, 32, 0.09);
+  --shadow-3: 0 18px 44px rgba(15, 35, 32, 0.13);
+  --focus-ring: 0 0 0 3px rgba(13, 148, 136, 0.26);
+  --scrim: rgba(15, 30, 28, 0.42);
+}
+
+html {
+  color: var(--text);
+  background-color: var(--bg-app);
 }

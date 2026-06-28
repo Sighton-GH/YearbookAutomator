@@ -10,7 +10,47 @@ import {
   setStoredLicenseKey,
   validateLicenseKey,
 } from "../licensing";
-import { ToggleSwitch } from "../components/ToggleSwitch";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { GuidedTour, type TourStep } from "../components/GuidedTour";
+import { HelpPanel } from "../components/HelpPanel";
+import { HelpCircle, KeyRound } from "lucide-react";
+
+const TOUR_SEEN_KEY = "ymga-tour-seen-v1";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    title: "Welcome 👋",
+    body: "This tool turns a template, a roster, and photos into print-ready yearbook spreads. Here's a 30-second tour.",
+  },
+  {
+    target: ".roadmap-rail",
+    placement: "right",
+    title: "Your roadmap",
+    body: "Five simple steps, left to right: Template → Roster & Photos → People → Style → Generate. Each step unlocks the next.",
+  },
+  {
+    target: ".import-card",
+    placement: "left",
+    title: "Upload as you go",
+    body: "Each step asks only for what it needs. Drag a file in or click Upload — we'll process it automatically.",
+  },
+  {
+    target: ".canvas-footer .footer-right button.primary",
+    placement: "top",
+    title: "Move forward",
+    body: "When a step is ready, the Continue button lights up. You can always jump back via the roadmap.",
+  },
+  {
+    target: "[data-tour=\"help\"]",
+    placement: "bottom",
+    title: "Help is always here",
+    body: "Stuck? Open Help to replay this tour, load a sample project, or read the docs. Look for ? icons for tips on any setting.",
+  },
+  {
+    title: "You're all set",
+    body: "Start by uploading your template — or click Help → Load a sample project to see a finished example first.",
+  },
+];
 
 type SessionTimingDetail = {
   remainingMs: number;
@@ -49,12 +89,16 @@ export function ToolAppPage() {
     return window.localStorage.getItem("ymga-session-info-collapsed") === "1";
   });
   const [appTheme, setAppTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") return "light";
-    return window.localStorage.getItem("ymga-app-theme") === "dark" ? "dark" : "light";
+    if (typeof window === "undefined") return "dark";
+    return window.localStorage.getItem("ymga-app-theme") === "light" ? "light" : "dark";
   });
   const isDark = appTheme === "dark";
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const sessionInfoRef = useRef<HTMLDivElement | null>(null);
+
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [sampleBusy, setSampleBusy] = useState(false);
 
   const [licenseKeyInput, setLicenseKeyInput] = useState("");
   const [licenseBusy, setLicenseBusy] = useState(false);
@@ -161,12 +205,44 @@ export function ToolAppPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("ymga-app-theme", isDark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("ymga-session-info-collapsed", sessionInfoCollapsed ? "1" : "0");
   }, [sessionInfoCollapsed]);
+
+  // First-run: auto-launch the guided tour once the tool is unlocked (give App a beat to mount the rail).
+  useEffect(() => {
+    if (checking || !valid) return;
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(TOUR_SEEN_KEY) === "1") return;
+    const t = window.setTimeout(() => setTourOpen(true), 900);
+    return () => window.clearTimeout(t);
+  }, [checking, valid]);
+
+  const closeTour = () => {
+    setTourOpen(false);
+    try {
+      window.localStorage.setItem(TOUR_SEEN_KEY, "1");
+    } catch {
+      // ignore
+    }
+  };
+
+  // App owns the upload pipeline; it signals when a sample finishes (or fails) loading.
+  useEffect(() => {
+    const onDone = () => setSampleBusy(false);
+    window.addEventListener("ymga:load-sample-done", onDone);
+    return () => window.removeEventListener("ymga:load-sample-done", onDone);
+  }, []);
+
+  const handleLoadSample = () => {
+    setSampleBusy(true);
+    setHelpOpen(false);
+    window.dispatchEvent(new Event("ymga:load-sample"));
+  };
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -296,24 +372,27 @@ export function ToolAppPage() {
     );
   }
 
+  // Flush the latest in-memory session edits to server before releasing lock.
+  const flushAndReleaseWorkspace = async (workspaceId: string) => {
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        window.dispatchEvent(
+          new CustomEvent("ymga:flush-workspace-state", {
+            detail: { resolve, reject },
+          }),
+        );
+      }),
+      new Promise<void>((resolve) => window.setTimeout(resolve, 2000)),
+    ]);
+
+    await releaseWorkspace(workspaceId, clientSessionId);
+  };
+
   const handleReleaseWorkspace = async () => {
     if (!resolvedWorkspaceId || resolvedLicenseType !== "commercial") return;
     try {
       setReleasingWorkspace(true);
-
-      // Flush the latest in-memory session edits to server before releasing lock.
-      await Promise.race([
-        new Promise<void>((resolve, reject) => {
-          window.dispatchEvent(
-            new CustomEvent("ymga:flush-workspace-state", {
-              detail: { resolve, reject },
-            }),
-          );
-        }),
-        new Promise<void>((resolve) => window.setTimeout(resolve, 2000)),
-      ]);
-
-      await releaseWorkspace(resolvedWorkspaceId, clientSessionId);
+      await flushAndReleaseWorkspace(resolvedWorkspaceId);
       setResolvedWorkspaceId(null);
       setLockConflict({
         message: "Workspace released for this session. Close this tab or return to the main site so another device can access it.",
@@ -327,8 +406,29 @@ export function ToolAppPage() {
     }
   };
 
+  // Lets the user swap in a different license key: best-effort release any held
+  // commercial workspace lock, then clear the stored key to return to the license-entry screen.
+  const handleChangeLicenseKey = async () => {
+    setMobileMenuOpen(false);
+    if (resolvedWorkspaceId && resolvedLicenseType === "commercial") {
+      try {
+        await flushAndReleaseWorkspace(resolvedWorkspaceId);
+      } catch {
+        // Proceed to the license screen even if the release call failed.
+      }
+    }
+
+    setStoredLicenseKey(null);
+    setValid(false);
+    setResolvedWorkspaceId(null);
+    setResolvedLicenseType(null);
+    setLockConflict(null);
+    setLicenseKeyInput("");
+    setLicenseError("");
+  };
+
   return (
-    <div className={`app-shell${isDark ? " dark" : ""}`}>
+    <div className="app-shell">
       <div className="app-return-bar">
         <div className="app-return-inner">
           <div className="app-title-row" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -418,12 +518,29 @@ export function ToolAppPage() {
               ) : null}
             </div>
             <div className="app-return-actions">
-              <ToggleSwitch
-                className="app-theme-toggle-switch"
-                checked={isDark}
-                onChange={(next) => setAppTheme(next ? "dark" : "light")}
-                label="Dark mode"
-              />
+              <button
+                type="button"
+                className="app-icon-btn"
+                data-tour="help"
+                onClick={() => {
+                  setHelpOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                aria-label="Open help"
+              >
+                <HelpCircle size={16} />
+                <span>Help</span>
+              </button>
+              <button
+                type="button"
+                className="app-icon-btn"
+                onClick={() => void handleChangeLicenseKey()}
+                aria-label="Change license key"
+              >
+                <KeyRound size={16} />
+                <span>Change License Key</span>
+              </button>
+              <ThemeToggle isDark={isDark} onChange={(next) => setAppTheme(next ? "dark" : "light")} />
               <a
                 className="app-return-link"
                 href={WEBSITE_URL}
@@ -461,9 +578,22 @@ export function ToolAppPage() {
             alt="Sighton logo"
             style={{ width: 20, height: 20, objectFit: "contain" }}
           />
-          <span>Sighton Innovations</span>
+          <span>Sighton Yearbook Tools</span>
         </div>
       </footer>
+
+      <HelpPanel
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onReplayTour={() => {
+          setHelpOpen(false);
+          setTourOpen(true);
+        }}
+        onLoadSample={handleLoadSample}
+        sampleBusy={sampleBusy}
+        websiteUrl={WEBSITE_URL}
+      />
+      <GuidedTour steps={TOUR_STEPS} open={tourOpen} onClose={closeTour} />
     </div>
   );
 }

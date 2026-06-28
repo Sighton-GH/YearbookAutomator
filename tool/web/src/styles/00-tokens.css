@@ -1,0 +1,76 @@
+/* =========================================================================
+   Design tokens — structural scales (theme-independent).
+   Colour / surface / shadow tokens live in 00-variables.css (per theme).
+   Everything here is fixed regardless of light/dark.
+   ========================================================================= */
+
+:root {
+  /* Type family — prefer Inter when installed, else a clean system stack. */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", monospace;
+
+  /* Spacing scale (4px base) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* Corner radii */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Type scale */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-cap: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --fs-2xl: 25px;
+  --fs-3xl: 31px;
+
+  --lh-tight: 1.18;
+  --lh-snug: 1.4;
+  --lh-base: 1.55;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --tracking-tight: -0.012em;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.06em;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 320ms;
+
+  /* Layout */
+  --inspector-w: 328px;
+  --topbar-h: 56px;
+  --canvas-max: 1120px;
+
+  /* Stacking order */
+  --z-rail: 20;
+  --z-topbar: 40;
+  --z-popover: 60;
+  --z-modal: 80;
+  --z-tour: 100;
+}

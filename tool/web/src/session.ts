@@ -2,12 +2,18 @@ import type { Area } from "react-easy-crop";
 import type { BackgroundMode, PersonRecord, TemplateSlots } from "./api";
 import type { Align, FontWeight, PlacementMode } from "./types";
 
+export type TopStep = "template" | "roster" | "people" | "style" | "generate";
+export type EditTab = "layout" | "people" | "style";
+
+export const TOP_STEP_ORDER: TopStep[] = ["template", "roster", "people", "style", "generate"];
+
 export type PersistedSessionV1 = {
   v: 1;
   sessionId?: string;
   startedAtMs?: number;
   expiresAtMs?: number;
-  activeStep: number;
+  activeStep: number | TopStep;
+  editTab?: EditTab;
   workspaceId: string | null;
   templateId: string | null;
   skipQuotes?: boolean;
@@ -179,17 +185,39 @@ export function isSessionExpired(session: PersistedSessionV1, nowMs = Date.now()
   return getRemainingSessionMs(session, nowMs) <= 0;
 }
 
-export function parseStepFromSearch(search: string): number | null {
+// Maps legacy step identifiers onto the current 5-step model so old saved sessions/configs and
+// bookmarked `?step=` URLs keep working across two redesigns:
+//   - 8-step numeric wizard (0-7)
+//   - the interim 3-phase model ("import" | "edit" | "finalize")
+const isTopStep = (x: unknown): x is TopStep =>
+  TOP_STEP_ORDER.includes(x as TopStep);
+
+export function migrateActiveStep(raw: number | TopStep | string | null | undefined): TopStep {
+  if (isTopStep(raw)) return raw;
+  // Interim 3-phase model.
+  if (raw === "import") return "template";
+  if (raw === "edit") return "people";
+  if (raw === "finalize") return "generate";
+  // Legacy 8-step numeric wizard.
+  const n = typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw);
+  if (!Number.isFinite(n)) return "template";
+  if (n <= 1) return "template"; // template parse / review
+  if (n === 2) return "roster"; // spreadsheet + portrait ingest
+  if (n <= 5) return "people"; // mapping review / quotes / baby
+  if (n === 6) return "style"; // styling
+  return "generate"; // render / results
+}
+
+export function parseStepFromSearch(search: string): TopStep | null {
   try {
     const params = new URLSearchParams(search || "");
     const raw = (params.get("step") || "").trim();
     if (!raw) return null;
+    if (isTopStep(raw)) return raw;
+    if (raw === "import" || raw === "edit" || raw === "finalize") return migrateActiveStep(raw);
     const n = Number(raw);
     if (!Number.isFinite(n)) return null;
-    const i = Math.floor(n);
-    if (i < 0) return 0;
-    if (i > 7) return 7;
-    return i;
+    return migrateActiveStep(Math.floor(n));
   } catch {
     return null;
   }

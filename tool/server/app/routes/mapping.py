@@ -874,7 +874,7 @@ async def upload_quotes_spreadsheet(
     return SpreadsheetPreview(workspace_id=workspace_id, people=out_people, warnings=warnings)
 
 
-@router.get("/asset")
+@router.api_route("/asset", methods=["GET", "HEAD"])
 async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filename: str):
     root = workspace_dir(workspace_id)
     if kind == "mugshot":

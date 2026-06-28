@@ -30,6 +30,9 @@ Thumbs.db
 *.swp
 .vscode/
 
+# --- Local testing assets (not for upload) ---
+testing assets/
+
 # --- App: user/workspace data (DO NOT COMMIT) ---
 # All per-workspace data lives under tool/server/app/data/<workspace_id>/
 # This includes uploads, spreadsheets, portraits, extracted images, masks, fonts, and outputs.

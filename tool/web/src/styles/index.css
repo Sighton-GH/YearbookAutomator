@@ -1,3 +1,4 @@
+@import "./00-tokens.css";
 @import "./00-variables.css";
 @import "./01-reset.css";
 @import "./02-shell.css";
@@ -6,3 +7,4 @@
 @import "./05-tool.css";
 @import "./06-modals.css";
 @import "./07-pages.css";
+@import "./08-workspace.css";

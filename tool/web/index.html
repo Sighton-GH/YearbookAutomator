@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/assets/Sighton_Logo.png" />
     <link rel="apple-touch-icon" href="/assets/Sighton_Logo.png" />
-    <title>Yearbook Auto Flow</title>
+    <title>Custom Flow Automator — Sighton Yearbook Tools</title>
+    <script>
+      (function () {
+        var theme = "dark";
+        try {
+          if (window.localStorage.getItem("ymga-app-theme") === "light") theme = "light";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

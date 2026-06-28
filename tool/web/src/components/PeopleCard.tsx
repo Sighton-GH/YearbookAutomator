@@ -29,6 +29,7 @@ export function PeopleCard({
   onDragOver,
   onDragLeave,
   onDrop,
+  onClick,
   mugshot,
   baby,
   quoteValue,
@@ -44,8 +45,9 @@ export function PeopleCard({
   onDragOver?: React.DragEventHandler<HTMLDivElement>;
   onDragLeave?: React.DragEventHandler<HTMLDivElement>;
   onDrop?: React.DragEventHandler<HTMLDivElement>;
+  onClick?: () => void;
   mugshot: PeopleCardThumb;
-  baby: PeopleCardThumb;
+  baby?: PeopleCardThumb;
   quoteValue: string;
   onQuoteChange: (next: string) => void;
   showQuote?: boolean;
@@ -138,6 +140,7 @@ export function PeopleCard({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onClick={onClick}
     >
       <div className="people-card-header">
         <div className="stack" style={{ gap: 4 }}>
@@ -152,7 +155,7 @@ export function PeopleCard({
 
       <div className="people-card-thumbs">
         {renderThumb(mugshot)}
-        {renderThumb(baby)}
+        {baby ? renderThumb(baby) : null}
       </div>
 
       <div className="people-card-body">

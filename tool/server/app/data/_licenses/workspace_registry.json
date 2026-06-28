@@ -1,13 +1,91 @@
 {
   "bindings": [
     {
-      "created_at": 1782047584,
-      "expires_at": 1782076604,
-      "last_seen": 1782047804,
+      "created_at": 1782093475,
+      "expires_at": 1782122276,
+      "last_seen": 1782093476,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-IN5RU-CI4MM-HLMQF-EQW2B-24U7Y-N5AGL-BQ67M-LQFSY-36BCW-PXKUA-BA:89f17807-27fb-4eb9-a2f1-0dca81cd9da5",
+      "workspace_id": "d1ddbf6a9c0f4e7cb27ae9caed8fef63"
+    },
+    {
+      "created_at": 1782093608,
+      "expires_at": 1782122468,
+      "last_seen": 1782093668,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-IY3OC-OKTC4-J4SP2-GWQYH-KZIPX-N5WIF-NJ7L3-RGIYK-PFCI3-DX6X3-2Q:61cd2f2a-e549-424b-9313-b09fb5f57bd2",
+      "workspace_id": "aae6829f777149908e8f3844e4bc45d2"
+    },
+    {
+      "created_at": 1782093712,
+      "expires_at": 1782122514,
+      "last_seen": 1782093714,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-ZARRH-URLEJ-4FE5M-IOTW5-67GY4-A257I-E2RND-EOHPH-A7YQ6-MKIHM-JQ:788b2a63-5221-4a5e-bd92-a5404ffe93d4",
+      "workspace_id": "4f5cc2423b984dac9aeb9c74ed171721"
+    },
+    {
+      "created_at": 1782093731,
+      "expires_at": 1782122540,
+      "last_seen": 1782093740,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-YMU6X-LTAKV-GCQIH-HKEHQ-ROHR6-LSQ3I-3IHQO-QYO5G-MF6ES-WDQKL-JA:d35e646f-1481-4af6-9d56-bf6789f40de1",
+      "workspace_id": "dcc8bfe830ff488d945c33f73797e392"
+    },
+    {
+      "created_at": 1782093832,
+      "expires_at": 1782122641,
+      "last_seen": 1782093841,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-DVRGZ-E4ND3-25TKY-SSJXV-UR3HJ-B2WAP-FGYE4-BKB54-S2DO3-UPMJL-XA:0b005131-cbb8-4b4b-8861-9b99b9cd7322",
+      "workspace_id": "b64fac97c0d847d48a1fd2e9d4a22a87"
+    },
+    {
+      "created_at": 1782523297,
+      "expires_at": 1782554994,
+      "last_seen": 1782526194,
       "license_type": "personal",
       "lock": null,
       "owner_key": "pers:YMGA1-U6FE3-7LIIJ-GUEYO-X62XJ-ZATEX-FLI2H-VLWXM-X3VYL-CPFU7-2JPIQ-5A:6bbed2fd-a383-4f71-ba92-97308fe95592",
-      "workspace_id": "b34239a11ffa46d6b96af131b132608d"
+      "workspace_id": "fdfadf1ab1ca41beb35f65e654979c1d"
+    },
+    {
+      "created_at": 1782543372,
+      "expires_at": 1782572232,
+      "last_seen": 1782543432,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-DTYCF-W2XD5-OW6UF-2AVYI-LYMIJ-NZ4PB-YAZWB-X5Y5Y-Z2QWS-O3HVW-MQ:audit-device-002",
+      "workspace_id": "21ad39a28ae0433587b5a733911cc3bb"
+    },
+    {
+      "created_at": 1782601888,
+      "expires_at": 1782630848,
+      "last_seen": 1782602048,
+      "license_type": "personal",
+      "lock": null,
+      "owner_key": "pers:YMGA1-CH6NE-6POCZ-OBTA3-HJYET-EEVXI-YPRWT-3DU3T-5GSB7-622K5-KWY2Z-HQ:audit-device-003",
+      "workspace_id": "e93c431a99ae4d8a96b3fe9bfb6e33e6"
+    },
+    {
+      "created_at": 1782618608,
+      "expires_at": 1782648369,
+      "last_seen": 1782619569,
+      "license_type": "commercial",
+      "lock": {
+        "acquired_at": 1782618608,
+        "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+        "expires_at": 1782619689,
+        "last_heartbeat_at": 1782619569,
+        "session_id": "be8dec40-eb26-4ad1-9933-90cdea7152ff"
+      },
+      "owner_key": "comm:YMGA1-RLD4T-LB4WW-COQIU-JVQ3M-GL2KZ-VHQWV-RU6MB-WQDP7-KITGY-53IJH-EA",
+      "workspace_id": "0bf5d94b7dd3466eabb2d8778831da84"
     }
   ],
   "version": 1

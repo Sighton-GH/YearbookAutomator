@@ -335,21 +335,6 @@
   gap: 6px;
 }
 
-/* Embedded app stepper: one row, full-width bar */
-.steps.fullwidth {
-  width: 100%;
-  justify-content: space-between;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.steps.fullwidth .step {
-  flex: 1 1 0;
-  justify-content: center;
-  white-space: nowrap;
-}
-
 /* Compact actions on the right side of the tool stepper */
 .tool-actions {
   display: inline-flex;

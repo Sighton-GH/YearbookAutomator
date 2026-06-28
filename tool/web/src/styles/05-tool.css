@@ -329,97 +329,6 @@
   }
 }
 
-.mapping-step {
-  display: grid;
-  gap: 16px;
-}
-
-.mapping-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 16px;
-  align-items: start;
-}
-
-.mapping-layout.mapping-layout-empty {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.mapping-layout.mapping-layout-empty .mapping-sidebar {
-  grid-column: 1 / -1;
-  order: -1;
-}
-
-.mapping-layout.mapping-layout-empty .mapping-main {
-  order: 2;
-}
-
-.mapping-main {
-  min-width: 0;
-}
-
-.mapping-sidebar {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-}
-
-.mapping-sidebar.mapping-sidebar-collapse {
-  animation: mappingSidebarCollapse 520ms cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: right center;
-}
-
-.mapping-sidebar-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mapping-sidebar-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.sidebar-actions-full {
-  display: grid;
-  gap: 8px;
-}
-
-.sidebar-actions-full > button {
-  width: 100%;
-}
-
-.sidebar-swap-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.sidebar-swap-row > button {
-  width: 100%;
-}
-
-.mapping-actions {
-  margin-top: 0;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-}
-
-.baby-process-actions {
-  width: 100%;
-  flex-wrap: nowrap;
-}
-
-.baby-process-actions > button.primary {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.baby-process-actions > button:not(.primary) {
-  flex: 0 0 auto;
-}
-
 .people-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -454,19 +363,7 @@
   }
 }
 
-@keyframes mappingSidebarCollapse {
-  from {
-    opacity: 0.6;
-    transform: translateX(-80px) scaleX(1.2);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scaleX(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .mapping-sidebar.mapping-sidebar-collapse,
   .people-grid.people-grid-enter .people-card {
     animation: none;
   }
@@ -539,23 +436,23 @@
 }
 
 .people-card.people-card-locked {
-  background: #f3f4f6 !important;
-  border-color: #cbd5e1 !important;
+  background: var(--bg-quiet) !important;
+  border-color: var(--border) !important;
 }
 
 .people-card.people-card-locked :not(.lock-toggle-btn):not(.lock-toggle-btn *) {
-  color: #6b7280 !important;
+  color: var(--muted) !important;
 }
 
 .people-card.people-card-locked .lock-toggle-btn {
-  color: #0f172a !important;
-  background: #ffffff !important;
-  border-color: #16a34a !important;
+  color: var(--text) !important;
+  background: var(--bg-panel) !important;
+  border-color: var(--accent) !important;
   filter: none !important;
   opacity: 1 !important;
   box-shadow:
     0 0 0 1px rgba(15, 23, 42, 0.05) inset,
-    0 0 0 2px rgba(22, 163, 74, 0.35);
+    0 0 0 2px var(--accent-soft);
 }
 
 .people-card.people-card-locked .lock-toggle-btn * {
@@ -591,9 +488,9 @@
   border-radius: 50%;
   line-height: 1;
   box-sizing: border-box;
-  background: #ffffff;
-  border-color: #16a34a;
-  color: #16a34a;
+  background: var(--bg-panel);
+  border-color: var(--accent);
+  color: var(--accent);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
 }
 
@@ -680,45 +577,7 @@
   align-items: center;
 }
 
-.table {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.table-head, .table-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr;
-  padding: 10px 12px;
-  gap: 8px;
-  align-items: start;
-}
-
-.table.four .table-head, .table.four .table-row {
-  grid-template-columns: 60px 1fr 1fr 1fr;
-}
-
-.table.five .table-head, .table.five .table-row {
-  grid-template-columns: 60px 1fr 1fr 1fr 1fr;
-}
-
-.table-head { background: #eef7ef; font-weight: 700; }
-.table-row:nth-child(odd) { background: #f7fdf9; }
-
 .canvas svg rect:hover { stroke: var(--accent); }
-
-.table-row textarea {
-  width: 100%;
-  min-height: 52px;
-  resize: vertical;
-}
-
-.table-row input[type="number"] {
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
-}
 
 .actions-row {
   display: flex;
@@ -837,6 +696,15 @@
   color: var(--muted);
   font-size: 32px;
   line-height: 1;
+}
+
+.thumb-placeholder-label {
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  padding: 6px;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .thumb-cell {
@@ -1017,28 +885,6 @@
   cursor: crosshair;
 }
 
-.slot-card {
-  cursor: pointer;
-}
-
-.table-row.active {
-  border-left: 4px solid var(--accent);
-  background: #e6f6eb;
-}
-
-.table-row.swap-mode {
-  cursor: grab;
-}
-
-.table-row.dragging {
-  opacity: 0.72;
-}
-
-.table-row.swap-target {
-  outline: 2px dashed var(--accent);
-  outline-offset: -4px;
-}
-
 .people-card.swap-mode {
   cursor: grab;
 }
@@ -1052,12 +898,6 @@
   outline-offset: -4px;
 }
 
-.portrait-swap-target {
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
-  cursor: grab;
-}
-
 .preview-toggle {
   display: flex;
   gap: 8px;
@@ -1066,191 +906,6 @@
   align-items: center;
 }
 
-.review-switch {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.review-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.review-tab {
-  appearance: none;
-  border: none;
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 14px;
-  background: transparent;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-}
-
-.review-tab + .review-tab {
-  border-left: 1px solid var(--border);
-}
-
-.review-tab:hover:not(.active) {
-  background: #f9fafb;
-  color: #374151;
-}
-
-.review-tab.active {
-  background: var(--accent);
-  color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.review-tab.active + .review-tab {
-  border-left-color: transparent;
-}
-
-.review-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  z-index: 1;
-}
-
-.review-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 16px;
-  align-items: start;
-}
-
-.review-split-left,
-.review-split-right {
-  min-width: 0;
-}
-
-.review-split-right {
-  max-width: 360px;
-  width: 100%;
-}
-
-@media (max-width: 1100px) {
-  .review-split {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Table-based slot editor */
-.slot-editor-table {
-  max-height: 480px;
-  overflow-y: auto;
-}
-
-.slot-editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  gap: 8px;
-}
-
-.slot-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.slot-table th {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.slot-table td {
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-}
-
-.slot-row-main {
-  cursor: pointer;
-  transition: background-color 0.1s;
-}
-
-.slot-row-main:hover {
-  background-color: #f5f5f5;
-}
-
-.slot-row-main.active,
-.slot-row-main.expanded {
-  background-color: #e6f6eb;
-}
-
-.expand-cell {
-  width: 20px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.slot-num-cell {
-  font-weight: 600;
-  width: 50px;
-}
-
-.slot-summary-cell {
-  color: var(--muted);
-  font-size: 12px;
-  font-family: monospace;
-}
-
-.slot-detail-row {
-  background-color: #fafafa;
-}
-
-.slot-detail-row td {
-  padding: 3px 8px;
-}
-
-.part-label-cell {
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.size-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.size-cell span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.slot-table input[type="number"] {
-  width: 60px;
-  padding: 3px 6px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  text-align: center;
-}
-
-.slot-table input[type="number"]:focus {
-  outline: none;
-  border-color: var(--accent);
-}
 
 /* Debug section at bottom */
 .debug-section {
