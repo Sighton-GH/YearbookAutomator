@@ -1343,6 +1343,30 @@
       "license_type": "personal",
       "ts": 1782929718,
       "workspace_id": "d308d133d43843b5adf323cc4774405d"
+    },
+    {
+      "detail": "",
+      "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+      "event": "workspace_created",
+      "license_type": "commercial",
+      "ts": 1782930895,
+      "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
+    },
+    {
+      "detail": "",
+      "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1782930903,
+      "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
+    },
+    {
+      "detail": "",
+      "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1782930949,
+      "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
     }
   ]
 }

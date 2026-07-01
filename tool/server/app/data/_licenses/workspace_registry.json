@@ -172,21 +172,6 @@
       "workspace_id": "d2064a7701cc4e34836ebb0a35dc97a9"
     },
     {
-      "created_at": 1782665543,
-      "expires_at": 1782702551,
-      "last_seen": 1782673751,
-      "license_type": "commercial",
-      "lock": {
-        "acquired_at": 1782665890,
-        "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
-        "expires_at": 1782673871,
-        "last_heartbeat_at": 1782673751,
-        "session_id": "f103c8e6-3fab-4069-9450-6a03debf166f"
-      },
-      "owner_key": "comm:YMGA1-Q5NI5-3GVRF-2THAW-Z55R6-P7S37-D6A3Y-NZRMR-DE6VP-MLUI4-PJLAI-WQ",
-      "workspace_id": "28f30cddde5a4118a4a34e4591ee554b"
-    },
-    {
       "created_at": 1782666045,
       "expires_at": 1782694846,
       "last_seen": 1782666046,
@@ -347,6 +332,21 @@
       "lock": null,
       "owner_key": "pers:YMGA1-GPPAE-I2UAF-PZ2CU-WT5AY-ZCQ3C-GZKC3-J7VYH-4GVTM-ZYETT-ATFEP-DA:aab7d4ab-a93f-4c2b-9381-879a2a40c260",
       "workspace_id": "d308d133d43843b5adf323cc4774405d"
+    },
+    {
+      "created_at": 1782930895,
+      "expires_at": 1782959750,
+      "last_seen": 1782930950,
+      "license_type": "commercial",
+      "lock": {
+        "acquired_at": 1782930949,
+        "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+        "expires_at": 1782931070,
+        "last_heartbeat_at": 1782930950,
+        "session_id": "fb204fa1-ce75-4d04-b8d5-938bb26d057e"
+      },
+      "owner_key": "comm:YMGA1-Q5NI5-3GVRF-2THAW-Z55R6-P7S37-D6A3Y-NZRMR-DE6VP-MLUI4-PJLAI-WQ",
+      "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
     }
   ],
   "version": 1
