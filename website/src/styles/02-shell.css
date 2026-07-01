@@ -43,6 +43,15 @@
   color: var(--muted);
 }
 
+.ss-footer-meta a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.ss-footer-meta a:hover {
+  color: var(--text);
+}
+
 .ss-footer-nav {
   display: flex;
   align-items: center;

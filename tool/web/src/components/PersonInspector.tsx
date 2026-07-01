@@ -24,6 +24,7 @@ export function PersonInspector({
   babyFilename,
   babyMaskCssUrl,
   babyFillColor,
+  babyAspect,
   adjustment,
   onShiftEnabled,
   onShiftCount,
@@ -50,6 +51,7 @@ export function PersonInspector({
   babyFilename: string | null;
   babyMaskCssUrl: string | null;
   babyFillColor: string | null;
+  babyAspect: number;
   adjustment: PersonAdjustment | undefined;
   onShiftEnabled: (enabled: boolean) => void;
   onShiftCount: (count: number) => void;
@@ -69,16 +71,24 @@ export function PersonInspector({
   const usingDefaultBaby = !person.baby_photo_filename && Boolean(babyFilename);
   const displayQuote = (person.quote ?? "").trim() ? person.quote ?? "" : assignedDefaultQuote || defaultQuoteFallback;
 
+  // Baby thumbnail: fixed height, width follows the parsed slot aspect ratio so it
+  // matches the People-grid shape and the actual template slot.
+  const PI_BABY_HEIGHT = 76;
+  const babyThumbStyle: React.CSSProperties = {
+    width: Math.max(40, Math.round(PI_BABY_HEIGHT * (babyAspect || 1))),
+    height: PI_BABY_HEIGHT,
+  };
+
   return (
-    <div className="person-inspector stack" style={{ gap: 16 }}>
-      <div className="inline" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <div>
+    <div className="person-inspector">
+      <div className="pi-head">
+        <div className="pi-head-text">
           <strong>{person.first_name} {person.last_name}</strong>
           <div className="muted small">Row {person.index}</div>
         </div>
-        <div className="inline" style={{ gap: 6 }}>
+        <div className="inline" style={{ gap: 4 }}>
           <button type="button" className="icon-btn" onClick={onToggleLock} aria-label={isLocked ? "Unlock person" : "Lock person"} title={isLocked ? "Unlock" : "Lock"}>
-            {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
+            {isLocked ? <Lock size={15} /> : <Unlock size={15} />}
           </button>
           <InfoPopover
             content="Locking a person protects their portrait/row from edits and swaps, but they will still be included in the final result."
@@ -93,23 +103,23 @@ export function PersonInspector({
             title="Remove person"
             disabled={isLocked}
           >
-            <Trash2 size={16} />
+            <Trash2 size={15} />
           </button>
         </div>
       </div>
 
-      <section className="stack" style={{ gap: 8 }}>
+      <section className="pi-section">
         <div className="inspector-section-title">Portrait</div>
-        <div className="inline" style={{ gap: 10, alignItems: "center" }}>
+        <div className="pi-row">
           {mugshotFilename && workspaceId ? (
-            <button type="button" className="thumb-button" onClick={onPreviewPortrait}>
+            <button type="button" className="thumb-button pi-thumb" onClick={onPreviewPortrait}>
               <img src={assetUrl(workspaceId, "mugshot", mugshotFilename)} alt="Portrait" className="thumb" />
             </button>
           ) : (
-            <div className="thumb thumb-placeholder thumb-placeholder-label">No portrait</div>
+            <div className="thumb pi-thumb thumb-placeholder thumb-placeholder-label">No portrait</div>
           )}
-          <div className="stack" style={{ gap: 4 }}>
-            {usingDefaultMugshot && <span className="chip small">Using default</span>}
+          <div className="pi-actions">
+            {usingDefaultMugshot && <span className="chip small pi-chip">Using default</span>}
             <label className="upload-file-button small">
               Replace
               <input
@@ -125,31 +135,19 @@ export function PersonInspector({
             </button>
           </div>
         </div>
-        <div className="grid two">
-          <ToggleSwitch checked={Boolean(adjustment?.shiftEnabled)} onChange={onShiftEnabled} label="Shift down" disabled={isLocked} />
-          <label className="field">
-            <span>Shift count</span>
-            <input
-              type="number"
-              value={adjustment?.shiftCount ?? 0}
-              onChange={(e) => onShiftCount(Number(e.target.value))}
-              disabled={isLocked || !adjustment?.shiftEnabled}
-            />
-          </label>
-        </div>
       </section>
 
       {!skipBabyPhotos && (
-        <section className="stack" style={{ gap: 8 }}>
+        <section className="pi-section">
           <div className="inspector-section-title">Baby photo</div>
-          <div className="inline" style={{ gap: 10, alignItems: "center" }}>
+          <div className="pi-row">
             {babyFilename && workspaceId ? (
               <button
                 type="button"
-                className="thumb-button baby-thumb-editable"
+                className="thumb-button baby-thumb-editable pi-thumb pi-baby-thumb"
                 onClick={onOpenBabyEditor}
                 disabled={isLocked}
-                style={babyFillColor ? { backgroundColor: babyFillColor } : undefined}
+                style={{ ...babyThumbStyle, ...(babyFillColor ? { backgroundColor: babyFillColor } : {}) }}
               >
                 <img
                   src={assetUrl(workspaceId, "baby", babyFilename)}
@@ -160,12 +158,12 @@ export function PersonInspector({
                 <span className="baby-thumb-hover"><Pencil size={16} /></span>
               </button>
             ) : (
-              <div className="thumb thumb-baby thumb-placeholder thumb-placeholder-label">No baby photo</div>
+              <div className="thumb pi-thumb pi-baby-thumb thumb-placeholder thumb-placeholder-label" style={babyThumbStyle}>No baby photo</div>
             )}
-            <div className="stack" style={{ gap: 4 }}>
-              {usingDefaultBaby && <span className="chip small">Using default</span>}
+            <div className="pi-actions pi-actions-grid">
+              {usingDefaultBaby && <span className="chip small pi-chip">Using default</span>}
               <button type="button" className="small" onClick={onOpenBabyEditor} disabled={isLocked || !babyFilename}>
-                Edit
+                <Pencil size={13} /> Edit
               </button>
               <label className="upload-file-button small">
                 Replace
@@ -188,8 +186,24 @@ export function PersonInspector({
         </section>
       )}
 
+      <section className="pi-section">
+        <div className="inspector-section-title">Mapping</div>
+        <div className="pi-shift">
+          <ToggleSwitch checked={Boolean(adjustment?.shiftEnabled)} onChange={onShiftEnabled} label="Shift down" disabled={isLocked} />
+          <label className="field pi-shift-count">
+            <span>Count</span>
+            <input
+              type="number"
+              value={adjustment?.shiftCount ?? 0}
+              onChange={(e) => onShiftCount(Number(e.target.value))}
+              disabled={isLocked || !adjustment?.shiftEnabled}
+            />
+          </label>
+        </div>
+      </section>
+
       {!skipQuotes && (
-        <section className="stack" style={{ gap: 8 }}>
+        <section className="pi-section pi-quote">
           <div className="inspector-section-title">Quote</div>
           <textarea
             rows={3}

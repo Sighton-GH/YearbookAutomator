@@ -16,6 +16,12 @@ export function SiteFooter() {
             <span>Sighton Yearbook Tools</span>
           </div>
           <div className="ss-footer-meta">© {year} Sighton Yearbook Tools</div>
+          <div className="ss-footer-meta">
+            Created by{" "}
+            <a href="https://sighton.ca" target="_blank" rel="noopener noreferrer">
+              Sighton Media
+            </a>
+          </div>
         </div>
 
         <nav className="ss-footer-nav" aria-label="Footer">

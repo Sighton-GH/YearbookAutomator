@@ -1,7 +1,8 @@
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Users } from "lucide-react";
+import { ProgressBar } from "../../components/ProgressBar";
 import {
   applyMapping,
   assetUrl,
@@ -117,6 +118,35 @@ export function PeopleTab({
     setDropTarget(null);
   }, [swapMode]);
 
+  // ---- Image load progress: show a bar while the grid's portrait/baby thumbnails load ----
+  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const loadedKeysRef = useRef<Set<string>>(new Set());
+  const totalImages = useMemo(() => {
+    if (!workspaceId) return 0;
+    let count = 0;
+    for (const p of people) {
+      if (p.mugshot_filename || defaultMugshotAssignments[p.index]) count += 1;
+      if (!skipBabyPhotos && (p.baby_photo_filename || defaultBabyFilename)) count += 1;
+    }
+    return count;
+    // defaultMugshotAssignments / defaultBabyFilename are stable enough; recompute on people changes.
+  }, [people, workspaceId, skipBabyPhotos, defaultMugshotAssignments, defaultBabyFilename]);
+
+  // Reset the counter whenever the roster is (re)loaded so the bar reflects a fresh render.
+  useEffect(() => {
+    loadedKeysRef.current = new Set();
+    setImagesLoaded(0);
+  }, [workspaceId, people.length]);
+
+  const markImageResolved = (key: string) => {
+    if (loadedKeysRef.current.has(key)) return;
+    loadedKeysRef.current.add(key);
+    setImagesLoaded(loadedKeysRef.current.size);
+  };
+
+  const imagesLoading = Boolean(workspaceId) && totalImages > 0 && imagesLoaded < totalImages;
+  const imageLoadProgress = totalImages > 0 ? Math.round((imagesLoaded / totalImages) * 100) : 100;
+
   const insecureHttp =
     typeof window !== "undefined" &&
     !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) &&
@@ -138,6 +168,10 @@ export function PeopleTab({
     return null;
   };
   const babyFillColor = normalizeHexColor(babyBackgroundColor);
+  // Every baby thumbnail uses the parsed baby slot's aspect ratio + mask so they all render
+  // in an identical shape (matching the template slot) instead of each image's natural size.
+  const babyAspect =
+    babyMaskBox && babyMaskBox.height > 0 ? babyMaskBox.width / babyMaskBox.height : 1;
 
   // ---- Swap mode ----
   const swapPositions = (sourceIdx: number, targetIdx: number) => {
@@ -611,6 +645,12 @@ export function PeopleTab({
         </div>
 
         {/* Grid */}
+        {imagesLoading && (
+          <div className="people-loadbar">
+            <span className="muted small">Loading photos… {imagesLoaded}/{totalImages}</span>
+            <ProgressBar progress={imageLoadProgress} />
+          </div>
+        )}
         {workspaceId && people.length > 0 ? (
           <div className="people-grid">
             {people.map((p, rowIdx) => {
@@ -660,6 +700,8 @@ export function PeopleTab({
                     defaultFilename: assignedDefaultMugshot,
                     showDefaultLabel: true,
                     overlayLabel: swapMode === "portrait" && swapEnabled ? "Drag to swap" : null,
+                    onLoad: () => markImageResolved(`${rowIdx}-mugshot`),
+                    onError: () => markImageResolved(`${rowIdx}-mugshot`),
                   }}
                   baby={
                     skipBabyPhotos
@@ -669,9 +711,15 @@ export function PeopleTab({
                           kind: "baby",
                           filename: babyFilename,
                           showMissingLabel: false,
+                          emptyLabel: "No baby photo",
                           wrapperClassName: "thumb-cell-baby",
                           className: rawMaskUrl ? "baby-thumb-masked" : undefined,
-                          style: rawMaskUrl ? ({ ["--baby-mask" as never]: babyMaskCssUrl } as React.CSSProperties) : undefined,
+                          style: {
+                            aspectRatio: String(babyAspect),
+                            ...(rawMaskUrl ? ({ ["--baby-mask" as never]: babyMaskCssUrl } as React.CSSProperties) : {}),
+                          } as React.CSSProperties,
+                          onLoad: () => markImageResolved(`${rowIdx}-baby`),
+                          onError: () => markImageResolved(`${rowIdx}-baby`),
                         }
                   }
                   quoteValue={displayQuote}
@@ -680,7 +728,7 @@ export function PeopleTab({
                   onClick={() => setSelectedIdx(rowIdx)}
                 >
                   {!skipQuotes && (
-                    <p className="muted small people-card-quote-preview">{displayQuote ? `"${displayQuote}"` : "No quote"}</p>
+                    <p className="muted small people-card-quote-preview">{displayQuote ? displayQuote : "No quote"}</p>
                   )}
                   {mugshotFilename ? null : <p className="upload-error">Missing portrait</p>}
                 </PeopleCard>
@@ -714,6 +762,7 @@ export function PeopleTab({
             babyFilename={selected.baby_photo_filename || defaultBabyFilename}
             babyMaskCssUrl={babyMaskCssUrl}
             babyFillColor={babyFillColor}
+            babyAspect={babyAspect}
             adjustment={adjustments[selected.index]}
             onShiftEnabled={(enabled) => setShiftEnabled(selected.index, enabled)}
             onShiftCount={(count) => setShiftCount(selected.index, count)}

@@ -141,6 +141,13 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [didRestoreSession, setDidRestoreSession] = useState(false);
   const activeStepRef = useRef<TopStep>("template");
   activeStepRef.current = activeStep;
+
+  // Jump back to the top of the page whenever the user changes steps so each step
+  // (especially the long People grid) starts from the top instead of mid-scroll.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeStep]);
   const [sessionIdentity, setSessionIdentity] = useState(() => {
     const base = createSessionIdentity();
     if (clientSessionId && clientSessionId.trim()) return { ...base, sessionId: clientSessionId.trim() };
@@ -342,6 +349,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showResetConfirm2, setShowResetConfirm2] = useState(false);
   const [workspaceDefaultsHydrated, setWorkspaceDefaultsHydrated] = useState(false);
   const lastServerSyncedSnapshotRef = useRef<string>("");
 
@@ -637,6 +645,9 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setOutputPath(null);
     setOutputPaths([]);
     setOutputNonce(0);
+    setOutputFormat("png");
+    setOutputSize(null);
+    setUsageInfo(null);
     setPreviewPath(null);
     setPreviewNonce(0);
     setProgress(0);
@@ -650,15 +661,51 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     setPeoplePerSpread(16);
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
+    setOriginalPeople(null);
     setOriginalBabyPeople(null);
+    setRawDebug(null);
+    setAllowInsecureReviewResults(false);
+    setShowSaveConfigReminder(false);
+    setDismissedToolMessageIds({});
+    setPortraitWarnings([]);
+    setPortraitWarningsOpen(false);
+    setPortraitCompletedErrorCount(null);
+    setQuotesWarnings([]);
+    setQuotesWarningsOpen(false);
+    setQuotesCompletedErrorCount(null);
+    setBabyZipWarnings([]);
+    setBabyZipWarningsOpen(false);
+    setBabyCompletedErrorCount(null);
     setActiveStep("template");
     setEditTab("layout");
     setTemplateView("upload");
+    resetImportUi();
     clearSession();
+    lastServerSyncedSnapshotRef.current = "";
     const nextIdentity = createSessionIdentity(Date.now(), sessionTtlMs);
     setSessionIdentity(nextIdentity);
     setSessionRemainingMs(sessionTtlMs);
     sessionExpiryHandledRef.current = false;
+  };
+
+  // User-initiated "Reset all": wipe in-memory state, delete the server workspace,
+  // and then hard-reload from a clean URL. The reload guarantees a true clean slate
+  // — it drops any stale session snapshot (local or server) that could otherwise be
+  // rehydrated and make the tool think the template was already parsed.
+  const performFullReset = () => {
+    const toDelete = workspaceId;
+    handleReset();
+    void (async () => {
+      try {
+        if (toDelete) await deleteWorkspace(toDelete);
+      } catch {
+        // best-effort; janitor/TTL still cleans up server-side
+      } finally {
+        if (typeof window !== "undefined") {
+          window.location.replace(window.location.pathname);
+        }
+      }
+    })();
   };
 
   const buildSessionPayload = (): PersistedSessionV1 => {
@@ -2298,6 +2345,37 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const isLastStep = stepIndex(activeStep) === TOP_STEPS.length - 1;
   const nextStepMeta = TOP_STEPS[stepIndex(activeStep) + 1] ?? null;
 
+  // Shared Back / Reset all / Continue controls, rendered both in line with the
+  // step description at the top (so the user doesn't have to scroll) and again
+  // at the bottom.
+  const backButton = (
+    <button className="ghost" disabled={isFirstStep || loading} onClick={() => goToAdjacentStep(-1)}>
+      <ArrowLeft size={15} /> Back
+    </button>
+  );
+  const resetContinueButtons = (
+    <div className="footer-right">
+      <button type="button" className="danger ghost" onClick={requestResetAll} disabled={loading}>
+        Reset all
+      </button>
+      {!isLastStep && (
+        <button
+          className="primary"
+          disabled={loading || !nextStepMeta || !topStepReady(nextStepMeta.id)}
+          onClick={() => goToAdjacentStep(1)}
+        >
+          Continue{nextStepMeta ? ` to ${nextStepMeta.label}` : ""} <ArrowRight size={15} />
+        </button>
+      )}
+    </div>
+  );
+  const stepNavButtons = (
+    <>
+      {backButton}
+      {resetContinueButtons}
+    </>
+  );
+
   const configActions = (
     <div className="tool-actions topbar-actions" aria-label="Configuration">
       <button type="button" className="tool-action-btn" onClick={handleSaveConfig} disabled={loading}>
@@ -2415,14 +2493,27 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
       <ConfirmDialog
         open={showResetConfirm}
         title="Reset everything?"
-        message="This will clear parsed template, people, and settings for this workspace."
-        confirmLabel="Reset"
+        message="This permanently deletes your uploaded template, roster, photos, edits, and every setting in this session. This cannot be undone — export a config file first if you want to keep your work."
+        confirmLabel="Continue"
         cancelLabel="Cancel"
         destructive
         onCancel={() => setShowResetConfirm(false)}
         onConfirm={() => {
           setShowResetConfirm(false);
-          handleReset();
+          setShowResetConfirm2(true);
+        }}
+      />
+      <ConfirmDialog
+        open={showResetConfirm2}
+        title="Are you absolutely sure?"
+        message="This is irreversible. All work in this session will be permanently erased and the tool will reload to a clean slate."
+        confirmLabel="Yes, reset everything"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={() => setShowResetConfirm2(false)}
+        onConfirm={() => {
+          setShowResetConfirm2(false);
+          performFullReset();
         }}
       />
       <ConfirmDialog
@@ -2717,8 +2808,17 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         <section className="app-canvas" aria-label={`${activeStepMeta.label} step`}>
           <div className="canvas-head">
             <h2 className="canvas-title">{activeStepMeta.label}</h2>
-            <p className="canvas-sub">{activeStepMeta.description}</p>
           </div>
+          <div className="canvas-subheader">
+            <div className="canvas-subheader-wing canvas-subheader-wing-left">{backButton}</div>
+            <p className="canvas-sub">{activeStepMeta.description}</p>
+            <div className="canvas-subheader-wing canvas-subheader-wing-right">{resetContinueButtons}</div>
+          </div>
+          {activeStep === "template" && (
+            <div className="tool-tips-center tool-tips-top">
+              <TipsBox tips={stepTips} />
+            </div>
+          )}
           {activeStep === "template" && (
             <div className="canvas-subnav">
               <TabBar
@@ -2926,34 +3026,11 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
             )
           )}
 
-          <div className="canvas-footer">
-            <button className="ghost" disabled={isFirstStep || loading} onClick={() => goToAdjacentStep(-1)}>
-              <ArrowLeft size={15} /> Back
-            </button>
-            <div className="footer-right">
-              <button type="button" className="danger ghost" onClick={requestResetAll} disabled={loading}>
-                Reset all
-              </button>
-              {!isLastStep && (
-                <button
-                  className="primary"
-                  disabled={loading || !nextStepMeta || !topStepReady(nextStepMeta.id)}
-                  onClick={() => goToAdjacentStep(1)}
-                >
-                  Continue{nextStepMeta ? ` to ${nextStepMeta.label}` : ""} <ArrowRight size={15} />
-                </button>
-              )}
-            </div>
-          </div>
+          <div className="canvas-footer">{stepNavButtons}</div>
           {!showImportStep && status && !renderFailedMessage && (
             <p className="muted prewrap canvas-status">{prefixServerMessage(status)}</p>
           )}
           {!showImportStep && loading && progress > 0 && <ProgressBar progress={progress} />}
-          {activeStep === "template" && (
-            <div className="tool-tips-center">
-              <TipsBox tips={stepTips} />
-            </div>
-          )}
         </section>
       </div>
     </>

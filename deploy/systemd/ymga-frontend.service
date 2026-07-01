@@ -1,0 +1,15 @@
+[Unit]
+Description=Yearbook Mugshot Automator - Frontend (Vite preview, production build)
+After=network.target ymga-backend.service
+Wants=ymga-backend.service
+
+[Service]
+Type=simple
+User=bryan
+WorkingDirectory=/media/bryan/OptiData1/VS Code/Personal Projects/Yearbook Grad Mugshot Automator/tool/web
+ExecStart=/usr/bin/npm run preview
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

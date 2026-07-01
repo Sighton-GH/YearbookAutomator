@@ -122,6 +122,15 @@ Astro project (`website/src/pages/*.astro`) with React islands for anything inte
 ### Known structural debt
 See `CODEBASE_ORGANIZATION_REPORT.md` for a fuller breakdown (paths there predate the `tool/`/`website/` split and both later frontend redesigns — Import/Edit/Finalize, then the current 5-step roadmap — mentally prefix `server/`/`web/` with `tool/` and ignore step filenames). The short version: `tool/web/src/App.tsx` (~2.9k lines), `tool/web/src/steps/ImportStep.tsx` (~1.6k), `tool/web/src/steps/edit/PeopleTab.tsx`, and `tool/server/app/services/generator.py` / `tool/server/app/routes/mapping.py` are oversized multi-concern files. No refactor is in progress — when touching these, prefer surgical edits over drive-by restructuring unless the task is specifically about cleanup.
 
+## Production deployment (live on this machine)
+- The tool is exposed publicly at `https://yearbooktool.sighton.ca` via a Cloudflare Tunnel (`cloudflared` systemd service, remotely-managed ingress — origin service must be `http://localhost:5173`, not `https://`, since the frontend serves plain HTTP).
+- Backend and frontend run as systemd services, unit files tracked at `deploy/systemd/ymga-backend.service` and `deploy/systemd/ymga-frontend.service` (installed to `/etc/systemd/system/`):
+  - `ymga-backend.service` — runs `uvicorn app.main:app` (no `--reload`) on `127.0.0.1:8000`.
+  - `ymga-frontend.service` — runs `npm run preview` (serves the last `tool/web` production build, i.e. whatever's in `tool/web/dist/`) on `0.0.0.0:5173`.
+- **Neither service auto-updates on code changes.** The backend needs `sudo systemctl restart ymga-backend.service` to pick up Python changes; the frontend needs `cd tool/web && npm run build` followed by `sudo systemctl restart ymga-frontend.service` to pick up frontend changes.
+- The marketing website (`yearbook.sighton.ca`) auto-builds/deploys to Cloudflare Workers on new commits (dashboard-side Git integration) — no local action needed for it.
+- **After making any change to `tool/server` or `tool/web` that would affect the running app, ask the user whether they want the corresponding systemd service rebuilt/restarted** — don't restart it automatically without asking.
+
 ## Conventions
 - API payloads are snake_case end-to-end (Pydantic ↔ TS); don't introduce camelCase fields on the wire.
 - Backend tests monkeypatch `storage.BASE_DATA` to a tmp dir rather than touching real workspace data (see `tool/server/tests/test_storage.py`).

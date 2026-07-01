@@ -916,7 +916,7 @@
 }
 
 .app-footer {
-  margin-top: 32px;
+  margin-top: 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
 }
@@ -924,10 +924,24 @@
 .app-footer-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px 24px 24px;
+  padding: 10px 24px 18px;
   color: var(--muted);
   font-size: 13px;
   text-align: center;
+}
+
+.app-footer-credit {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.app-footer-credit a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.app-footer-credit a:hover {
+  color: var(--accent-strong);
 }
 
 /* Tool launch gate on /tool */

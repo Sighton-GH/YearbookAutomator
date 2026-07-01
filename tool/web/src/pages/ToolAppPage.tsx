@@ -13,6 +13,7 @@ import {
 import { ThemeToggle } from "../components/ThemeToggle";
 import { GuidedTour, type TourStep } from "../components/GuidedTour";
 import { HelpPanel } from "../components/HelpPanel";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { HelpCircle, KeyRound } from "lucide-react";
 
 const TOUR_SEEN_KEY = "ymga-tour-seen-v1";
@@ -83,6 +84,7 @@ export function ToolAppPage() {
   const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null } | null>(null);
   const [clientSessionId] = useState<string>(() => getOrCreateClientSessionId());
   const [releasingWorkspace, setReleasingWorkspace] = useState(false);
+  const [showChangeLicenseConfirm, setShowChangeLicenseConfirm] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sessionInfoCollapsed, setSessionInfoCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -429,6 +431,18 @@ export function ToolAppPage() {
 
   return (
     <div className="app-shell">
+      <ConfirmDialog
+        open={showChangeLicenseConfirm}
+        title="Change license key?"
+        message="You'll return to the license-entry screen and need to re-enter a key to use the tool again. Your current session stays saved and isn't deleted."
+        confirmLabel="Change key"
+        cancelLabel="Cancel"
+        onCancel={() => setShowChangeLicenseConfirm(false)}
+        onConfirm={() => {
+          setShowChangeLicenseConfirm(false);
+          void handleChangeLicenseKey();
+        }}
+      />
       <div className="app-return-bar">
         <div className="app-return-inner">
           <div className="app-title-row" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -534,7 +548,10 @@ export function ToolAppPage() {
               <button
                 type="button"
                 className="app-icon-btn"
-                onClick={() => void handleChangeLicenseKey()}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowChangeLicenseConfirm(true);
+                }}
                 aria-label="Change license key"
               >
                 <KeyRound size={16} />
@@ -572,13 +589,21 @@ export function ToolAppPage() {
         />
       )}
       <footer className="app-footer">
-        <div className="app-footer-inner" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img
-            src={withBase("assets/Sighton_Logo.png")}
-            alt="Sighton logo"
-            style={{ width: 20, height: 20, objectFit: "contain" }}
-          />
-          <span>Sighton Yearbook Tools</span>
+        <div className="app-footer-inner">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <img
+              src={withBase("assets/Sighton_Logo.png")}
+              alt="Sighton logo"
+              style={{ width: 20, height: 20, objectFit: "contain" }}
+            />
+            <span>Sighton Yearbook Tools</span>
+          </div>
+          <div className="app-footer-credit">
+            Created by{" "}
+            <a href="https://sighton.ca" target="_blank" rel="noopener noreferrer">
+              Sighton Media
+            </a>
+          </div>
         </div>
       </footer>
 

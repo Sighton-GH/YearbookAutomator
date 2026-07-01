@@ -10,6 +10,7 @@ export type PeopleCardThumb = {
   showDefaultLabel?: boolean;
   showMissingLabel?: boolean;
   showEmptyBox?: boolean;
+  emptyLabel?: string;
   canShowImage?: boolean;
   className?: string;
   wrapperClassName?: string;
@@ -17,6 +18,7 @@ export type PeopleCardThumb = {
   overlayLabel?: string | null;
   onClick?: () => void;
   onError?: () => void;
+  onLoad?: () => void;
   renderMode?: "default" | "baby-editor";
 };
 
@@ -95,6 +97,7 @@ export function PeopleCard({
             alt={thumb.label.toLowerCase()}
             className="baby-thumb-img"
             onError={thumb.onError}
+            onLoad={thumb.onLoad}
           />
           {isClickable ? (
             <div className="baby-thumb-hover" aria-hidden="true">
@@ -113,7 +116,7 @@ export function PeopleCard({
           style={thumb.style}
         >
           {thumb.renderMode === "baby-editor" ? (
-            hasImage ? renderBabyEditorThumb() : (showEmptyBox ? <div className="thumb-empty" /> : null)
+            hasImage ? renderBabyEditorThumb() : (showEmptyBox ? <div className="thumb-empty">{thumb.emptyLabel ?? ""}</div> : null)
           ) : hasImage ? (
             <img
               src={assetUrl(workspaceId!, thumb.kind, finalFilename!)}
@@ -121,9 +124,10 @@ export function PeopleCard({
               className={clsx("thumb", thumb.kind === "baby" && "thumb-baby", thumb.className)}
               onClick={thumb.onClick}
               onError={thumb.onError}
+              onLoad={thumb.onLoad}
             />
           ) : showEmptyBox ? (
-            <div className="thumb-empty" />
+            <div className="thumb-empty">{thumb.emptyLabel ?? ""}</div>
           ) : null}
           {thumb.overlayLabel ? <div className="thumb-overlay">{thumb.overlayLabel}</div> : null}
         </div>

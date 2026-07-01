@@ -517,10 +517,13 @@ export function ImportStep({
   };
 
   // ---- Stage 2: roster + portraits ----
-  const runPortraitsStage = async (): Promise<boolean> => {
+  // Returns the freshly-ingested people list (or null on failure) rather than a bare boolean
+  // so the cascade below can hand the *current* roster to quotes/baby instead of relying on
+  // the `people` prop, which won't reflect this stage's setPeople() call until the next render.
+  const runPortraitsStage = async (): Promise<PersonRecord[] | null> => {
     if (!workspaceId) {
       setStatus("Parse the template first");
-      return false;
+      return null;
     }
     if (!sheet || !zip) {
       setShowMissingPortraits(true);
@@ -529,11 +532,11 @@ export function ImportStep({
       if (!zip) missing.push("Portraits ZIP (.zip)");
       setStatus(`Missing required file(s): ${missing.join(", ")}`);
       scrollTo(portraitsRef.current);
-      return false;
+      return null;
     }
     if (insecureHttp && !allowInsecureUploads) {
       setStatus("Uploads over HTTP are not encrypted in transit. Toggle 'I understand' to continue.");
-      return false;
+      return null;
     }
 
     setPortraitsStage("running");
@@ -583,32 +586,37 @@ export function ImportStep({
       setStatus("Portrait mapping processing completed");
       setProgress(100);
       setPortraitsStage("done");
-      return true;
+      return resp.people;
     } catch (err) {
       ticker.finish(opStartMs);
       console.error(err);
       setStatus(`Mapping failed.\n${formatServerMessage(err)}`);
       setPortraitsStage("error");
       setStageError((prev) => ({ ...prev, portraits: formatServerMessage(err) }));
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   // ---- Stage 3: quotes (optional) ----
-  const runQuotesStage = async (): Promise<boolean> => {
-    if (!workspaceId || !people.length) {
+  // `peopleOverride` lets the cascade pass the roster a prior stage in the *same* run just
+  // produced (see runImportCascade) instead of the `people` prop, which is stale until the
+  // next render — without it, quotes/baby would match against last batch's roster and then
+  // clobber the freshly-ingested one when they call setPeople() with their own response.
+  const runQuotesStage = async (peopleOverride?: PersonRecord[]): Promise<PersonRecord[] | null> => {
+    const currentPeople = peopleOverride ?? people;
+    if (!workspaceId || !currentPeople.length) {
       setStatus("Import the roster first");
-      return false;
+      return null;
     }
     if (!quotesSheet) {
       scrollTo(quotesRef.current);
-      return false;
+      return null;
     }
     if (insecureHttp && !allowInsecureUploads) {
       setStatus("Uploads over HTTP are not encrypted in transit. Toggle 'I understand' to continue.");
-      return false;
+      return null;
     }
 
     setQuotesStage("running");
@@ -630,7 +638,7 @@ export function ImportStep({
     });
     const opStartMs = performance.now();
     try {
-      const resp = await uploadQuotesSpreadsheet(workspaceId, people, quotesSheet, {
+      const resp = await uploadQuotesSpreadsheet(workspaceId, currentPeople, quotesSheet, {
         advancedNameMatch: quotesAdvancedNameMatch,
         onProgress: (pct) => {
           const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
@@ -657,22 +665,25 @@ export function ImportStep({
       setProgress(100);
       setQuotesStage("done");
       onSkipQuotes(false);
-      return true;
+      return resp.people;
     } catch (err) {
       ticker.finish(opStartMs);
       console.error(err);
       setStatus(`Quote upload failed.\n${formatServerMessage(err)}`);
       setQuotesStage("error");
       setStageError((prev) => ({ ...prev, quotes: formatServerMessage(err) }));
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   // ---- Stage 4: baby photos (optional) ----
-  const runBabyStage = async (): Promise<boolean> => {
-    if (!workspaceId || !people.length) {
+  // Same `peopleOverride` reasoning as runQuotesStage above: the cascade passes the roster
+  // quotes just returned so the baby ZIP is matched against the current batch, not a stale one.
+  const runBabyStage = async (peopleOverride?: PersonRecord[]): Promise<boolean> => {
+    const currentPeople = peopleOverride ?? people;
+    if (!workspaceId || !currentPeople.length) {
       setStatus("Import the roster first");
       return false;
     }
@@ -731,7 +742,7 @@ export function ImportStep({
         });
         onBabyZipWarnings([]);
         onBabyCompletedErrorCount(null);
-        const resp = await uploadBabyZip(workspaceId, people, babyZip, {
+        const resp = await uploadBabyZip(workspaceId, currentPeople, babyZip, {
           advancedNameMatch: babyAdvancedNameMatch,
           partialNameMatch: babyAdvancedNameMatch && babyPartialNameMatch,
           convertPdfs,
@@ -782,6 +793,11 @@ export function ImportStep({
   // explicitly advances to Edit. The overrides let a caller that just flipped
   // skipQuotes/skipBabyPhotos (via setState, which doesn't land until the next
   // render) act on the new value immediately instead of the stale closed-over prop.
+  //
+  // `currentPeople` is threaded explicitly through each stage rather than read back from the
+  // `people` prop: setPeople() calls made earlier in this same cascade haven't landed in props
+  // yet (no re-render has happened mid-await), so without this, quotes/baby would match against
+  // last batch's roster and their response would overwrite the roster portraits just ingested.
   const runImportCascade = async (overrides?: { skipQuotesOverride?: boolean; skipBabyOverride?: boolean }) => {
     const effectiveSkipQuotes = overrides?.skipQuotesOverride ?? skipQuotes;
     const effectiveSkipBaby = overrides?.skipBabyOverride ?? skipBabyPhotos;
@@ -789,15 +805,18 @@ export function ImportStep({
       const ok = await runTemplateStage();
       if (!ok) return;
     }
+    let currentPeople = people;
     if (portraitsStage !== "done") {
-      const ok = await runPortraitsStage();
-      if (!ok) return;
+      const result = await runPortraitsStage();
+      if (!result) return;
+      currentPeople = result;
     }
     if (!effectiveSkipQuotes && quotesSheet && quotesStage !== "done") {
-      await runQuotesStage();
+      const result = await runQuotesStage(currentPeople);
+      if (result) currentPeople = result;
     }
     if (!effectiveSkipBaby && (babyZip || babyFile) && babyStage !== "done") {
-      await runBabyStage();
+      await runBabyStage(currentPeople);
     }
     onContinue();
   };
@@ -970,10 +989,16 @@ export function ImportStep({
       {status && <p className="muted prewrap import-status">{prefixServerMessage(status)}</p>}
       {loading && progress > 0 && <ProgressBar progress={progress} />}
 
-      {fullImport && (
-        <div className="inline" style={{ justifyContent: "flex-end" }}>
+      {(fullImport || show("portraits")) && (
+        <div className="import-process-all">
+          <div className="muted small">
+            Add your files below, then process everything in one go
+            {fullImport ? " — template, roster & portraits" : " — roster & portraits"}
+            {show("quotes") ? ", quotes" : ""}
+            {show("baby") ? ", and baby photos" : ""}.
+          </div>
           <button className="primary" onClick={handleProcessImportClick} disabled={loading}>
-            {loading ? "Processing…" : "Process import"}
+            {loading ? "Processing…" : fullImport ? "Process everything" : "Process all uploads"}
           </button>
         </div>
       )}
@@ -1340,7 +1365,6 @@ export function ImportStep({
       <div
         className={clsx("import-card panel", {
           "import-card-skipped": skipQuotes,
-          "import-card-locked": optionalLocked,
           "is-running": !skipQuotes && quotesStage === "running",
           "is-done": !skipQuotes && quotesStage === "done",
         })}
@@ -1351,13 +1375,13 @@ export function ImportStep({
           <h3>Quotes</h3>
           <span className="chip small">Optional</span>
         </div>
-        {optionalLocked && <p className="muted small">Ingest your roster first to unlock this step.</p>}
+        {optionalLocked && <p className="muted small">Add your files now — they'll be processed automatically right after your roster when you use “Process all uploads”.</p>}
         {!optionalLocked && skipQuotes && (
           <p className="muted small">Turned off for this batch — add a spreadsheet below to turn quotes back on.</p>
         )}
-        <fieldset className="import-card-fieldset" disabled={optionalLocked}>
+        <fieldset className="import-card-fieldset">
           <div className="upload-title">Quotes spreadsheet (optional)</div>
-          <UploadDropLabel accept=".xlsx,.csv" disabled={loading || optionalLocked} onFile={setQuotesSheet}>
+          <UploadDropLabel accept=".xlsx,.csv" disabled={loading} onFile={setQuotesSheet}>
             <input type="file" accept=".xlsx,.csv" onChange={(e) => setQuotesSheet(e.target.files?.[0] ?? null)} />
             {quotesSheet && <span className="muted small">{quotesSheet.name}</span>}
           </UploadDropLabel>
@@ -1408,7 +1432,6 @@ export function ImportStep({
       <div
         className={clsx("import-card panel", {
           "import-card-skipped": skipBabyPhotos,
-          "import-card-locked": optionalLocked,
           "is-running": !skipBabyPhotos && babyStage === "running",
           "is-done": !skipBabyPhotos && babyStage === "done",
         })}
@@ -1419,13 +1442,13 @@ export function ImportStep({
           <h3>Baby Photos</h3>
           <span className="chip small">Optional</span>
         </div>
-        {optionalLocked && <p className="muted small">Ingest your roster first to unlock this step.</p>}
+        {optionalLocked && <p className="muted small">Add your files now — they'll be processed automatically right after your roster when you use “Process all uploads”.</p>}
         {!optionalLocked && skipBabyPhotos && (
           <p className="muted small">Turned off for this batch — add a photo/ZIP below to turn baby photos back on.</p>
         )}
-        <fieldset className="import-card-fieldset" disabled={optionalLocked}>
+        <fieldset className="import-card-fieldset">
           <div className="upload-title">Baby photo ZIP (optional)</div>
-            <UploadDropLabel accept=".zip" disabled={loading || optionalLocked} onFile={setBabyZip}>
+            <UploadDropLabel accept=".zip" disabled={loading} onFile={setBabyZip}>
               <input type="file" accept=".zip" onChange={(e) => setBabyZip(e.target.files?.[0] ?? null)} />
               {babyZip && <span className="muted small">{babyZip.name}</span>}
             </UploadDropLabel>

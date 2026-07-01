@@ -7,7 +7,7 @@
   gap: var(--space-6);
   max-width: 1600px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-7) var(--space-9);
+  padding: var(--space-6) var(--space-7) var(--space-5);
 }
 
 /* Horizontal step bar. Kept in normal flow (not sticky) — the topbar above it
@@ -79,25 +79,50 @@
 
 /* Canvas — centered, full remaining width (no more fixed side column to share with). */
 .app-canvas { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--space-5); }
-.canvas-head { display: grid; gap: var(--space-1); order: -1; justify-items: center; text-align: center; }
+.canvas-head { display: grid; order: -3; justify-items: center; text-align: center; }
+.canvas-subheader { order: -2; }
+.app-canvas > .tool-tips-top { order: -1; }
 .canvas-footer { order: 90; }
-.canvas-status, .app-canvas > .tool-tips-center, .app-canvas > .progress { order: 91; }
+.canvas-status, .app-canvas > .tool-tips-center:not(.tool-tips-top), .app-canvas > .progress { order: 91; }
 /* People step: show the people grid (EditStep) first, optional quote/baby uploads after it. */
 .app-canvas.edit-first .import-step { order: 50; }
 .canvas-title { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); letter-spacing: var(--tracking-tight); line-height: var(--lh-tight); }
 .canvas-sub { color: var(--text-muted); font-size: var(--fs-md); line-height: var(--lh-snug); max-width: 70ch; }
 .canvas-footer {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding-top: var(--space-5); margin-top: var(--space-2); border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);
 }
-.canvas-footer .footer-right { display: flex; gap: var(--space-3); }
-.canvas-status { margin: 0; }
+/* Top row: Back on the left and Reset/Continue on the right sandwich the step
+   description in the middle, so the header doesn't need a separate button row.
+   The two "wing" wrappers share equal flex-grow from a zero basis, so they end
+   up equal width regardless of how much wider the Reset/Continue cluster is
+   than the lone Back button — without that, the description (sized to fill
+   whatever space is left between two unequal-width edges) visually centers
+   between the buttons instead of on the page. */
+.canvas-subheader {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-subtle);
+}
+.canvas-subheader-wing { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.canvas-subheader-wing-left { justify-content: flex-start; }
+.canvas-subheader-wing-right { justify-content: flex-end; }
+.canvas-subheader .canvas-sub {
+  flex: 0 1 auto; min-width: 0; margin: 0; max-width: 50ch; text-align: center;
+}
+.canvas-footer .footer-right, .canvas-subheader .footer-right { display: flex; gap: var(--space-3); flex: 0 0 auto; }
+
+@media (max-width: 720px) {
+  .canvas-subheader { flex-wrap: wrap; justify-content: center; }
+  .canvas-subheader-wing { flex: 0 0 auto; }
+  .canvas-subheader .canvas-sub { order: -1; flex-basis: 100%; max-width: none; }
+}
+.canvas-status { margin: 0; text-align: center; }
 
 /* Narrow laptops: shrink padding and hide inactive labels so the bar always
    fits on one line — it should never wrap, scroll, or overlap regardless of
    width. */
 @media (max-width: 980px) {
-  .app-workspace { padding: var(--space-4) var(--space-5) var(--space-8); gap: var(--space-4); }
+  .app-workspace { padding: var(--space-4) var(--space-5) var(--space-4); gap: var(--space-4); }
   .roadmap-step:not(.is-active) .roadmap-label { display: none; }
   .roadmap-connector { flex: 1 1 16px; margin: 0 var(--space-1); }
 }
@@ -239,8 +264,10 @@
 .inspector-body {
   padding: 14px 16px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .inspector-empty {
@@ -323,6 +350,27 @@
   margin: 0;
 }
 
+.import-process-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-quiet, var(--surface-raised));
+}
+
+.import-process-all .muted {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.import-process-all button {
+  flex: 0 0 auto;
+}
+
 .import-card {
   display: grid;
   gap: 12px;
@@ -363,6 +411,7 @@
 .import-card-actions {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -570,6 +619,97 @@
   font-family: inherit;
 }
 
+/* Compact vertical person inspector — fits the panel width without horizontal scroll.
+   Order: Portrait → Baby photo → Mapping (shift) → Quote. */
+.person-inspector {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.person-inspector * {
+  min-width: 0;
+}
+
+.pi-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pi-head-text strong {
+  display: block;
+  line-height: 1.2;
+}
+
+.pi-section {
+  display: grid;
+  gap: 8px;
+}
+
+/* thumbnail on the left, action buttons filling the rest of the row */
+.pi-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pi-thumb {
+  width: 76px;
+  height: 76px;
+  flex: 0 0 auto;
+}
+
+.pi-thumb.thumb,
+.pi-thumb .thumb {
+  width: 76px;
+  height: 76px;
+}
+
+.pi-actions {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-content: start;
+}
+
+/* portrait has only two actions → keep them on one row each is fine in 2 cols */
+.pi-actions .small,
+.pi-actions .upload-file-button.small {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pi-chip {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.pi-shift {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.pi-shift > :first-child {
+  flex: 1 1 auto;
+}
+
+.pi-shift-count {
+  flex: 0 0 auto;
+  max-width: 84px;
+}
+
+.pi-quote textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* People tab toolbar + selectable grid cards */
 .people-toolbar {
   display: grid;
@@ -602,11 +742,8 @@
 .people-card-quote-preview {
   margin: 0;
   font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* ===== Guided tour (coachmarks) ===== */
