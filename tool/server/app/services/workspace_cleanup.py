@@ -98,6 +98,7 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
         last_seen = float(meta.get("last_seen") or 0)
         end_requested_at = meta.get("end_requested_at")
         session_expires_at = meta.get("session_expires_at")
+        expiry_disabled = bool(meta.get("workspace_expiry_disabled", False))
 
         should_delete = False
         if cfg.auto_delete_expired and session_expires_at is not None:
@@ -115,7 +116,10 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
                 end_requested_at_f = 0.0
             if (now - end_requested_at_f) >= cfg.grace_seconds:
                 should_delete = True
-        elif not should_delete and last_seen and (now - last_seen) >= cfg.ttl_seconds:
+        elif not should_delete and not expiry_disabled and last_seen and (now - last_seen) >= cfg.ttl_seconds:
+            # The idle safety-net TTL only applies when expiry isn't explicitly
+            # disabled for this workspace's license (commercial-only override) —
+            # an explicit end-session request above is still honored either way.
             should_delete = True
 
         if should_delete and delete_workspace(workspace_id):

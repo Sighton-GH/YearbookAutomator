@@ -116,9 +116,12 @@ The tool app (`tool/web`) is locked behind a license key — the website carries
 	- This creates (or reuses) a **unique personal key** tied to your device.
 - The backend also enforces licensing: tool APIs require an `X-License-Key` header.
 
-### Admin panel (create/revoke keys)
+### Admin panel (dashboard, usage, sessions, audit log, licenses, settings)
 
-- Admin home URL: http://127.0.0.1:8000/
+- Dashboard (stat cards, system/GPU resource usage, recent license activity, recent workspace session events): http://127.0.0.1:8000/
+- Usage (live CPU/RAM/GPU trend charts, request traffic + response status breakdown, tool/license usage over time, top license keys — see "Usage tab" below): http://127.0.0.1:8000/admin/usage
+- Sessions (active workspace sessions, checkout locks, disk usage, prune/force-release/delete): http://127.0.0.1:8000/admin/sessions
+- Audit Log (workspace session lifecycle events — created/resumed/released/taken over/pruned): http://127.0.0.1:8000/admin/audit
 - License admin URL: http://127.0.0.1:8000/admin/licenses
 - Admin settings URL: http://127.0.0.1:8000/admin/settings
 - Set admin username default: `YMGA_LICENSE_ADMIN_USERNAME` (default: `admin`)
@@ -134,6 +137,29 @@ The tool app (`tool/web`) is locked behind a license key — the website carries
 - Admin generation operations are controlled separately:
 	- Background removal operations
 	- Center-on-face operations
+
+### Usage tab (`/admin/usage`)
+
+- **Live system resources** — CPU/RAM/GPU utilization as trend line charts (sampled every 15s, last hour retained), plus a point-in-time disk-usage meter and ONNX Runtime provider badges. Sampled in-memory by a background thread — the history resets on restart (see `system_stats.resource_history_loop`).
+- **Request traffic** — requests/minute over the last 30 minutes, HTTP response status breakdown (2xx/3xx/4xx/5xx/other), average latency, and bandwidth used this run. Also in-memory since last restart.
+- **Tool & license usage** — counted generation runs per day (last 14 days), split by personal vs commercial license, license inventory by state (active/revoked/expired), and the most-active license keys. Backed by the persisted usage log, so this survives restarts (unlike the two sections above).
+
+### Performance & resource limits (admin settings)
+
+Configurable from the "Performance & Resource Limits" card in `/admin/settings` (persisted server-side); env vars below only set the initial default before anything is saved:
+
+- **Network** — throttles incoming uploads and outgoing downloads across the whole server so large batches don't saturate your internet connection:
+	- `YMGA_NETWORK_UPLOAD_LIMIT_KBPS` (default: `0` = unlimited)
+	- `YMGA_NETWORK_DOWNLOAD_LIMIT_KBPS` (default: `0` = unlimited)
+- **CPU** — caps OpenCV/ONNX Runtime worker threads and paces rendering so the app doesn't hog CPU from other running programs:
+	- `YMGA_CPU_MAX_THREADS` (default: `0` = auto/all cores)
+	- `YMGA_CPU_THROTTLE_PERCENT` (default: `100` = full speed; lower values insert idle gaps between rendered photos)
+	- `YMGA_CPU_LOW_PRIORITY` (default: `false`; lowers the process's OS scheduling priority — on Linux/macOS, raising it back to normal after enabling may need a backend restart, since that typically requires elevated permissions)
+- **GPU** — forces CPU-only inference, paces GPU-bound calls, and/or bounds concurrent GPU inference so background removal/face detection don't saturate a GPU you need for other things:
+	- `YMGA_GPU_DISABLED` (default: `false`)
+	- `YMGA_GPU_THROTTLE_PERCENT` (default: `100` = full speed)
+	- `YMGA_GPU_MAX_CONCURRENT_OPS` (default: `0` = auto)
+
 
 ### License persistence & secrets
 
@@ -201,7 +227,7 @@ Every request is scoped to a `workspace_id`:
 
 - When you upload templates/ZIPs/spreadsheets, the backend saves them into that workspace folder.
 - When you preview or generate, the backend reads from that workspace folder.
-- Workspaces can be cleaned up automatically (configurable). This is important for privacy and for keeping disk usage sane.
+- Workspaces are cleaned up automatically when their workspace session expires (personal licenses use an admin-configured default; commercial licenses can set a custom per-license duration or disable expiry entirely). This is important for privacy and for keeping disk usage sane.
 
 ### Template Parsing
 

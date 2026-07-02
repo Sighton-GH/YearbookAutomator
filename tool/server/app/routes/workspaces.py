@@ -38,6 +38,8 @@ class ResolveWorkspaceResponse(BaseModel):
     state: str = "ready"
     lock_expires_at: int | None = None
     lock_holder_device_id: str | None = None
+    expires_at_ms: int | None = None
+    expiry_disabled: bool = False
 
 
 class WorkspaceActionRequest(BaseModel):
@@ -147,11 +149,23 @@ async def resolve(req: ResolveWorkspaceRequest, request: Request) -> ResolveWork
             status_code=409,
             detail={
                 "code": "workspace_locked",
-                "message": "Workspace tied to this commercial license is currently in use.",
+                "message": "The workspace session for this commercial license is currently in use.",
                 "lock_expires_at": resolved.lock_expires_at,
                 "lock_holder_device_id": resolved.lock_holder_device_id,
             },
         )
+
+    workspace_expires_at_ms: int | None = None
+    workspace_expiry_disabled = False
+    if resolved.workspace_id:
+        wmeta = read_workspace_meta(resolved.workspace_id)
+        workspace_expiry_disabled = bool(wmeta.get("workspace_expiry_disabled", False))
+        session_expires_at = wmeta.get("session_expires_at")
+        if session_expires_at is not None:
+            try:
+                workspace_expires_at_ms = int(float(session_expires_at) * 1000)
+            except (TypeError, ValueError):
+                workspace_expires_at_ms = None
 
     return ResolveWorkspaceResponse(
         ok=True,
@@ -160,6 +174,8 @@ async def resolve(req: ResolveWorkspaceRequest, request: Request) -> ResolveWork
         created_new=resolved.created_new,
         recreated_after_expiry=resolved.recreated_after_expiry,
         state="expired_recreated" if resolved.recreated_after_expiry else "ready",
+        expires_at_ms=workspace_expires_at_ms,
+        expiry_disabled=workspace_expiry_disabled,
     )
 
 

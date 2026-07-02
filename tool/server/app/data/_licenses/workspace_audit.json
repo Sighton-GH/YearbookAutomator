@@ -1367,6 +1367,54 @@
       "license_type": "commercial",
       "ts": 1782930949,
       "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
+    },
+    {
+      "detail": "",
+      "device_id": "eee28163-ba43-4e82-9072-e7141f19c82e",
+      "event": "workspace_resumed",
+      "license_type": "commercial",
+      "ts": 1782936153,
+      "workspace_id": "a3f4dbbd25bb4f43b0f6b7da3018f839"
+    },
+    {
+      "detail": "",
+      "device_id": "aab7d4ab-a93f-4c2b-9381-879a2a40c260",
+      "event": "workspace_created",
+      "license_type": "personal",
+      "ts": 1782936177,
+      "workspace_id": "3a9b04e89b104e079a9225034955dbb5"
+    },
+    {
+      "detail": "",
+      "device_id": "7746a975-e614-46f8-8397-5f5ee60f3c85",
+      "event": "workspace_created",
+      "license_type": "personal",
+      "ts": 1782942010,
+      "workspace_id": "6c4d549604f04ad59c265610218fb5d2"
+    },
+    {
+      "detail": "",
+      "device_id": "7746a975-e614-46f8-8397-5f5ee60f3c85",
+      "event": "workspace_legacy_bound",
+      "license_type": "personal",
+      "ts": 1782942049,
+      "workspace_id": "b7992b7cbc01481b9eb2db957fc57954"
+    },
+    {
+      "detail": "removed=41",
+      "device_id": null,
+      "event": "stale_bindings_pruned",
+      "license_type": "system",
+      "ts": 1782955141,
+      "workspace_id": null
+    },
+    {
+      "detail": "",
+      "device_id": "0e5dffbc-2873-41be-a2e5-8c42fafccc2d",
+      "event": "workspace_created",
+      "license_type": "commercial",
+      "ts": 1783013273,
+      "workspace_id": "cbebf5649af244eb8e401aac44c7683f"
     }
   ]
 }

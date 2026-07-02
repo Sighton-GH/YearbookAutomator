@@ -16,6 +16,9 @@ export function FinalizeStep({
   onPlacementMode,
   forceAlphabetical,
   onForceAlphabetical,
+  alphabeticalSortOptionEnabled,
+  pdfOutputEnabled,
+  tiffOutputEnabled,
   loading,
   canContinue,
   handleRenderPreview,
@@ -41,6 +44,9 @@ export function FinalizeStep({
   onPlacementMode: (mode: PlacementMode) => void;
   forceAlphabetical: boolean;
   onForceAlphabetical: (next: boolean) => void;
+  alphabeticalSortOptionEnabled: boolean;
+  pdfOutputEnabled: boolean;
+  tiffOutputEnabled: boolean;
   loading: boolean;
   canContinue: boolean;
   handleRenderPreview: () => void;
@@ -136,13 +142,15 @@ export function FinalizeStep({
                   <InfoPopover content="Fills the left page in reading order, then the right page in reading order." ariaLabel="Left then right placement description" />
                 </div>
               </label>
-              <label className="inline" style={{ alignItems: "center", gap: 10 }}>
-                <input type="checkbox" checked={forceAlphabetical} onChange={(e) => onForceAlphabetical(e.target.checked)} disabled={loading} />
-                <div className="inline" style={{ alignItems: "center", gap: 6 }}>
-                  <div>Force alphabetical (by last name)</div>
-                  <InfoPopover content="Sorts the generation order by last name before filling slots." ariaLabel="Alphabetical placement description" />
-                </div>
-              </label>
+              {alphabeticalSortOptionEnabled && (
+                <label className="inline" style={{ alignItems: "center", gap: 10 }}>
+                  <input type="checkbox" checked={forceAlphabetical} onChange={(e) => onForceAlphabetical(e.target.checked)} disabled={loading} />
+                  <div className="inline" style={{ alignItems: "center", gap: 6 }}>
+                    <div>Force alphabetical (by last name)</div>
+                    <InfoPopover content="Sorts the generation order by last name before filling slots." ariaLabel="Alphabetical placement description" />
+                  </div>
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -155,8 +163,8 @@ export function FinalizeStep({
             </div>
             <select value={outputFormat} onChange={(e) => onOutputFormat(e.target.value as "png" | "pdf" | "tiff")} disabled={loading}>
               <option value="png">PNG (default)</option>
-              <option value="pdf">PDF</option>
-              <option value="tiff">TIFF</option>
+              {pdfOutputEnabled && <option value="pdf">PDF</option>}
+              {tiffOutputEnabled && <option value="tiff">TIFF</option>}
             </select>
 
             <div className="inline" style={{ alignItems: "center", gap: 6, marginTop: 6 }}>

@@ -30,6 +30,7 @@ export function StyleTab({
   workspaceId,
   availableFonts,
   setAvailableFonts,
+  customFontUploadEnabled,
 }: {
   skipQuotes: boolean;
   nameFontFamily: string;
@@ -55,6 +56,7 @@ export function StyleTab({
   workspaceId: string | null;
   availableFonts: { name: string; filename: string; source?: string }[];
   setAvailableFonts: (fonts: { name: string; filename: string; source?: string }[]) => void;
+  customFontUploadEnabled: boolean;
 }) {
   return (
     <div className="style-layout">
@@ -91,7 +93,9 @@ export function StyleTab({
           />
         )}
 
-        <FontLoader availableFonts={availableFonts} setAvailableFonts={setAvailableFonts} workspaceId={workspaceId} onFontFamily={onNameFontFamily} />
+        {customFontUploadEnabled && (
+          <FontLoader availableFonts={availableFonts} setAvailableFonts={setAvailableFonts} workspaceId={workspaceId} onFontFamily={onNameFontFamily} />
+        )}
       </div>
 
       <StylePreview

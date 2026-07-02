@@ -74,7 +74,7 @@ export type AdminFeatureFlags = {
   enable_background_removal_ops?: boolean;
   enable_center_on_face_ops?: boolean;
   enable_heavy_generation_ops?: boolean;
-  tool_session_timeout_seconds?: number;
+  personal_workspace_timeout_seconds?: number;
   workspace_lock_timeout_seconds?: number;
   workspace_heartbeat_interval_seconds?: number;
   workspace_cleanup_interval_seconds?: number;
@@ -82,6 +82,13 @@ export type AdminFeatureFlags = {
   enable_admin_workspace_takeover?: boolean;
   commercial_workspace_key_mode?: "license_only" | "license_and_device";
   workspace_audit_retention_days?: number;
+  enable_quotes_feature?: boolean;
+  enable_baby_photos_feature?: boolean;
+  enable_pdf_output?: boolean;
+  enable_tiff_output?: boolean;
+  enable_alphabetical_sort_option?: boolean;
+  enable_advanced_name_matching?: boolean;
+  enable_custom_font_upload?: boolean;
 };
 
 export type WorkspaceResolveResponse = {
@@ -91,6 +98,8 @@ export type WorkspaceResolveResponse = {
   created_new: boolean;
   recreated_after_expiry: boolean;
   state: "ready" | "expired_recreated";
+  expires_at_ms: number | null;
+  expiry_disabled: boolean;
 };
 
 export type WorkspaceStateResponse = {

@@ -127,10 +127,18 @@ type AppProps = {
   initialWorkspaceId?: string | null;
   initialLicenseType?: "personal" | "commercial" | null;
   clientSessionId?: string | null;
+  initialSessionExpiresAtMs?: number | null;
+  initialSessionExpiryDisabled?: boolean;
 };
 
 
-export default function App({ embedded = false, initialWorkspaceId = null, clientSessionId = null }: AppProps) {
+export default function App({
+  embedded = false,
+  initialWorkspaceId = null,
+  clientSessionId = null,
+  initialSessionExpiresAtMs = null,
+  initialSessionExpiryDisabled = false,
+}: AppProps) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -156,6 +164,16 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [sessionTtlMs, setSessionTtlMs] = useState<number>(SESSION_TTL_MS);
   const [sessionRemainingMs, setSessionRemainingMs] = useState<number>(SESSION_TTL_MS);
   const [workspaceHeartbeatSeconds, setWorkspaceHeartbeatSeconds] = useState<number>(20);
+  // Server-authoritative workspace-session expiry (from /api/workspaces/resolve),
+  // used for the topbar countdown instead of the client-guessed sessionTtlMs above —
+  // this is the value that actually governs when the backend janitor deletes the
+  // workspace, and correctly reflects per-license (personal vs. commercial custom/
+  // disabled) policy that a single client-side constant can't represent.
+  const [serverSessionExpiresAtMs, setServerSessionExpiresAtMs] = useState<number | null>(initialSessionExpiresAtMs);
+  const [serverSessionExpiryDisabled, setServerSessionExpiryDisabled] = useState<boolean>(initialSessionExpiryDisabled);
+  const [serverSessionRemainingMs, setServerSessionRemainingMs] = useState<number>(
+    initialSessionExpiresAtMs ? Math.max(0, initialSessionExpiresAtMs - Date.now()) : 0
+  );
   const sessionExpiryHandledRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -250,6 +268,13 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
   const [backgroundRemovalOpsEnabled, setBackgroundRemovalOpsEnabled] = useState(false);
   const [centerOnFaceOpsEnabled, setCenterOnFaceOpsEnabled] = useState(false);
+  const [quotesFeatureEnabled, setQuotesFeatureEnabled] = useState(true);
+  const [babyPhotosFeatureEnabled, setBabyPhotosFeatureEnabled] = useState(true);
+  const [pdfOutputEnabled, setPdfOutputEnabled] = useState(true);
+  const [tiffOutputEnabled, setTiffOutputEnabled] = useState(true);
+  const [alphabeticalSortOptionEnabled, setAlphabeticalSortOptionEnabled] = useState(true);
+  const [advancedNameMatchingEnabled, setAdvancedNameMatchingEnabled] = useState(true);
+  const [customFontUploadEnabled, setCustomFontUploadEnabled] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,7 +285,14 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
           const legacy = Boolean(flags.enable_heavy_generation_ops);
           setBackgroundRemovalOpsEnabled(Boolean(flags.enable_background_removal_ops ?? legacy));
           setCenterOnFaceOpsEnabled(Boolean(flags.enable_center_on_face_ops ?? legacy));
-          const configuredTimeoutSeconds = Number(flags.tool_session_timeout_seconds ?? 0);
+          setQuotesFeatureEnabled(flags.enable_quotes_feature ?? true);
+          setBabyPhotosFeatureEnabled(flags.enable_baby_photos_feature ?? true);
+          setPdfOutputEnabled(flags.enable_pdf_output ?? true);
+          setTiffOutputEnabled(flags.enable_tiff_output ?? true);
+          setAlphabeticalSortOptionEnabled(flags.enable_alphabetical_sort_option ?? true);
+          setAdvancedNameMatchingEnabled(flags.enable_advanced_name_matching ?? true);
+          setCustomFontUploadEnabled(flags.enable_custom_font_upload ?? true);
+          const configuredTimeoutSeconds = Number(flags.personal_workspace_timeout_seconds ?? 0);
           if (Number.isFinite(configuredTimeoutSeconds) && configuredTimeoutSeconds >= 60) {
             setSessionTtlMs(Math.floor(configuredTimeoutSeconds * 1000));
           }
@@ -273,6 +305,8 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         if (!cancelled) {
           setBackgroundRemovalOpsEnabled(false);
           setCenterOnFaceOpsEnabled(false);
+          // Tool-feature toggles fail open (default on) so a transient admin API
+          // error never silently hides features that are actually enabled.
         }
       }
     })();
@@ -299,6 +333,29 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     if (centerOnFaceOpsEnabled) return;
     if (centerBabyOnFace) setCenterBabyOnFace(false);
   }, [centerOnFaceOpsEnabled, centerBabyOnFace]);
+
+  // Admin-disabled tool features force their corresponding session choice off/
+  // back to a safe default, rather than just hiding the toggle (so a session
+  // that was mid-flight when an admin disables something doesn't keep using it).
+  useEffect(() => {
+    if (quotesFeatureEnabled) return;
+    if (!skipQuotes) setSkipQuotes(true);
+  }, [quotesFeatureEnabled, skipQuotes]);
+
+  useEffect(() => {
+    if (babyPhotosFeatureEnabled) return;
+    if (!skipBabyPhotos) setSkipBabyPhotos(true);
+  }, [babyPhotosFeatureEnabled, skipBabyPhotos]);
+
+  useEffect(() => {
+    if (alphabeticalSortOptionEnabled) return;
+    if (forceAlphabetical) setForceAlphabetical(false);
+  }, [alphabeticalSortOptionEnabled, forceAlphabetical]);
+
+  useEffect(() => {
+    if (outputFormat === "pdf" && !pdfOutputEnabled) setOutputFormat("png");
+    if (outputFormat === "tiff" && !tiffOutputEnabled) setOutputFormat("png");
+  }, [outputFormat, pdfOutputEnabled, tiffOutputEnabled]);
 
   useEffect(() => {
     if (!templateSize) {
@@ -327,6 +384,11 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
   const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
+
+  useEffect(() => {
+    if (advancedNameMatchingEnabled) return;
+    if (advancedNameMatch) setAdvancedNameMatch(false);
+  }, [advancedNameMatchingEnabled, advancedNameMatch]);
 
   // Config export/import UI state.
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -685,6 +747,10 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     const nextIdentity = createSessionIdentity(Date.now(), sessionTtlMs);
     setSessionIdentity(nextIdentity);
     setSessionRemainingMs(sessionTtlMs);
+    // The workspace this pointed to was just deleted; the topbar will get an
+    // accurate value again once a new workspace is resolved (next page load).
+    setServerSessionExpiresAtMs(null);
+    setServerSessionExpiryDisabled(false);
     sessionExpiryHandledRef.current = false;
   };
 
@@ -1540,18 +1606,35 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
     return () => window.clearInterval(timer);
   }, [sessionIdentity.expiresAtMs]);
 
+  // Topbar countdown ticker — driven by the server-authoritative workspace-session
+  // expiry (from /api/workspaces/resolve), not the client-side sessionIdentity above
+  // (which only drives the local edit-cache restore/reset heuristic).
+  useEffect(() => {
+    if (serverSessionExpiryDisabled || serverSessionExpiresAtMs == null) {
+      setServerSessionRemainingMs(0);
+      return;
+    }
+    const tick = () => {
+      setServerSessionRemainingMs(Math.max(0, serverSessionExpiresAtMs - Date.now()));
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [serverSessionExpiresAtMs, serverSessionExpiryDisabled]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.dispatchEvent(
       new CustomEvent("ymga:session-timing", {
         detail: {
-          remainingMs: sessionRemainingMs,
-          expiresAtMs: sessionIdentity.expiresAtMs,
+          remainingMs: serverSessionRemainingMs,
+          expiresAtMs: serverSessionExpiresAtMs,
           ttlMs: sessionTtlMs,
+          expiryDisabled: serverSessionExpiryDisabled,
         },
       })
     );
-  }, [sessionIdentity.expiresAtMs, sessionRemainingMs, sessionTtlMs]);
+  }, [serverSessionExpiresAtMs, serverSessionRemainingMs, serverSessionExpiryDisabled, sessionTtlMs]);
 
   useEffect(() => {
     if (sessionRemainingMs > 0) {
@@ -2311,7 +2394,10 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
         ? ["template"]
         : null
       : activeStep === "roster"
-      ? ["portraits", "quotes", "baby"]
+      ? (["portraits", "quotes", "baby"] as const).filter(
+          (section) =>
+            (section !== "quotes" || quotesFeatureEnabled) && (section !== "baby" || babyPhotosFeatureEnabled)
+        )
       : null;
   const showImportStep = importSections !== null;
 
@@ -2915,6 +3001,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
               onCenterBabyOnFace={setCenterBabyOnFace}
               backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
               centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
+              advancedNameMatchingEnabled={advancedNameMatchingEnabled}
               onContinue={() => goToAdjacentStep(1)}
             />
           )}
@@ -2990,6 +3077,7 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
               onQuoteAlign={setQuoteAlign}
               availableFonts={availableFonts}
               setAvailableFonts={setAvailableFonts}
+              customFontUploadEnabled={customFontUploadEnabled}
             />
           )}
 
@@ -3011,6 +3099,9 @@ export default function App({ embedded = false, initialWorkspaceId = null, clien
                 onPlacementMode={setPlacementMode}
                 forceAlphabetical={forceAlphabetical}
                 onForceAlphabetical={setForceAlphabetical}
+                alphabeticalSortOptionEnabled={alphabeticalSortOptionEnabled}
+                pdfOutputEnabled={pdfOutputEnabled}
+                tiffOutputEnabled={tiffOutputEnabled}
                 loading={loading}
                 canContinue={canContinue}
                 handleRenderPreview={handleRenderPreview}

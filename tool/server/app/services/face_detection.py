@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ import numpy as np
 from PIL import Image
 
 from app.services.admin_settings import get_face_detection_settings
+from app.services import throttle
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -40,6 +42,9 @@ _YUNET_SCORE: float | None = None
 
 
 def _get_ort_providers() -> list[str] | None:
+    if get_face_detection_settings().gpu_disabled:
+        return ["CPUExecutionProvider"]
+
     forced = os.getenv("YMGA_FACE_PROVIDER", "").strip()
     try:
         import onnxruntime as ort  # type: ignore
@@ -79,7 +84,11 @@ def _load_retina_session(model_path: str, input_size: int) -> object | None:
 
     providers = _get_ort_providers()
     try:
-        _RETINA_SESSION = ort.InferenceSession(model_path, providers=providers)
+        sess_options = throttle.onnx_session_options()
+        if sess_options is not None:
+            _RETINA_SESSION = ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
+        else:
+            _RETINA_SESSION = ort.InferenceSession(model_path, providers=providers)
         _RETINA_MODEL_PATH = model_path
         _RETINA_INPUT_SIZE = input_size
         _RETINA_PROVIDERS = providers
@@ -199,7 +208,10 @@ def _retinaface_detect(img_rgb: Image.Image, model_path: str, input_size: int, c
 
     blob = cv2.dnn.blobFromImage(resized, scalefactor=1.0, size=(input_size, input_size), mean=(104, 117, 123))
     input_name = sess.get_inputs()[0].name
-    outputs = sess.run(None, {input_name: blob})
+    started = time.monotonic()
+    with throttle.gpu_concurrency_gate():
+        outputs = sess.run(None, {input_name: blob})
+    throttle.gpu_pace(started)
     if len(outputs) < 2:
         return []
 
@@ -305,7 +317,10 @@ def _yunet_detect(img_rgb: Image.Image, model_path: str, input_size: int, score_
     img = np.array(rgb)
     bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     detector.setInputSize((bgr.shape[1], bgr.shape[0]))
-    ok, detections = detector.detect(bgr)
+    started = time.monotonic()
+    with throttle.gpu_concurrency_gate():
+        ok, detections = detector.detect(bgr)
+    throttle.gpu_pace(started)
     if not ok or detections is None:
         return []
 
@@ -330,7 +345,10 @@ def _yunet_detect_with_status(
     img = np.array(rgb)
     bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     detector.setInputSize((bgr.shape[1], bgr.shape[0]))
-    ok, detections = detector.detect(bgr)
+    started = time.monotonic()
+    with throttle.gpu_concurrency_gate():
+        ok, detections = detector.detect(bgr)
+    throttle.gpu_pace(started)
     if not ok or detections is None:
         return [], True
 

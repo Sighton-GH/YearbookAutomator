@@ -42,11 +42,11 @@ export function PricingPage() {
                   </li>
                   <li>
                     <span className="check-icon">✓</span>
-                    <span>Independent workspace per device</span>
+                    <span>Independent workspace session per device</span>
                   </li>
                   <li>
                     <span className="check-icon">✓</span>
-                    <span>8-hour session duration</span>
+                    <span>8-hour workspace session duration</span>
                   </li>
                 </ul>
               </div>
@@ -98,11 +98,11 @@ export function PricingPage() {
                   </li>
                   <li>
                     <span className="check-icon">✓</span>
-                    <span>8-hour session duration</span>
+                    <span>Configurable workspace session duration, or no expiry at all</span>
                   </li>
                   <li>
                     <span className="check-icon">✓</span>
-                    <span>Safe handoffs with workspace synchronization</span>
+                    <span>Safe handoffs with workspace session release</span>
                   </li>
                 </ul>
               </div>
@@ -162,25 +162,25 @@ export function PricingPage() {
             <div className="faq-item">
               <h4>Can two people use the same commercial license at the same time?</h4>
               <p>
-                No, the software enforces that only one person actively works in the shared workspace at a time. This is a safety feature to prevent accidental conflicts and data loss. Team members can take turns using the workspace seamlessly—when one person finishes and closes the tool, the next person can immediately start working on the same project with all shared templates, settings, and data waiting for them.
+                No, the software enforces that only one person holds the workspace session at a time. This is a safety feature to prevent accidental conflicts and data loss. Team members can take turns seamlessly—when one person finishes and closes the tool (or releases the session), the next person can immediately start a new workspace session on the same project with all shared templates, settings, and data waiting for them.
               </p>
             </div>
 
             <div className="faq-item">
-              <h4>What happens if my session expires after 8 hours of inactivity?</h4>
+              <h4>What happens if my workspace session expires after 8 hours of inactivity?</h4>
               <p>
-                Your workspace is preserved, so nothing is lost. When you open the tool again, you can create a fresh workspace and all your previous work (templates, data, settings) remains accessible. It's just a way to keep things organized and clean up unused sessions. Your student data, photos, and styling choices are never deleted.
+                Your workspace is preserved, so nothing is lost. When you open the tool again, you can start a fresh workspace session and all your previous work (templates, data, settings) remains accessible. It's just a way to keep things organized and clean up unused sessions. Your student data, photos, and styling choices are never deleted. (Commercial licenses can also be configured with a custom expiry, or no expiry at all.)
               </p>
             </div>
           </div>
 
           <div style={{ backgroundColor: "#f9f9f9", padding: "32px 24px", borderRadius: "8px", marginTop: "40px", marginBottom: "40px", textAlign: "center" }}>
-            <h3 style={{ marginTop: 0 }}>How Workspaces & Sessions Work</h3>
+            <h3 style={{ marginTop: 0 }}>How Workspaces & Workspace Sessions Work</h3>
             <p style={{ marginBottom: "12px", fontSize: "15px", lineHeight: "1.6" }}>
               All users get a secure workspace for their project. Personal licenses are device-locked—each device gets its own separate workspace, so you can work from your laptop, phone, or desktop completely independently with no interference. Commercial licenses provide a shared collaborative workspace—multiple team members can contribute to the same yearbook project from the same workstation, with safe handoffs to prevent conflicts.
             </p>
             <p style={{ marginBottom: 0, fontSize: "15px", lineHeight: "1.6" }}>
-              Sessions stay active for 8 hours while you're working. If you step away and come back later, your workspace is still there with all your templates and settings preserved. No data loss, no hassle.
+              Workspace sessions stay active for 8 hours by default while you're working (commercial licenses can set a custom duration or disable expiry entirely). If you step away and come back later, your workspace is still there with all your templates and settings preserved. No data loss, no hassle.
             </p>
           </div>
 

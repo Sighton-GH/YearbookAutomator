@@ -17,11 +17,18 @@ DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
 def _tool_session_ttl_seconds() -> int:
+    """Default (personal-license) workspace-session TTL.
+
+    Only used when a caller doesn't pass an explicit `ttl_seconds` to
+    `touch_workspace` (e.g. legacy/edge call sites). Commercial-license TTLs
+    are resolved per-license in `workspace_registry.py` and always passed in
+    explicitly.
+    """
     try:
         from app.services.admin_settings import get_face_detection_settings
 
         settings = get_face_detection_settings()
-        ttl = int(getattr(settings, "tool_session_timeout_seconds", DEFAULT_SESSION_TTL_SECONDS))
+        ttl = int(getattr(settings, "personal_workspace_timeout_seconds", DEFAULT_SESSION_TTL_SECONDS))
         return max(60, ttl)
     except Exception:
         return DEFAULT_SESSION_TTL_SECONDS
@@ -102,10 +109,14 @@ def touch_workspace(
     session_id: str | None = None,
     started_at_ms: int | float | None = None,
     expires_at_ms: int | float | None = None,
+    ttl_seconds: int | None = None,
+    expiry_disabled: bool = False,
 ) -> None:
     """Mark workspace as active and clear any pending end-session request.
 
-    Session expiry is capped by the admin-configured tool session timeout.
+    Session expiry is capped by `ttl_seconds` (falls back to the personal-license
+    default if not given). If `expiry_disabled` is True, no expiry is computed at
+    all and the workspace is never swept by the cleanup janitor.
     """
     meta = read_workspace_meta(workspace_id)
     now_s = time.time()
@@ -128,27 +139,34 @@ def touch_workspace(
             session_started_at_s = now_s
         meta["session_started_at"] = session_started_at_s
 
-    # Expires at most timeout seconds from session start (policy). Never extend beyond that.
-    hard_expiry_s = session_started_at_s + _tool_session_ttl_seconds()
-    candidate_expiry_s = hard_expiry_s
-    if expires_at_ms is not None:
-        try:
-            candidate_expiry_s = float(expires_at_ms) / 1000.0
-        except (TypeError, ValueError):
-            candidate_expiry_s = hard_expiry_s
-
-    candidate_expiry_s = min(candidate_expiry_s, hard_expiry_s)
-    prev_expiry = meta.get("session_expires_at")
-    try:
-        prev_expiry_s = float(prev_expiry) if prev_expiry is not None else 0.0
-    except (TypeError, ValueError):
-        prev_expiry_s = 0.0
-
-    # Keep earliest known expiry to avoid accidental extension.
-    if prev_expiry_s > 0:
-        meta["session_expires_at"] = min(prev_expiry_s, candidate_expiry_s)
+    if expiry_disabled:
+        meta["workspace_expiry_disabled"] = True
+        meta.pop("session_expires_at", None)
     else:
-        meta["session_expires_at"] = candidate_expiry_s
+        meta.pop("workspace_expiry_disabled", None)
+
+        # Expires at most ttl_seconds from session start (policy). Never extend beyond that.
+        effective_ttl = int(ttl_seconds) if ttl_seconds is not None else _tool_session_ttl_seconds()
+        hard_expiry_s = session_started_at_s + effective_ttl
+        candidate_expiry_s = hard_expiry_s
+        if expires_at_ms is not None:
+            try:
+                candidate_expiry_s = float(expires_at_ms) / 1000.0
+            except (TypeError, ValueError):
+                candidate_expiry_s = hard_expiry_s
+
+        candidate_expiry_s = min(candidate_expiry_s, hard_expiry_s)
+        prev_expiry = meta.get("session_expires_at")
+        try:
+            prev_expiry_s = float(prev_expiry) if prev_expiry is not None else 0.0
+        except (TypeError, ValueError):
+            prev_expiry_s = 0.0
+
+        # Keep earliest known expiry to avoid accidental extension.
+        if prev_expiry_s > 0:
+            meta["session_expires_at"] = min(prev_expiry_s, candidate_expiry_s)
+        else:
+            meta["session_expires_at"] = candidate_expiry_s
 
     if session_id:
         meta["session_id"] = str(session_id)

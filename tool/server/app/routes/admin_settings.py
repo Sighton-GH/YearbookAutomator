@@ -5,8 +5,10 @@ import html
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.routes.licensing import _admin_layout
+from app.routes.admin_ui import admin_layout as _admin_layout, badge
 from app.services.admin_settings import get_face_detection_settings, update_face_detection_settings
+from app.services import throttle
+from app.services.system_stats import get_gpu_stats
 
 
 router = APIRouter()
@@ -19,7 +21,7 @@ def admin_feature_flags() -> dict[str, bool | int | str]:
         "enable_background_removal_ops": bool(s.enable_background_removal_ops),
         "enable_center_on_face_ops": bool(s.enable_center_on_face_ops),
         "enable_heavy_generation_ops": bool(s.enable_heavy_generation_ops),
-        "tool_session_timeout_seconds": int(s.tool_session_timeout_seconds),
+        "personal_workspace_timeout_seconds": int(s.personal_workspace_timeout_seconds),
         "workspace_lock_timeout_seconds": int(s.workspace_lock_timeout_seconds),
         "workspace_heartbeat_interval_seconds": int(s.workspace_heartbeat_interval_seconds),
         "workspace_cleanup_interval_seconds": int(s.workspace_cleanup_interval_seconds),
@@ -27,6 +29,13 @@ def admin_feature_flags() -> dict[str, bool | int | str]:
         "enable_admin_workspace_takeover": bool(s.enable_admin_workspace_takeover),
         "commercial_workspace_key_mode": str(s.commercial_workspace_key_mode),
         "workspace_audit_retention_days": int(s.workspace_audit_retention_days),
+        "enable_quotes_feature": bool(s.enable_quotes_feature),
+        "enable_baby_photos_feature": bool(s.enable_baby_photos_feature),
+        "enable_pdf_output": bool(s.enable_pdf_output),
+        "enable_tiff_output": bool(s.enable_tiff_output),
+        "enable_alphabetical_sort_option": bool(s.enable_alphabetical_sort_option),
+        "enable_advanced_name_matching": bool(s.enable_advanced_name_matching),
+        "enable_custom_font_upload": bool(s.enable_custom_font_upload),
     }
 
 
@@ -41,10 +50,19 @@ def admin_settings(request: Request):
         notice = "<div class='card success'><strong>Face-detection settings updated.</strong></div>"
     elif saved == "auth":
         notice = "<div class='card success'><strong>Admin username updated.</strong></div>"
+    elif saved == "performance":
+        notice = "<div class='card success'><strong>Performance &amp; resource limit settings updated.</strong></div>"
+    elif saved == "tool-features":
+        notice = "<div class='card success'><strong>Tool feature toggles updated.</strong></div>"
+
+    gpu_info = get_gpu_stats()
+    providers_html = "".join(
+        badge(p, "info" if p != "CPUExecutionProvider" else "muted") for p in gpu_info.get("onnx_providers") or []
+    ) or "<span class='muted'>none detected</span>"
 
     content = f"""
-  <h1>Admin Settings</h1>
-  <p class='muted'>Manage admin access, generation controls, and face-detection behavior.</p>
+  <h1 class="page-title">Settings</h1>
+  <p class="subtitle">Manage admin access, generation controls, face-detection behavior, and performance/resource limits.</p>
 
   {notice}
 
@@ -88,15 +106,16 @@ def admin_settings(request: Request):
       <div class=\"muted\" style=\"margin-top:8px;\">
         Idle timeout logs out inactive admin sessions. Max age forces re-login even when active.
       </div>
-        <h3 style="margin-top: 14px;">Tool session timeout</h3>
+        <h3 style="margin-top: 14px;">Personal license workspace timeout</h3>
         <div class="row">
           <div>
-            <label>Tool session timeout (seconds)</label>
-            <input name="tool_session_timeout_seconds" value="{s.tool_session_timeout_seconds}" />
+            <label>Personal license workspace timeout (seconds)</label>
+            <input name="personal_workspace_timeout_seconds" value="{s.personal_workspace_timeout_seconds}" />
           </div>
         </div>
         <div class="muted" style="margin-top:8px;">
-          Controls how long the tool workspace session stays active before automatic expiry/cleanup.
+          Controls how long personal (free) license workspace sessions stay active before automatic expiry/cleanup.
+          Commercial licenses are configured per-license instead &mdash; see the <a href="/admin/licenses">Licenses</a> page.
         </div>
 
       <h3 style="margin-top: 14px;">Workspace ownership + lock controls</h3>
@@ -140,6 +159,117 @@ def admin_settings(request: Request):
 
       <div style=\"margin-top: 12px;\">
         <button type=\"submit\">Save feature settings</button>
+      </div>
+    </form>
+  </div>
+
+  <div class=\"card\">
+    <h2>Performance &amp; Resource Limits</h2>
+    <p class=\"hint\">Keep this app from bottlenecking your internet connection or hogging CPU/GPU while other things are running. 0 always means "unlimited" / "auto".</p>
+    <form method=\"post\" action=\"/admin/settings/performance\">
+      <h3 style=\"margin-top:0\">Network</h3>
+      <div class=\"row\">
+        <div>
+          <label>Upload bandwidth limit (KB/s)</label>
+          <input name=\"network_upload_limit_kbps\" value=\"{s.network_upload_limit_kbps}\" placeholder=\"0 = unlimited\" />
+        </div>
+        <div>
+          <label>Download bandwidth limit (KB/s)</label>
+          <input name=\"network_download_limit_kbps\" value=\"{s.network_download_limit_kbps}\" placeholder=\"0 = unlimited\" />
+        </div>
+      </div>
+      <div class=\"hint\">
+        Throttles incoming file uploads (templates, rosters, photo ZIPs) and outgoing downloads (generated spreads)
+        across the whole server, so a big batch transfer doesn't saturate your internet connection.
+      </div>
+
+      <h3>CPU</h3>
+      <div class=\"row\">
+        <div>
+          <label>Max CPU threads</label>
+          <input name=\"cpu_max_threads\" value=\"{s.cpu_max_threads}\" placeholder=\"0 = auto (all cores)\" />
+        </div>
+        <div>
+          <label>CPU speed limit (%)</label>
+          <input name=\"cpu_throttle_percent\" value=\"{s.cpu_throttle_percent}\" placeholder=\"100 = full speed\" />
+        </div>
+      </div>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"cpu_low_priority\" value=\"1\" style=\"width:auto\" {"checked" if s.cpu_low_priority else ""} />
+        Lower process priority (let other apps win CPU contention)
+      </label>
+      <div class=\"hint\">
+        The thread cap applies to OpenCV and newly created ML sessions immediately. The speed limit paces image
+        rendering with small idle gaps so sustained CPU load stays near the target percent. On Linux/macOS, turning
+        "lower priority" back off may require a backend restart (raising priority back up needs elevated permissions).
+      </div>
+
+      <h3>GPU</h3>
+      <div class=\"row\">
+        <div>
+          <label>GPU concurrency limit</label>
+          <input name=\"gpu_max_concurrent_ops\" value=\"{s.gpu_max_concurrent_ops}\" placeholder=\"0 = auto\" />
+        </div>
+        <div>
+          <label>GPU speed limit (%)</label>
+          <input name=\"gpu_throttle_percent\" value=\"{s.gpu_throttle_percent}\" placeholder=\"100 = full speed\" />
+        </div>
+      </div>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"gpu_disabled\" value=\"1\" style=\"width:auto\" {"checked" if s.gpu_disabled else ""} />
+        Force CPU-only (disable GPU acceleration entirely)
+      </label>
+      <div class=\"hint\">Detected ONNX Runtime providers: {providers_html}</div>
+
+      <div style=\"margin-top: 12px;\">
+        <button type=\"submit\" class=\"primary\">Save performance settings</button>
+      </div>
+    </form>
+  </div>
+
+  <div class=\"card\">
+    <h2>Tool Feature Toggles</h2>
+    <p class=\"hint\">
+      Turn off individual optional features of the tool for everyone. The 5 wizard steps themselves (Template,
+      Roster &amp; Photos, People, Style, Generate) always stay available since they're sequential and required &mdash;
+      these toggles only affect optional sub-features within them.
+    </p>
+    <form method=\"post\" action=\"/admin/settings/tool-features\">
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_quotes_feature\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_quotes_feature else ""} />
+        Quotes feature (upload/edit/render student quotes)
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_baby_photos_feature\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_baby_photos_feature else ""} />
+        Baby photos feature (upload/edit/render baby cutouts)
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_pdf_output\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_pdf_output else ""} />
+        PDF output format
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_tiff_output\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_tiff_output else ""} />
+        TIFF output format
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_alphabetical_sort_option\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_alphabetical_sort_option else ""} />
+        Alphabetical sort option (Generate step)
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_advanced_name_matching\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_advanced_name_matching else ""} />
+        Advanced name matching (mugshots, quotes, baby photos)
+      </label>
+      <label style=\"display:flex; gap:10px; align-items:center; font-weight:600; margin-top: 10px;\">
+        <input type=\"checkbox\" name=\"enable_custom_font_upload\" value=\"1\" style=\"width:auto\" {"checked" if s.enable_custom_font_upload else ""} />
+        Custom font upload (Style step)
+      </label>
+      <div class=\"hint\" style=\"margin-top:10px;\">
+        Disabling a feature here takes effect the next time the tool frontend loads its admin flags (on page load,
+        or within a few seconds if it's already open). It does not delete any data already using that feature.
+      </div>
+
+      <div style=\"margin-top: 12px;\">
+        <button type=\"submit\" class=\"primary\">Save tool feature toggles</button>
       </div>
     </form>
   </div>
@@ -237,7 +367,7 @@ def admin_settings_features(
     enable_center_on_face_ops: str | None = Form(None),
     admin_idle_timeout_seconds: str = Form(""),
     admin_max_session_seconds: str = Form(""),
-    tool_session_timeout_seconds: str = Form(""),
+    personal_workspace_timeout_seconds: str = Form(""),
     workspace_lock_timeout_seconds: str = Form(""),
     workspace_heartbeat_interval_seconds: str = Form(""),
     workspace_cleanup_interval_seconds: str = Form(""),
@@ -256,7 +386,9 @@ def admin_settings_features(
     current = get_face_detection_settings()
     idle = _parse_timeout(admin_idle_timeout_seconds, current.admin_idle_timeout_seconds, 60)
     max_age = _parse_timeout(admin_max_session_seconds, current.admin_max_session_seconds, idle)
-    tool_timeout = _parse_timeout(tool_session_timeout_seconds, current.tool_session_timeout_seconds, 60)
+    personal_workspace_timeout = _parse_timeout(
+        personal_workspace_timeout_seconds, current.personal_workspace_timeout_seconds, 60
+    )
     lock_timeout = _parse_timeout(workspace_lock_timeout_seconds, current.workspace_lock_timeout_seconds, 30)
     heartbeat_interval = _parse_timeout(
         workspace_heartbeat_interval_seconds,
@@ -280,7 +412,7 @@ def admin_settings_features(
             "enable_heavy_generation_ops": bool(enable_background_removal_ops and enable_center_on_face_ops),
             "admin_idle_timeout_seconds": idle,
             "admin_max_session_seconds": max_age,
-            "tool_session_timeout_seconds": tool_timeout,
+            "personal_workspace_timeout_seconds": personal_workspace_timeout,
             "workspace_lock_timeout_seconds": lock_timeout,
             "workspace_heartbeat_interval_seconds": heartbeat_interval,
             "workspace_cleanup_interval_seconds": cleanup_interval,
@@ -291,3 +423,71 @@ def admin_settings_features(
         }
     )
     return RedirectResponse(url="/admin/settings?saved=features", status_code=303)
+
+
+@router.post("/admin/settings/performance", response_class=HTMLResponse)
+def admin_settings_performance(
+    network_upload_limit_kbps: str = Form(""),
+    network_download_limit_kbps: str = Form(""),
+    cpu_max_threads: str = Form(""),
+    cpu_throttle_percent: str = Form(""),
+    cpu_low_priority: str | None = Form(None),
+    gpu_disabled: str | None = Form(None),
+    gpu_throttle_percent: str = Form(""),
+    gpu_max_concurrent_ops: str = Form(""),
+):
+    def _parse_non_negative(raw: str, default: int) -> int:
+        try:
+            value = int((raw or "").strip())
+        except ValueError:
+            return default
+        return max(0, value)
+
+    def _parse_percent(raw: str, default: int) -> int:
+        try:
+            value = int((raw or "").strip())
+        except ValueError:
+            return default
+        return min(100, max(1, value))
+
+    current = get_face_detection_settings()
+    update_face_detection_settings(
+        {
+            "network_upload_limit_kbps": _parse_non_negative(network_upload_limit_kbps, current.network_upload_limit_kbps),
+            "network_download_limit_kbps": _parse_non_negative(network_download_limit_kbps, current.network_download_limit_kbps),
+            "cpu_max_threads": _parse_non_negative(cpu_max_threads, current.cpu_max_threads),
+            "cpu_throttle_percent": _parse_percent(cpu_throttle_percent, current.cpu_throttle_percent),
+            "cpu_low_priority": bool(cpu_low_priority),
+            "gpu_disabled": bool(gpu_disabled),
+            "gpu_throttle_percent": _parse_percent(gpu_throttle_percent, current.gpu_throttle_percent),
+            "gpu_max_concurrent_ops": _parse_non_negative(gpu_max_concurrent_ops, current.gpu_max_concurrent_ops),
+        }
+    )
+    # Apply the CPU thread cap / process priority immediately rather than
+    # waiting for the next generation job or a server restart.
+    throttle.apply_cpu_limits()
+    return RedirectResponse(url="/admin/settings?saved=performance", status_code=303)
+
+
+@router.post("/admin/settings/tool-features", response_class=HTMLResponse)
+def admin_settings_tool_features(
+    enable_quotes_feature: str | None = Form(None),
+    enable_baby_photos_feature: str | None = Form(None),
+    enable_pdf_output: str | None = Form(None),
+    enable_tiff_output: str | None = Form(None),
+    enable_alphabetical_sort_option: str | None = Form(None),
+    enable_advanced_name_matching: str | None = Form(None),
+    enable_custom_font_upload: str | None = Form(None),
+):
+    update_face_detection_settings(
+        {
+            "enable_quotes_feature": bool(enable_quotes_feature),
+            "enable_baby_photos_feature": bool(enable_baby_photos_feature),
+            "enable_pdf_output": bool(enable_pdf_output),
+            "enable_tiff_output": bool(enable_tiff_output),
+            "enable_alphabetical_sort_option": bool(enable_alphabetical_sort_option),
+            "enable_advanced_name_matching": bool(enable_advanced_name_matching),
+            "enable_custom_font_upload": bool(enable_custom_font_upload),
+        }
+    )
+    return RedirectResponse(url="/admin/settings?saved=tool-features", status_code=303)

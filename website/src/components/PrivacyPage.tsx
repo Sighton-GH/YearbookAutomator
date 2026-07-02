@@ -35,7 +35,7 @@ export function PrivacyPage() {
               <li>
                 In the future, the Software may be offered as a hosted service. When using a hosted version, your data will
                 be transmitted to and processed on the server. Data you upload or generate will be accessible to the server
-                operator for the duration of your session or workspace.
+                operator for the duration of your workspace session.
               </li>
             </ul>
 
@@ -48,8 +48,8 @@ export function PrivacyPage() {
               <li>No analytics, telemetry, or background network communication is performed in local mode.</li>
               <li>
                 When using a hosted version, your data (including images, spreadsheets, and generated outputs) will be
-                stored on the server only as long as your workspace or session is active. Data will be deleted from the
-                server after you leave the workspace or end your session.
+                stored on the server only as long as your workspace session is active. Data will be deleted from the
+                server after your workspace session ends or expires.
               </li>
             </ul>
 

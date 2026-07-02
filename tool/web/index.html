@@ -8,9 +8,9 @@
     <title>Custom Flow Automator — Sighton Yearbook Tools</title>
     <script>
       (function () {
-        var theme = "dark";
+        var theme = "light";
         try {
-          if (window.localStorage.getItem("ymga-app-theme") === "light") theme = "light";
+          if (window.localStorage.getItem("ymga-app-theme") === "dark") theme = "dark";
         } catch (e) {}
         document.documentElement.setAttribute("data-theme", theme);
       })();

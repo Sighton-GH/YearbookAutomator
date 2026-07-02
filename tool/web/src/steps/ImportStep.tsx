@@ -220,6 +220,7 @@ export function ImportStep({
   onCenterBabyOnFace,
   backgroundRemovalOpsEnabled,
   centerOnFaceOpsEnabled,
+  advancedNameMatchingEnabled,
   onContinue,
 }: {
   /** Which pipeline cards to render. Lets the 5-step flow surface one card per step
@@ -294,6 +295,7 @@ export function ImportStep({
   onCenterBabyOnFace: (v: boolean) => void;
   backgroundRemovalOpsEnabled: boolean;
   centerOnFaceOpsEnabled: boolean;
+  advancedNameMatchingEnabled: boolean;
   onContinue: () => void;
 }) {
   // --- Template card state ---
@@ -329,6 +331,23 @@ export function ImportStep({
   const [babyFile, setBabyFile] = useState<File | null>(null);
   const [babyAdvancedNameMatch, setBabyAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
   const [babyPartialNameMatch, setBabyPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
+
+  // Admin-disabled advanced name matching forces every local "advanced/partial
+  // matching" toggle off too, so a hidden checkbox can't leave stale state that
+  // still gets sent to the backend on ingest.
+  useEffect(() => {
+    if (advancedNameMatchingEnabled) return;
+    if (quotesAdvancedNameMatch) setQuotesAdvancedNameMatch(false);
+    if (babyAdvancedNameMatch) {
+      setBabyAdvancedNameMatch(false);
+      onBabyIngest((prev) => ({ ...prev, advancedNameMatch: false }));
+    }
+    if (babyPartialNameMatch) {
+      setBabyPartialNameMatch(false);
+      onBabyIngest((prev) => ({ ...prev, partialNameMatch: false }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advancedNameMatchingEnabled, quotesAdvancedNameMatch, babyAdvancedNameMatch, babyPartialNameMatch]);
   const [convertPdfs, setConvertPdfs] = useState(Boolean(babyIngest.convertPdfs ?? true));
   const [removeBabyBackground, setRemoveBabyBackground] = useState(Boolean(babyIngest.removeBackground ?? false));
   const [babyBackgroundMode, setBabyBackgroundMode] = useState<BackgroundMode>(
@@ -1314,12 +1333,14 @@ export function ImportStep({
               <input type="text" value={namingPattern} onChange={(e) => setNamingPattern(e.target.value)} placeholder={defaultNamingPattern} />
             </label>
           )}
-          <ToggleSwitch
-            checked={advancedNameMatch}
-            onChange={setAdvancedNameMatch}
-            label="Prioritize names (case-insensitive)"
-            description="Filenames containing FIRST+LAST map to that student first, then numbered portraits fill remaining rows."
-          />
+          {advancedNameMatchingEnabled && (
+            <ToggleSwitch
+              checked={advancedNameMatch}
+              onChange={setAdvancedNameMatch}
+              label="Prioritize names (case-insensitive)"
+              description="Filenames containing FIRST+LAST map to that student first, then numbered portraits fill remaining rows."
+            />
+          )}
 
           {insecureHttp && (
             <ToggleSwitch checked={allowInsecureUploads} onChange={() => undefined} label="Uploads over HTTP" description="Contact an admin to allow insecure uploads." disabled />
@@ -1385,12 +1406,14 @@ export function ImportStep({
             <input type="file" accept=".xlsx,.csv" onChange={(e) => setQuotesSheet(e.target.files?.[0] ?? null)} />
             {quotesSheet && <span className="muted small">{quotesSheet.name}</span>}
           </UploadDropLabel>
-          <ToggleSwitch
-            checked={quotesAdvancedNameMatch}
-            onChange={setQuotesAdvancedNameMatch}
-            label="Advanced name matching"
-            description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
-          />
+          {advancedNameMatchingEnabled && (
+            <ToggleSwitch
+              checked={quotesAdvancedNameMatch}
+              onChange={setQuotesAdvancedNameMatch}
+              label="Advanced name matching"
+              description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
+            />
+          )}
           <p className="muted small">You can also add or edit quotes per-person later in Edit — this upload is optional.</p>
           <div className="import-card-actions">
             <ProcessButton
@@ -1453,25 +1476,29 @@ export function ImportStep({
               {babyZip && <span className="muted small">{babyZip.name}</span>}
             </UploadDropLabel>
 
-            <ToggleSwitch
-              checked={babyAdvancedNameMatch}
-              onChange={(checked) => {
-                setBabyAdvancedNameMatch(checked);
-                onBabyIngest((prev) => ({ ...prev, advancedNameMatch: checked }));
-              }}
-              label="Advanced name matching"
-              description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
-            />
-            <ToggleSwitch
-              disabled={!babyAdvancedNameMatch}
-              checked={babyAdvancedNameMatch && babyPartialNameMatch}
-              onChange={(checked) => {
-                setBabyPartialNameMatch(checked);
-                onBabyIngest((prev) => ({ ...prev, partialNameMatch: checked }));
-              }}
-              label="Partial name matching"
-              description="Helps with minor typos/missing characters."
-            />
+            {advancedNameMatchingEnabled && (
+              <>
+                <ToggleSwitch
+                  checked={babyAdvancedNameMatch}
+                  onChange={(checked) => {
+                    setBabyAdvancedNameMatch(checked);
+                    onBabyIngest((prev) => ({ ...prev, advancedNameMatch: checked }));
+                  }}
+                  label="Advanced name matching"
+                  description="Matches FIRST LAST or LAST FIRST (case-insensitive)."
+                />
+                <ToggleSwitch
+                  disabled={!babyAdvancedNameMatch}
+                  checked={babyAdvancedNameMatch && babyPartialNameMatch}
+                  onChange={(checked) => {
+                    setBabyPartialNameMatch(checked);
+                    onBabyIngest((prev) => ({ ...prev, partialNameMatch: checked }));
+                  }}
+                  label="Partial name matching"
+                  description="Helps with minor typos/missing characters."
+                />
+              </>
+            )}
             <ToggleSwitch
               checked={convertPdfs}
               onChange={(checked) => {

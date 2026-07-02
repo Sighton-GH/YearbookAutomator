@@ -4,7 +4,6 @@ import time
 import os
 from threading import Event, Thread
 
-import cv2
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
@@ -15,11 +14,19 @@ from app.routes import templates, mapping, generation, fonts
 from app.routes import workspaces
 from app.routes import licensing
 from app.routes import admin_settings
+from app.routes import admin_dashboard
+from app.routes import admin_usage
+from app.routes.admin_ui import auth_required_page
 from app.services.workspace_cleanup import cleanup_loop
 from app.services.storage import InvalidWorkspaceId, clear_all_workspaces
+from app.services import throttle
+from app.services import metrics as metrics_service
+from app.services import system_stats
+from app.services.bandwidth import get_download_bucket, get_upload_bucket
 from app.services.licensing import (
     get_device_id_from_headers,
     get_required_license_key_from_headers,
+    record_license_seen,
     validate_license,
 )
 from app.routes.licensing import (
@@ -73,8 +80,9 @@ def _license_hint(reason: str | None) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Let OpenCV use all available CPU cores for image operations.
-    cv2.setNumThreads(0)
+    # Apply the admin-configured CPU thread cap + process priority (defaults to
+    # "auto" / normal priority, matching the previous hardcoded behavior).
+    throttle.apply_cpu_limits()
 
     # Local/dev convenience: wipe uploaded data on server start.
     # Set YMGA_CLEAR_WORKSPACES_ON_STARTUP=false to preserve workspaces.
@@ -96,11 +104,17 @@ async def lifespan(app: FastAPI):
     stop_event = Event()
     thread = Thread(target=cleanup_loop, args=(stop_event,), daemon=True)
     thread.start()
+
+    resource_stop_event = Event()
+    resource_thread = Thread(target=system_stats.resource_history_loop, args=(resource_stop_event,), daemon=True)
+    resource_thread.start()
     try:
         yield
     finally:
         stop_event.set()
         thread.join(timeout=1.0)
+        resource_stop_event.set()
+        resource_thread.join(timeout=1.0)
 
 
 app = FastAPI(title="Yearbook Mugshot Automator", version="0.1.0", lifespan=lifespan)
@@ -199,6 +213,8 @@ async def license_guard(request: Request, call_next):
                 },
             )
 
+        record_license_seen(key or "", ip=ip, device_id=device_id)
+
         # Expose validated license context for downstream handlers.
         request.state.license_key = key
         request.state.license_device_id = device_id
@@ -239,7 +255,7 @@ async def admin_session_guard(request: Request, call_next):
             status_msg = "Invalid admin session"
 
         resp = HTMLResponse(
-            content=status_msg,
+            content=auth_required_page(status_msg),
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="YMGA Admin", charset="UTF-8"'},
         )
@@ -252,9 +268,63 @@ async def admin_session_guard(request: Request, call_next):
     return response
 
 
+class TrafficMiddleware:
+    """Outermost ASGI layer: bandwidth throttling + full-coverage request metrics.
+
+    Implemented as a raw ASGI middleware (not `@app.middleware("http")`, which
+    uses `BaseHTTPMiddleware` and would buffer the request/response instead of
+    exposing real byte-level chunks) so it can:
+      - throttle incoming upload bytes and outgoing download bytes to the
+        admin-configured KB/s caps, and
+      - record metrics for *every* request/response, including ones rejected
+        early by the license/admin guards below it (those never reach the
+        `access_log` BaseHTTPMiddleware since it sits further inside the stack).
+
+    Registered last (see bottom of this file) so it ends up outermost.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        upload_bucket = get_upload_bucket()
+        download_bucket = get_download_bucket()
+        started = time.perf_counter()
+        status_holder = {"status": 0}
+
+        async def throttled_receive():
+            message = await receive()
+            if message.get("type") == "http.request":
+                body = message.get("body")
+                if body:
+                    await upload_bucket.consume(len(body))
+            return message
+
+        async def throttled_send(message):
+            if message.get("type") == "http.response.start":
+                status_holder["status"] = int(message.get("status") or 0)
+            elif message.get("type") == "http.response.body":
+                body = message.get("body")
+                if body:
+                    await download_bucket.consume(len(body))
+            await send(message)
+
+        try:
+            await self.app(scope, throttled_receive, throttled_send)
+        finally:
+            duration_ms = (time.perf_counter() - started) * 1000
+            metrics_service.record_request(status=status_holder["status"] or 500, duration_ms=duration_ms)
+
+
 @app.exception_handler(InvalidWorkspaceId)
 async def invalid_workspace_id_handler(request: Request, exc: InvalidWorkspaceId):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+app.add_middleware(TrafficMiddleware)
 
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
@@ -263,6 +333,8 @@ app.include_router(fonts.router, prefix="/api/fonts", tags=["fonts"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 app.include_router(licensing.router, tags=["licensing"])
 app.include_router(admin_settings.router, tags=["admin"])
+app.include_router(admin_dashboard.router, tags=["admin"])
+app.include_router(admin_usage.router, tags=["admin"])
 
 @app.get("/health")
 def health() -> dict[str, str]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -10,6 +11,7 @@ from PIL import UnidentifiedImageError
 from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.placement import auto_place_slots_for_people
 from app.services.storage import workspace_dir
+from app.services import throttle
 
 
 _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
@@ -555,6 +557,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     if not template_path.exists():
         raise FileNotFoundError("Clean template not found; parse step must run first")
 
+    # Apply the admin-configured CPU thread cap for this render job (cheap; safe
+    # to call per-job so settings changes take effect without a restart).
+    throttle.apply_cpu_limits()
+
     output_format = (getattr(payload, "output_format", "png") or "png").lower()
     tick(5, "Loading template")
     base = Image.open(template_path).convert("RGB")
@@ -621,6 +627,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             return None
 
     for idx, (person, slot) in enumerate(zip(effective_people, effective_slots)):
+        _loop_started = time.monotonic()
         mugshot_filename = person.mugshot_filename or payload.default_mugshot_filename
         if mugshot_filename:
             mug_path = root / "mugshots" / mugshot_filename
@@ -689,6 +696,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
         pct = 10 + int((idx + 1) / total * 80)
         tick(pct, f"Rendered {idx + 1}/{total}")
+        throttle.cpu_pace(_loop_started)
 
     out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
     out_path = root / out_name

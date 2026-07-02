@@ -91,9 +91,9 @@ function LicensingSessionsSection() {
   return (
     <div className="panel">
       <div className="ss-kicker">Fundamentals</div>
-      <h2>Understanding Licensing & Workspaces</h2>
+      <h2>Understanding Licensing & Workspace Sessions</h2>
       <p className="muted">
-        When you use the Yearbook Grad Mugshot Automator, the tool creates a private <strong>workspace</strong> for your project. A workspace is an isolated folder that stores your templates, student data, images, and styling choices. Understanding how workspaces work helps you get the most out of the tool, especially when using multiple devices or sharing a license.
+        When you use the Yearbook Grad Mugshot Automator, the tool creates a private <strong>workspace</strong> for your project — an isolated folder on the server that stores your templates, student data, images, and styling choices. Each time you open the tool with your license, you check out a <strong>workspace session</strong> tied to that workspace. Understanding how workspace sessions work helps you get the most out of the tool, especially when using multiple devices or sharing a license.
       </p>
 
       <h3>What is a Workspace?</h3>
@@ -108,10 +108,10 @@ function LicensingSessionsSection() {
         <li>Generated output files (PNGs)</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
-        By default, workspaces stay active for up to 8 hours of activity. If you step away and come back later, your workspace is still there with all your work preserved. If a workspace expires from inactivity, the data is preserved and can be recovered, but you'll create a fresh new workspace on your next visit.
+        By default, a workspace session stays active for up to 8 hours of activity — personal (free) licenses always use this default. Commercial licenses can instead be configured with a custom session duration, or no expiry at all. If you step away and come back later, your workspace is still there with all your work preserved. If a workspace session expires from inactivity, the workspace itself is preserved and can be recovered, but you'll start a fresh workspace session on your next visit.
       </p>
 
-      <h3>Personal License: Device-Locked Workspaces</h3>
+      <h3>Personal License: Device-Locked Workspace Sessions</h3>
       <p className="muted">
         With a <strong>free personal license</strong>, each device you use gets its own completely separate workspace. The license is locked to the device, meaning:
       </p>
@@ -122,7 +122,7 @@ function LicensingSessionsSection() {
         <li><strong>No waiting:</strong> You can switch devices instantly without worrying about locks or conflicts</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
-        Example: You design templates on your laptop (stored in laptop workspace). When you switch to your desktop, you start fresh with a new workspace. If you want to reuse the templates, you'll need to re-upload them. Each device is completely independent.
+        Example: You design templates on your laptop (stored in your laptop's workspace). When you switch to your desktop, you start a fresh workspace session with a new workspace. If you want to reuse the templates, you'll need to re-upload them. Each device is completely independent.
       </p>
 
       <h3>Commercial License: Shared Collaborative Workspace</h3>
@@ -131,10 +131,11 @@ function LicensingSessionsSection() {
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
         <li><strong>Centralized project:</strong> Everyone works from the same templates, settings, and student data. No duplication, no version confusion</li>
-        <li><strong>Safe collaboration:</strong> Only one person works in the workspace at a time to prevent conflicts. Safe handoffs mean Person A can finish, Person B takes over seamlessly</li>
+        <li><strong>Safe collaboration:</strong> Only one person holds the workspace session at a time to prevent conflicts. Safe handoffs mean Person A can finish, Person B takes over seamlessly</li>
         <li><strong>Shared templates & styling:</strong> Once your yearbook design and styling are perfected, every team member uses the exact same setup</li>
         <li><strong>Organized workspace:</strong> All work stays in one place; everyone accessing the license sees the same templates and settings</li>
         <li><strong>Team efficiency:</strong> Perfect for workstations where multiple staff members take shifts or collaborate on yearbook generation</li>
+        <li><strong>Flexible expiry:</strong> Commercial workspace sessions can be configured with a custom duration, or set to never expire</li>
       </ul>
 
       <h3>Multi-Device Scenarios</h3>
@@ -157,9 +158,9 @@ function LicensingSessionsSection() {
         Your school has one commercial license assigned to the yearbook lab. Multiple staff members collaborate and take shifts on the same yearbook project.
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>9 AM:</strong> Staff member A opens the lab workstation, accesses the shared workspace, generates spreads for students 1-100</li>
-        <li><strong>12 PM:</strong> Staff member A finishes and closes the tool, releasing the workspace</li>
-        <li><strong>1 PM:</strong> Staff member B opens the tool on the same lab workstation and accesses the exact same workspace with all templates, styling, and student data</li>
+        <li><strong>9 AM:</strong> Staff member A opens the lab workstation, checks out the shared workspace session, generates spreads for students 1-100</li>
+        <li><strong>12 PM:</strong> Staff member A finishes and closes the tool, releasing the workspace session</li>
+        <li><strong>1 PM:</strong> Staff member B opens the tool on the same lab workstation and checks out a new workspace session against the exact same workspace, with all templates, styling, and student data intact</li>
         <li><strong>Result:</strong> Both team members contributed to one cohesive yearbook project without duplication or rework</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
@@ -171,32 +172,32 @@ function LicensingSessionsSection() {
         Your school has one commercial license but wants to use it from different computers (e.g., the lab and the library).
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Lab workstation:</strong> Opens the tool with the commercial license. Workspace locks to this computer.</li>
-        <li><strong>Library computer:</strong> Someone tries to open the tool with the same license. They see "workspace locked" (because lab is actively using it)</li>
-        <li><strong>Resolution:</strong> They wait ~2 minutes for the lab's lock to expire, then try again. Or the lab user closes their browser/finishes faster to release the lock.</li>
+        <li><strong>Lab workstation:</strong> Opens the tool with the commercial license. The workspace session locks to this computer.</li>
+        <li><strong>Library computer:</strong> Someone tries to open the tool with the same license. They see "workspace locked" (because the lab is actively using it)</li>
+        <li><strong>Resolution:</strong> They wait ~2 minutes for the lab's lock to expire, then try again. Or the lab user closes their browser/finishes faster to release the session.</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
         This design prevents accidental data loss from multiple people editing the same workspace simultaneously.
       </p>
 
-      <h3>Session Duration & Expiry</h3>
+      <h3>Workspace Session Duration & Expiry</h3>
       <p className="muted">
-        Sessions stay active while you're using the tool. If you're idle for more than 8 hours, the session expires. Here's what happens:
+        Workspace sessions stay active while you're using the tool. By default, if you're idle for more than 8 hours the session expires (commercial licenses can change or disable this). Here's what happens:
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Workspace is preserved:</strong> All your templates, data, and settings remain on the server</li>
-        <li><strong>Next time you visit:</strong> You can create a new workspace and all previous work is accessible if needed</li>
-        <li><strong>No data loss:</strong> Nothing is deleted; it's just a way to keep things organized</li>
-        <li><strong>Personal licenses:</strong> Get a fresh workspace per device automatically</li>
-        <li><strong>Commercial licenses:</strong> Maintain the same exclusive workspace, just with a refreshed lock timer</li>
+        <li><strong>Workspace is preserved:</strong> All your templates, data, and settings remain on the server until the workspace session actually expires</li>
+        <li><strong>Next time you visit:</strong> You can start a new workspace session and all previous work is accessible if the workspace hasn't yet expired</li>
+        <li><strong>No surprise data loss:</strong> Nothing is deleted early; expiry is just a way to keep things organized</li>
+        <li><strong>Personal licenses:</strong> Get a fresh workspace session per device automatically</li>
+        <li><strong>Commercial licenses:</strong> Maintain the same exclusive workspace, just with a refreshed lock timer — and can opt out of expiry entirely</li>
       </ul>
 
       <h3>Workspace Tips & Best Practices</h3>
       <ul className="muted" style={{ marginTop: 12 }}>
         <li><strong>Save your config:</strong> After perfecting your templates and styling, save the workspace config to reuse across years or share with team members</li>
-        <li><strong>Close gracefully:</strong> When done, close the browser tab or use the end-session button for cleaner workspace cleanup</li>
+        <li><strong>Close gracefully:</strong> When done, close the browser tab or use the Release Session button (File menu) for a cleaner handoff to the next person</li>
         <li><strong>Plan for lock timeouts:</strong> With commercial licenses, locks expire after ~2 minutes of inactivity. If switching devices, wait a moment before trying the new one</li>
-        <li><strong>Monitor device usage:</strong> If your commercial license seems stuck, ensure the other device isn't still holding the lock in a background tab</li>
+        <li><strong>Monitor device usage:</strong> If your commercial license seems stuck, ensure the other device isn't still holding the workspace session in a background tab</li>
       </ul>
     </div>
   );

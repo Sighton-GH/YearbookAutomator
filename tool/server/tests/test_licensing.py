@@ -60,6 +60,61 @@ def test_personal_license_loopback_ip_equivalence(tmp_path, monkeypatch):
     assert ok_v6 is True
 
 
+def test_workspace_expiry_defaults_to_no_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(license_type="commercial", note="test")
+    disabled, seconds = licensing.get_workspace_expiry_policy(key)
+    assert disabled is False
+    assert seconds is None
+
+    rec = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec.workspace_expiry_disabled is False
+    assert rec.workspace_expiry_seconds is None
+
+
+def test_create_license_with_workspace_expiry_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(
+        license_type="commercial",
+        note="test",
+        workspace_expiry_seconds=120,
+    )
+    disabled, seconds = licensing.get_workspace_expiry_policy(key)
+    assert disabled is False
+    assert seconds == 120
+
+
+def test_set_license_workspace_expiry_updates_existing_record(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(license_type="commercial", note="test")
+
+    assert licensing.set_license_workspace_expiry(key, disabled=True, seconds=None) is True
+    disabled, seconds = licensing.get_workspace_expiry_policy(key)
+    assert disabled is True
+    assert seconds is None
+
+    # Re-enabling with a custom duration clears the disabled flag and sets seconds.
+    assert licensing.set_license_workspace_expiry(key, disabled=False, seconds=3600) is True
+    disabled2, seconds2 = licensing.get_workspace_expiry_policy(key)
+    assert disabled2 is False
+    assert seconds2 == 3600
+
+
+def test_get_workspace_expiry_policy_unknown_key_returns_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    disabled, seconds = licensing.get_workspace_expiry_policy("YMGA1-NOTREAL")
+    assert disabled is False
+    assert seconds is None
+
+
 def test_max_uses_enforced(tmp_path, monkeypatch):
     monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
     monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
@@ -164,3 +219,68 @@ def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
     recs2 = licensing.list_licenses()
     rec2 = next(x for x in recs2 if x.key == key)
     assert rec2.uses == 1
+
+
+def test_delete_license_removes_record(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(license_type="commercial", note="test")
+    assert any(r.key == key for r in licensing.list_licenses())
+
+    assert licensing.delete_license(key) is True
+    assert not any(r.key == key for r in licensing.list_licenses())
+    # Deleting again is a no-op.
+    assert licensing.delete_license(key) is False
+
+
+def test_update_license_edits_only_provided_fields(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(license_type="personal", note="original", max_uses=None)
+
+    assert licensing.update_license(key, expires_at=1999999999, note="updated") is True
+    rec = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec.expires_at == 1999999999
+    assert rec.note == "updated"
+    # monthly_limit/max_uses left untouched since not passed.
+    assert rec.max_uses is None
+
+    # Explicitly clearing expires_at with None.
+    assert licensing.update_license(key, expires_at=None) is True
+    rec2 = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec2.expires_at is None
+    assert rec2.note == "updated"
+
+    # Unknown key is a no-op.
+    assert licensing.update_license("YMGA1-NOTREAL", note="x") is False
+
+
+def test_record_license_seen_updates_last_used_without_counting_uses(tmp_path, monkeypatch):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+
+    key = licensing.create_license(license_type="commercial", note="test")
+    rec_before = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec_before.last_used_at is None
+    assert rec_before.uses == 0
+
+    licensing.record_license_seen(key, ip="9.9.9.9", device_id="dev-1")
+    rec_after = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec_after.last_used_at is not None
+    assert rec_after.last_seen_ip == "9.9.9.9"
+    assert rec_after.last_seen_device_id == "dev-1"
+    # Only "seen" bookkeeping changed, not the generation-usage counter.
+    assert rec_after.uses == 0
+
+    # Immediately calling again within the throttle window doesn't move last_used_at.
+    first_seen = rec_after.last_used_at
+    licensing.record_license_seen(key, ip="9.9.9.9", device_id="dev-1")
+    rec_same = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec_same.last_used_at == first_seen
+
+    # But a changed IP/device is recorded even inside the throttle window.
+    licensing.record_license_seen(key, ip="8.8.8.8", device_id="dev-1")
+    rec_changed = next(r for r in licensing.list_licenses() if r.key == key)
+    assert rec_changed.last_seen_ip == "8.8.8.8"

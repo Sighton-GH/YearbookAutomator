@@ -14,9 +14,12 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { GuidedTour, type TourStep } from "../components/GuidedTour";
 import { HelpPanel } from "../components/HelpPanel";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { HelpCircle, KeyRound } from "lucide-react";
+import { ChevronDown, File as FileIcon, HelpCircle, KeyRound } from "lucide-react";
 
 const TOUR_SEEN_KEY = "ymga-tour-seen-v1";
+
+// Keep in sync with the `.app-return-controls` collapse breakpoint in styles/07-pages.css.
+const MOBILE_NAV_BREAKPOINT = 900;
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -55,8 +58,9 @@ const TOUR_STEPS: TourStep[] = [
 
 type SessionTimingDetail = {
   remainingMs: number;
-  expiresAtMs: number;
+  expiresAtMs: number | null;
   ttlMs: number;
+  expiryDisabled: boolean;
 };
 
 const formatSessionCountdown = (remainingMs: number): string => {
@@ -81,22 +85,26 @@ export function ToolAppPage() {
   const [sessionTiming, setSessionTiming] = useState<SessionTimingDetail | null>(null);
   const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState<string | null>(null);
   const [resolvedLicenseType, setResolvedLicenseType] = useState<"personal" | "commercial" | null>(null);
+  const [resolvedSessionExpiresAtMs, setResolvedSessionExpiresAtMs] = useState<number | null>(null);
+  const [resolvedSessionExpiryDisabled, setResolvedSessionExpiryDisabled] = useState(false);
   const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null } | null>(null);
   const [clientSessionId] = useState<string>(() => getOrCreateClientSessionId());
   const [releasingWorkspace, setReleasingWorkspace] = useState(false);
   const [showChangeLicenseConfirm, setShowChangeLicenseConfirm] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [sessionInfoCollapsed, setSessionInfoCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("ymga-session-info-collapsed") === "1";
   });
   const [appTheme, setAppTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") return "dark";
-    return window.localStorage.getItem("ymga-app-theme") === "light" ? "light" : "dark";
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem("ymga-app-theme") === "dark" ? "dark" : "light";
   });
   const isDark = appTheme === "dark";
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const sessionInfoRef = useRef<HTMLDivElement | null>(null);
+  const fileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [helpOpen, setHelpOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -128,6 +136,8 @@ export function ToolAppPage() {
       const resolved = await resolveWorkspace(clientSessionId);
       setResolvedWorkspaceId(resolved.workspace_id || null);
       setResolvedLicenseType(resolved.license_type || null);
+      setResolvedSessionExpiresAtMs(resolved.expires_at_ms ?? null);
+      setResolvedSessionExpiryDisabled(Boolean(resolved.expiry_disabled));
       setLockConflict(null);
     } catch (err: any) {
       const code = err?.response?.data?.detail?.code;
@@ -135,12 +145,12 @@ export function ToolAppPage() {
         const lockExpiresAt = Number(err?.response?.data?.detail?.lock_expires_at || 0) || null;
         setLockConflict({
           message:
-            "Workspace tied to this commercial license is already in use. Ask the other user to disconnect, release the workspace, or wait for lock timeout.",
+            "The workspace session for this commercial license is already in use. Ask the other user to disconnect, release the session, or wait for the lock timeout.",
           lockExpiresAt,
         });
         setResolvedWorkspaceId(null);
       } else {
-        setLockConflict({ message: "Could not resolve workspace for this license. Please refresh and try again." });
+        setLockConflict({ message: "Could not resolve a workspace session for this license. Please refresh and try again." });
       }
     }
 
@@ -293,8 +303,35 @@ export function ToolAppPage() {
   }, [sessionInfoCollapsed]);
 
   useEffect(() => {
+    if (!fileMenuOpen) return;
+
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (fileMenuRef.current && !fileMenuRef.current.contains(target)) {
+        setFileMenuOpen(false);
+      }
+    };
+
+    const onDocKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFileMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, [fileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) setFileMenuOpen(false);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth > 768) setMobileMenuOpen(false);
+      if (window.innerWidth > MOBILE_NAV_BREAKPOINT) setMobileMenuOpen(false);
     };
     window.addEventListener("resize", onResize);
     return () => {
@@ -306,13 +343,14 @@ export function ToolAppPage() {
     const onSessionTiming = (event: Event) => {
       const detail = (event as CustomEvent<SessionTimingDetail>).detail;
       if (!detail || typeof detail !== "object") return;
-      if (!Number.isFinite(detail.remainingMs) || !Number.isFinite(detail.expiresAtMs) || !Number.isFinite(detail.ttlMs)) {
-        return;
-      }
+      const expiryDisabled = Boolean(detail.expiryDisabled);
+      if (!Number.isFinite(detail.remainingMs) || !Number.isFinite(detail.ttlMs)) return;
+      if (!expiryDisabled && !Number.isFinite(detail.expiresAtMs)) return;
       setSessionTiming({
         remainingMs: Math.max(0, Number(detail.remainingMs)),
-        expiresAtMs: Number(detail.expiresAtMs),
+        expiresAtMs: expiryDisabled ? null : Number(detail.expiresAtMs),
         ttlMs: Math.max(60_000, Number(detail.ttlMs)),
+        expiryDisabled,
       });
     };
 
@@ -323,8 +361,15 @@ export function ToolAppPage() {
   }, []);
 
   const remainingMs = sessionTiming?.remainingMs ?? 0;
-  const sessionToneClass = remainingMs <= 5 * 60 * 1000 ? " danger" : remainingMs <= 30 * 60 * 1000 ? " warn" : "";
-  const showSessionExpiry = Boolean(resolvedLicenseType === "commercial" && resolvedWorkspaceId);
+  const expiryDisabled = Boolean(sessionTiming?.expiryDisabled);
+  const sessionToneClass = expiryDisabled
+    ? ""
+    : remainingMs <= 5 * 60 * 1000
+      ? " danger"
+      : remainingMs <= 30 * 60 * 1000
+        ? " warn"
+        : "";
+  const showSessionExpiry = Boolean(!expiryDisabled && resolvedWorkspaceId && sessionTiming?.expiresAtMs != null);
 
   if (!checking && !valid) {
     return (
@@ -397,11 +442,11 @@ export function ToolAppPage() {
       await flushAndReleaseWorkspace(resolvedWorkspaceId);
       setResolvedWorkspaceId(null);
       setLockConflict({
-        message: "Workspace released for this session. Close this tab or return to the main site so another device can access it.",
+        message: "Session released. Close this tab or return to the main site so another device can access this workspace.",
       });
     } catch {
       setLockConflict({
-        message: "Could not release workspace right now. Please try again.",
+        message: "Could not release the session right now. Please try again.",
       });
     } finally {
       setReleasingWorkspace(false);
@@ -466,69 +511,121 @@ export function ToolAppPage() {
             ref={mobileMenuRef}
           >
             <div className="app-return-left-group">
-              <div className="app-file-actions" aria-label="Configuration">
+              <div className="app-file-menu" ref={fileMenuRef}>
                 <button
                   type="button"
-                  className="app-file-action"
-                  onClick={() => {
-                    triggerConfigAction("export");
-                    setMobileMenuOpen(false);
-                  }}
-                  disabled={checking}
+                  className="app-icon-btn"
+                  aria-haspopup="menu"
+                  aria-expanded={fileMenuOpen}
+                  onClick={() => setFileMenuOpen((v) => !v)}
                 >
-                  Export
+                  <FileIcon size={16} />
+                  <span>File</span>
+                  <ChevronDown size={14} />
                 </button>
-                <button
-                  type="button"
-                  className="app-file-action"
-                  onClick={() => {
-                    triggerConfigAction("import");
-                    setMobileMenuOpen(false);
-                  }}
-                  disabled={checking}
-                >
-                  Import
-                </button>
+                {fileMenuOpen ? (
+                  <div className="app-file-menu-dropdown" role="menu" aria-label="File">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="app-file-menu-item"
+                      onClick={() => {
+                        triggerConfigAction("export");
+                        setFileMenuOpen(false);
+                        setMobileMenuOpen(false);
+                      }}
+                      disabled={checking}
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="app-file-menu-item"
+                      onClick={() => {
+                        triggerConfigAction("import");
+                        setFileMenuOpen(false);
+                        setMobileMenuOpen(false);
+                      }}
+                      disabled={checking}
+                    >
+                      Import
+                    </button>
+                    {resolvedLicenseType === "commercial" && resolvedWorkspaceId ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="app-file-menu-item"
+                        onClick={() => {
+                          setFileMenuOpen(false);
+                          void handleReleaseWorkspace();
+                        }}
+                        disabled={checking || releasingWorkspace}
+                      >
+                        {releasingWorkspace ? "Releasing..." : "Release Session"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               {sessionTiming ? (
                 <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite" ref={sessionInfoRef}>
-                  <span className="app-session-meta">{formatSessionCountdown(sessionTiming.remainingMs)}</span>
+                  <span className="app-session-meta">
+                    {expiryDisabled ? "No expiry" : formatSessionCountdown(sessionTiming.remainingMs)}
+                  </span>
                   <button
                     type="button"
                     className="app-session-toggle"
                     onClick={() => setSessionInfoCollapsed((v) => !v)}
                     aria-label={sessionInfoCollapsed ? "Expand session information" : "Collapse session information"}
+                    aria-expanded={!sessionInfoCollapsed}
                   >
-                    {sessionInfoCollapsed ? "Expand" : "Collapse"}
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        transform: sessionInfoCollapsed ? "none" : "rotate(180deg)",
+                        transition: "transform 120ms ease",
+                      }}
+                    />
                   </button>
                   {!sessionInfoCollapsed ? (
                     <div className="app-session-dropdown" role="dialog" aria-label="Session information">
                       <div className="app-session-dropdown-row">
-                        <span className="app-session-label">Session</span>
+                        <span className="app-session-label">Workspace session</span>
                       </div>
-                      <div className="app-session-dropdown-row">
-                        <span className="app-session-dropdown-key">Remaining</span>
-                        <span>{formatSessionCountdown(sessionTiming.remainingMs)}</span>
-                      </div>
+                      {expiryDisabled ? (
+                        <div className="app-session-dropdown-row">
+                          <span className="app-session-dropdown-key">Expiry</span>
+                          <span>No expiry</span>
+                        </div>
+                      ) : (
+                        <div className="app-session-dropdown-row">
+                          <span className="app-session-dropdown-key">Remaining</span>
+                          <span>{formatSessionCountdown(sessionTiming.remainingMs)}</span>
+                        </div>
+                      )}
                       {showSessionExpiry ? (
                         <div className="app-session-dropdown-row">
                           <span className="app-session-dropdown-key">Expires at</span>
-                          <span>{formatSessionExpiryTime(sessionTiming.expiresAtMs)}</span>
+                          <span>{formatSessionExpiryTime(sessionTiming.expiresAtMs as number)}</span>
                         </div>
                       ) : null}
+                      <div className="app-session-dropdown-row app-session-dropdown-note">
+                        {expiryDisabled ? (
+                          <span>
+                            This commercial license has no workspace session expiry &mdash; files are kept until
+                            released or removed by an admin.
+                          </span>
+                        ) : (
+                          <span>
+                            This is when your workspace session expires and everything in it will be deleted. Save
+                            your config file before then to avoid losing your work.
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ) : null}
                 </div>
-              ) : null}
-              {resolvedLicenseType === "commercial" && resolvedWorkspaceId ? (
-                <button
-                  type="button"
-                  className="app-file-action"
-                  onClick={handleReleaseWorkspace}
-                  disabled={checking || releasingWorkspace}
-                >
-                  {releasingWorkspace ? "Releasing..." : "Release Workspace"}
-                </button>
               ) : null}
             </div>
             <div className="app-return-actions">
@@ -586,6 +683,8 @@ export function ToolAppPage() {
           initialWorkspaceId={resolvedWorkspaceId}
           initialLicenseType={resolvedLicenseType}
           clientSessionId={clientSessionId}
+          initialSessionExpiresAtMs={resolvedSessionExpiresAtMs}
+          initialSessionExpiryDisabled={resolvedSessionExpiryDisabled}
         />
       )}
       <footer className="app-footer">

@@ -83,6 +83,7 @@ export function EditStep({
   onQuoteAlign,
   availableFonts,
   setAvailableFonts,
+  customFontUploadEnabled,
 }: {
   editTab: EditTab;
   onEditTab: (tab: EditTab) => void;
@@ -155,6 +156,7 @@ export function EditStep({
   onQuoteAlign: (v: Align) => void;
   availableFonts: { name: string; filename: string; source?: string }[];
   setAvailableFonts: (fonts: { name: string; filename: string; source?: string }[]) => void;
+  customFontUploadEnabled: boolean;
 }) {
   const items: TabBarItem<EditTab>[] = [
     { id: "layout", label: "Layout", icon: <LayoutGrid size={15} />, disabled: !editTabReady("layout"), disabledReason: "Parse a template first" },
@@ -247,6 +249,7 @@ export function EditStep({
           workspaceId={workspaceId}
           availableFonts={availableFonts}
           setAvailableFonts={setAvailableFonts}
+          customFontUploadEnabled={customFontUploadEnabled}
         />
       )}
     </div>

@@ -11,7 +11,9 @@ from app.services.admin_settings import get_face_detection_settings
 from app.services.storage import (
     DEFAULT_SESSION_TTL_SECONDS,
     delete_workspace,
+    list_workspace_ids,
     new_workspace_id,
+    read_workspace_meta,
     touch_workspace,
     workspace_path,
 )
@@ -95,7 +97,7 @@ def _save_audit(events: list[dict[str, Any]]) -> None:
     _save_json(_audit_path(), {"events": events})
 
 
-def _audit(event_type: str, *, workspace_id: str | None, license_type: LicenseType, device_id: str | None, detail: str = "") -> None:
+def _audit(event_type: str, *, workspace_id: str | None, license_type: LicenseType | str, device_id: str | None, detail: str = "") -> None:
     now = int(time.time())
     with _STORE_LOCK:
         events = _load_audit()
@@ -153,12 +155,27 @@ def _binding_by_workspace(bindings: list[dict[str, Any]], workspace_id: str) -> 
     return None
 
 
-def _current_ttl_seconds() -> int:
+def _resolve_ttl_policy(license_key: str, license_type: LicenseType) -> tuple[int, bool]:
+    """Return `(ttl_seconds, expiry_disabled)` for a given license.
+
+    Commercial licenses use their per-license override (set in the admin
+    Licenses page); personal licenses always use the dedicated
+    `personal_workspace_timeout_seconds` admin setting.
+    """
+    if license_type == "commercial":
+        from app.services.licensing import DEFAULT_COMMERCIAL_WORKSPACE_EXPIRY_SECONDS, get_workspace_expiry_policy
+
+        disabled, custom_seconds = get_workspace_expiry_policy(license_key)
+        if disabled:
+            return 0, True
+        ttl = int(custom_seconds) if custom_seconds else DEFAULT_COMMERCIAL_WORKSPACE_EXPIRY_SECONDS
+        return max(60, ttl), False
+
     settings = get_face_detection_settings()
     try:
-        return max(60, int(settings.tool_session_timeout_seconds))
+        return max(60, int(settings.personal_workspace_timeout_seconds)), False
     except Exception:
-        return DEFAULT_SESSION_TTL_SECONDS
+        return DEFAULT_SESSION_TTL_SECONDS, False
 
 
 def _current_lock_timeout_seconds() -> int:
@@ -201,6 +218,7 @@ def resolve_workspace(
 ) -> ResolveResult:
     now = int(time.time())
     owner_key = _owner_key(license_key, license_type, device_id)
+    ttl, expiry_disabled = _resolve_ttl_policy(license_key, license_type)
 
     with _STORE_LOCK:
         store = _load_registry()
@@ -229,13 +247,14 @@ def resolve_workspace(
         if binding is None:
             created_new = True
             workspace_id = new_workspace_id()
-            ttl = _current_ttl_seconds()
-            expires_at = now + ttl
+            expires_at = 0 if expiry_disabled else now + ttl
             touch_workspace(
                 workspace_id,
                 session_id=(session_id or None),
                 started_at_ms=now * 1000,
-                expires_at_ms=expires_at * 1000,
+                expires_at_ms=None if expiry_disabled else expires_at * 1000,
+                ttl_seconds=ttl,
+                expiry_disabled=expiry_disabled,
             )
             binding = {
                 "owner_key": owner_key,
@@ -244,9 +263,16 @@ def resolve_workspace(
                 "created_at": now,
                 "last_seen": now,
                 "expires_at": expires_at,
+                "ttl_seconds": ttl,
+                "expiry_disabled": expiry_disabled,
                 "lock": None,
             }
             bindings.append(binding)
+        else:
+            # Refresh the cached policy in case the admin changed the license's
+            # expiry settings since this binding was created.
+            binding["ttl_seconds"] = ttl
+            binding["expiry_disabled"] = expiry_disabled
 
         workspace_id = str(binding.get("workspace_id"))
 
@@ -272,14 +298,15 @@ def resolve_workspace(
 
             _acquire_lock(binding, device_id=device_id, session_id=session_id, now=now)
 
-        ttl = _current_ttl_seconds()
         binding["last_seen"] = now
-        binding["expires_at"] = now + ttl
+        binding["expires_at"] = 0 if expiry_disabled else now + ttl
         touch_workspace(
             workspace_id,
             session_id=(session_id or None),
             started_at_ms=now * 1000,
-            expires_at_ms=(now + ttl) * 1000,
+            expires_at_ms=None if expiry_disabled else (now + ttl) * 1000,
+            ttl_seconds=ttl,
+            expiry_disabled=expiry_disabled,
         )
         _save_registry(store)
 
@@ -331,16 +358,21 @@ def heartbeat_workspace(
             lock["expires_at"] = now + timeout
             binding["lock"] = lock
 
-        ttl = _current_ttl_seconds()
+        # Reuse the ttl/disabled policy cached on the binding at resolve-time,
+        # rather than re-reading the license store on every heartbeat.
+        ttl = int(binding.get("ttl_seconds") or 0) or DEFAULT_SESSION_TTL_SECONDS
+        expiry_disabled = bool(binding.get("expiry_disabled", False))
         binding["last_seen"] = now
-        binding["expires_at"] = now + ttl
+        binding["expires_at"] = 0 if expiry_disabled else now + ttl
         _save_registry(store)
 
     touch_workspace(
         workspace_id,
         session_id=session_id,
         started_at_ms=started_at_ms,
-        expires_at_ms=expires_at_ms,
+        expires_at_ms=None if expiry_disabled else expires_at_ms,
+        ttl_seconds=ttl,
+        expiry_disabled=expiry_disabled,
     )
     return True, None
 
@@ -453,15 +485,17 @@ def ensure_workspace_write_access(
             # Lazily register the workspace to the current owner and, for
             # commercial keys, acquire a lock owned by the caller.
             expected_owner = _owner_key(license_key, license_type, device_id)
-            ttl = _current_ttl_seconds()
-            touch_workspace(workspace_id, session_id=session_id)
+            ttl, expiry_disabled = _resolve_ttl_policy(license_key, license_type)
+            touch_workspace(workspace_id, session_id=session_id, ttl_seconds=ttl, expiry_disabled=expiry_disabled)
             binding = {
                 "owner_key": expected_owner,
                 "workspace_id": workspace_id,
                 "license_type": license_type,
                 "created_at": now,
                 "last_seen": now,
-                "expires_at": now + ttl,
+                "expires_at": 0 if expiry_disabled else now + ttl,
+                "ttl_seconds": ttl,
+                "expiry_disabled": expiry_disabled,
                 "lock": None,
             }
             if license_type == "commercial":
@@ -487,4 +521,170 @@ def ensure_workspace_write_access(
     )
     if not hb_ok:
         return False, hb_reason
+    return True, None
+
+
+def _mask_license_key(key: str) -> str | None:
+    key = (key or "").strip()
+    if not key:
+        return None
+    if len(key) <= 14:
+        return key
+    return f"{key[:10]}…{key[-4:]}"
+
+
+def _owner_key_display(owner_key: str) -> tuple[str | None, str | None]:
+    """Best-effort split of an internal `owner_key` into (masked_key, device_id).
+
+    `owner_key` is formatted as `pers:<KEY>:<device>`, `comm:<KEY>:<device>`, or
+    `comm:<KEY>` (see `_owner_key`).
+    """
+
+    parts = (owner_key or "").split(":")
+    if len(parts) >= 2:
+        device = parts[2] if len(parts) >= 3 and parts[2] else None
+        return _mask_license_key(parts[1]), device
+    return _mask_license_key(owner_key), None
+
+
+def _workspace_disk_usage_bytes(workspace_id: str) -> int:
+    try:
+        root = workspace_path(workspace_id)
+        if not root.exists():
+            return 0
+        total = 0
+        for p in root.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    continue
+        return total
+    except Exception:
+        return 0
+
+
+def list_all_sessions_detailed() -> list[dict[str, Any]]:
+    """Rich per-workspace session info for the admin dashboard.
+
+    Includes every registered binding plus any on-disk workspace directories
+    that have no (or no longer have a) registry binding, so nothing active is
+    hidden from the admin. Newest activity first.
+    """
+
+    now = int(time.time())
+    with _STORE_LOCK:
+        store = _load_registry()
+        bindings = [dict(b) for b in store.get("bindings", [])]
+
+    known_ids = {str(b.get("workspace_id") or "") for b in bindings}
+    out: list[dict[str, Any]] = []
+
+    for b in bindings:
+        workspace_id = str(b.get("workspace_id") or "")
+        masked_key, device_id = _owner_key_display(str(b.get("owner_key") or ""))
+        expires_at = int(b.get("expires_at") or 0)
+        lock = b.get("lock") if isinstance(b.get("lock"), dict) else None
+        lock_active = bool(lock and int(lock.get("expires_at") or 0) > now)
+        on_disk = bool(workspace_id) and workspace_path(workspace_id).exists()
+
+        out.append(
+            {
+                "workspace_id": workspace_id,
+                "license_type": b.get("license_type", "personal"),
+                "masked_license_key": masked_key,
+                "device_id": device_id,
+                "created_at": int(b.get("created_at") or 0),
+                "last_seen": int(b.get("last_seen") or 0),
+                "expires_at": expires_at,
+                "seconds_until_expiry": max(0, expires_at - now),
+                "on_disk": on_disk,
+                "is_stale": not on_disk,
+                "locked": lock_active,
+                "lock_device_id": (lock.get("device_id") if lock_active else None),
+                "lock_expires_at": (int(lock.get("expires_at") or 0) if lock_active else None),
+                "disk_bytes": _workspace_disk_usage_bytes(workspace_id) if on_disk else 0,
+                "expiry_disabled": bool(b.get("expiry_disabled", False)),
+            }
+        )
+
+    try:
+        for workspace_id in list_workspace_ids():
+            if workspace_id in known_ids:
+                continue
+            meta = read_workspace_meta(workspace_id)
+            last_seen = float(meta.get("last_seen") or 0)
+            session_expires_at = meta.get("session_expires_at")
+            expires_at = int(session_expires_at) if session_expires_at else 0
+            out.append(
+                {
+                    "workspace_id": workspace_id,
+                    "license_type": "unknown",
+                    "masked_license_key": None,
+                    "device_id": None,
+                    "created_at": int(last_seen),
+                    "last_seen": int(last_seen),
+                    "expires_at": expires_at,
+                    "seconds_until_expiry": max(0, expires_at - now),
+                    "on_disk": True,
+                    "is_stale": False,
+                    "locked": False,
+                    "lock_device_id": None,
+                    "lock_expires_at": None,
+                    "disk_bytes": _workspace_disk_usage_bytes(workspace_id),
+                    "expiry_disabled": bool(meta.get("workspace_expiry_disabled", False)),
+                }
+            )
+    except Exception:
+        pass
+
+    out.sort(key=lambda r: r.get("last_seen", 0), reverse=True)
+    return out
+
+
+def prune_stale_bindings() -> int:
+    """Remove registry bindings whose workspace no longer exists on disk.
+
+    Returns the number of bindings removed.
+    """
+
+    removed = 0
+    with _STORE_LOCK:
+        store = _load_registry()
+        bindings = store.get("bindings", [])
+        kept = []
+        for b in bindings:
+            wid = str(b.get("workspace_id") or "")
+            if wid and workspace_path(wid).exists():
+                kept.append(b)
+            else:
+                removed += 1
+        if removed:
+            store["bindings"] = kept
+            _save_registry(store)
+
+    if removed:
+        _audit("stale_bindings_pruned", workspace_id=None, license_type="system", device_id=None, detail=f"removed={removed}")
+    return removed
+
+
+def admin_force_release_lock(workspace_id: str) -> tuple[bool, str | None]:
+    """Admin-only: unconditionally clear a commercial workspace's checkout lock.
+
+    Unlike `admin_takeover_workspace`, this does not reassign the lock to the
+    caller — it simply frees the workspace for the next caller immediately.
+    """
+
+    with _STORE_LOCK:
+        store = _load_registry()
+        bindings = store.get("bindings", [])
+        binding = _binding_by_workspace(bindings, workspace_id)
+        if binding is None:
+            return False, "workspace_not_registered"
+        if binding.get("lock") is None:
+            return True, None
+        binding["lock"] = None
+        _save_registry(store)
+
+    _audit("workspace_lock_force_released", workspace_id=workspace_id, license_type="commercial", device_id=None)
     return True, None

@@ -7,11 +7,14 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 import numpy as np
 from PIL import Image
+
+from app.services.admin_settings import get_face_detection_settings
+from app.services import throttle
 
 BackgroundMode = Literal["simple", "complex", "ultra_complex"]
 
@@ -81,6 +84,9 @@ def _get_rembg_providers() -> list[str] | None:
     We keep this best-effort so missing GPU runtimes don't break CPU usage.
     """
 
+    if get_face_detection_settings().gpu_disabled:
+        return ["CPUExecutionProvider"]
+
     try:
         import onnxruntime as ort  # type: ignore
     except Exception:
@@ -114,6 +120,12 @@ def _get_rembg_providers() -> list[str] | None:
 
 
 def _get_rembg_pool_max(providers: list[str] | None) -> int:
+    # Admin-configured GPU concurrency cap takes priority when set: it's the
+    # live, user-facing control this dashboard exposes for rate limiting.
+    configured = int(get_face_detection_settings().gpu_max_concurrent_ops or 0)
+    if configured > 0:
+        return configured
+
     raw = os.getenv("YMGA_REMBG_POOL_SIZE", "").strip()
     if raw:
         try:
@@ -180,6 +192,18 @@ def _release_rembg_session(session: object) -> None:
         _rembg_pool_condition.notify()
 
 
+def get_rembg_pool_status() -> dict[str, Any]:
+    """Read-only pool status for the admin dashboard."""
+
+    with _rembg_pool_condition:
+        return {
+            "created": _rembg_pool_created,
+            "max": _rembg_pool_max,
+            "idle": len(_rembg_pool),
+            "providers": list(_rembg_pool_providers) if _rembg_pool_providers else None,
+        }
+
+
 def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
     """High-quality ML background removal via rembg.
 
@@ -204,6 +228,7 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
     # messages directly to stdout; suppress those by default to avoid spamming
     # the server logs.
     verbose = os.getenv("YMGA_REMBG_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
+    started = time.monotonic()
     try:
         if verbose:
             out = remove(
@@ -226,6 +251,7 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
                 )
     finally:
         _release_rembg_session(session)
+        throttle.gpu_pace(started)
     if not isinstance(out, (bytes, bytearray)):
         raise ValueError("Ultra complex background removal failed")
     return bytes(out)

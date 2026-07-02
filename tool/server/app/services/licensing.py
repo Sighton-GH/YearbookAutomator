@@ -14,6 +14,11 @@ from typing import Any, Literal
 
 LicenseType = Literal["personal", "commercial"]
 
+# Default workspace-session TTL for a commercial license with no per-license
+# override set. Matches the historical global default (8h); each module in
+# this codebase keeps its own copy of this constant rather than importing it.
+DEFAULT_COMMERCIAL_WORKSPACE_EXPIRY_SECONDS = 8 * 60 * 60
+
 
 class LicenseError(Exception):
     pass
@@ -36,6 +41,15 @@ class LicenseRecord:
     monthly_uses: dict[str, int]
     monthly_limit: int | None
     unlock_all_steps: bool
+    workspace_expiry_disabled: bool
+    workspace_expiry_seconds: int | None
+    last_seen_ip: str | None
+    last_seen_device_id: str | None
+
+
+# Sentinel to distinguish "field not provided" from "field explicitly cleared to None"
+# in update_license's kwargs.
+_UNSET = object()
 
 
 _STORE_LOCK = Lock()
@@ -183,6 +197,8 @@ def create_license(
     monthly_limit: int | None = None,
     note: str | None = None,
     unlock_all_steps: bool = False,
+    workspace_expiry_disabled: bool = False,
+    workspace_expiry_seconds: int | None = None,
 ) -> str:
     license_key = generate_license_key().strip().upper()
     now = int(time.time())
@@ -204,6 +220,10 @@ def create_license(
         "monthly_limit": monthly_limit,
         "monthly_uses": {},
         "unlock_all_steps": bool(unlock_all_steps),
+        "workspace_expiry_disabled": bool(workspace_expiry_disabled),
+        "workspace_expiry_seconds": int(workspace_expiry_seconds) if workspace_expiry_seconds else None,
+        "last_seen_ip": None,
+        "last_seen_device_id": None,
     }
 
     with _STORE_LOCK:
@@ -255,6 +275,116 @@ def get_or_create_personal_license(*, ip: str | None, device_id: str | None, not
     return create_personal_license(ip=ip, device_id=device_id, note=note)
 
 
+def delete_license(license_key: str) -> bool:
+    """Admin-only: permanently remove a license record from the store.
+
+    Unlike `revoke_license`, this is irreversible and drops all history (uses,
+    bindings, notes) for the key. Matches by full key or legacy key_hash.
+    """
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return False
+    key_hash = _key_hash(key_norm)
+
+    with _STORE_LOCK:
+        store = _load_store()
+        licenses: list[dict[str, Any]] = store.get("licenses", [])
+        remaining = [rec for rec in licenses if not _matches_record(rec, key=key_norm, key_hash=key_hash)]
+        changed = len(remaining) != len(licenses)
+        if changed:
+            store["licenses"] = remaining
+            _dump_store(store)
+    return changed
+
+
+def update_license(
+    license_key: str,
+    *,
+    note: Any = _UNSET,
+    expires_at: Any = _UNSET,
+    max_uses: Any = _UNSET,
+    monthly_limit: Any = _UNSET,
+) -> bool:
+    """Admin-only: edit editable metadata on an existing license.
+
+    Any kwarg left as the default (`_UNSET`) is left untouched. Passing `None`
+    explicitly clears that field (e.g. `expires_at=None` removes an expiry).
+    """
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return False
+
+    changed = False
+    with _STORE_LOCK:
+        store = _load_store()
+        for rec in store.get("licenses", []):
+            rec_key = (rec.get("key") or "").strip().upper()
+            if not (rec_key and rec_key == key_norm):
+                continue
+            if note is not _UNSET:
+                normalized_note = (note or "").strip() or None
+                if rec.get("note") != normalized_note:
+                    rec["note"] = normalized_note
+                    changed = True
+            if expires_at is not _UNSET:
+                normalized_expires = int(expires_at) if expires_at is not None else None
+                if rec.get("expires_at") != normalized_expires:
+                    rec["expires_at"] = normalized_expires
+                    changed = True
+            if max_uses is not _UNSET:
+                normalized_max_uses = int(max_uses) if max_uses is not None else None
+                if rec.get("max_uses") != normalized_max_uses:
+                    rec["max_uses"] = normalized_max_uses
+                    changed = True
+            if monthly_limit is not _UNSET:
+                normalized_monthly_limit = int(monthly_limit) if monthly_limit is not None else None
+                if rec.get("monthly_limit") != normalized_monthly_limit:
+                    rec["monthly_limit"] = normalized_monthly_limit
+                    changed = True
+        if changed:
+            _dump_store(store)
+    return changed
+
+
+def record_license_seen(license_key: str, *, ip: str | None, device_id: str | None) -> None:
+    """Update `last_used_at`/`last_seen_ip`/`last_seen_device_id` for any validated request.
+
+    Unlike `validate_and_record_use`, this never touches `uses` or monthly counters —
+    it exists purely so the admin panel's "last used" column reflects real activity
+    (browsing/uploading), not only completed generations. Writes are throttled to
+    once per 30s per key so routine polling doesn't hammer the JSON store.
+    """
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return
+    key_hash = _key_hash(key_norm)
+    now = int(time.time())
+
+    with _STORE_LOCK:
+        store = _load_store()
+        changed = False
+        for rec in store.get("licenses", []):
+            if not _matches_record(rec, key=key_norm, key_hash=key_hash):
+                continue
+            last_used_at = rec.get("last_used_at") or 0
+            ip_changed = bool(ip) and rec.get("last_seen_ip") != ip
+            device_changed = bool(device_id) and rec.get("last_seen_device_id") != device_id
+            if (now - int(last_used_at)) < 30 and not ip_changed and not device_changed:
+                return
+            rec["last_used_at"] = now
+            if ip:
+                rec["last_seen_ip"] = ip
+            if device_id:
+                rec["last_seen_device_id"] = device_id
+            changed = True
+            break
+        if changed:
+            _dump_store(store)
+
+
 def revoke_license(license_key: str) -> bool:
     key_norm = (license_key or "").strip().upper()
     key_hash = _key_hash(key_norm)
@@ -297,6 +427,10 @@ def list_licenses() -> list[LicenseRecord]:
                     monthly_uses=(rec.get("monthly_uses", {}) or {}),
                     monthly_limit=rec.get("monthly_limit", None),
                     unlock_all_steps=bool(rec.get("unlock_all_steps", False)),
+                    workspace_expiry_disabled=bool(rec.get("workspace_expiry_disabled", False)),
+                    workspace_expiry_seconds=rec.get("workspace_expiry_seconds", None),
+                    last_seen_ip=rec.get("last_seen_ip", None),
+                    last_seen_device_id=rec.get("last_seen_device_id", None),
                 )
             )
         return out
@@ -321,6 +455,59 @@ def set_license_unlock_all_steps(license_key: str, *, enabled: bool) -> bool:
         if changed:
             _dump_store(store)
     return changed
+
+
+def set_license_workspace_expiry(license_key: str, *, disabled: bool, seconds: int | None) -> bool:
+    """Admin-only: set a commercial license's per-license workspace-session expiry override.
+
+    `seconds=None` clears any custom duration (falls back to the default). Meaningless
+    for personal licenses, but not blocked here — the caller (admin UI) restricts this
+    to commercial rows.
+    """
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return False
+
+    normalized_seconds = int(seconds) if seconds else None
+
+    changed = False
+    with _STORE_LOCK:
+        store = _load_store()
+        for rec in store.get("licenses", []):
+            rec_key = (rec.get("key") or "").strip().upper()
+            if rec_key and rec_key == key_norm:
+                if bool(rec.get("workspace_expiry_disabled", False)) != bool(disabled):
+                    rec["workspace_expiry_disabled"] = bool(disabled)
+                    changed = True
+                if rec.get("workspace_expiry_seconds", None) != normalized_seconds:
+                    rec["workspace_expiry_seconds"] = normalized_seconds
+                    changed = True
+        if changed:
+            _dump_store(store)
+    return changed
+
+
+def get_workspace_expiry_policy(license_key: str) -> tuple[bool, int | None]:
+    """Return `(expiry_disabled, custom_seconds)` for a commercial license.
+
+    `(False, None)` if the license isn't found or has no override set (i.e. use the
+    default commercial workspace-session TTL).
+    """
+
+    key_norm = (license_key or "").strip().upper()
+    if not key_norm:
+        return False, None
+
+    with _STORE_LOCK:
+        store = _load_store()
+        for rec in store.get("licenses", []):
+            rec_key = (rec.get("key") or "").strip().upper()
+            if rec_key and rec_key == key_norm:
+                disabled = bool(rec.get("workspace_expiry_disabled", False))
+                seconds = rec.get("workspace_expiry_seconds", None)
+                return disabled, (int(seconds) if seconds else None)
+    return False, None
 
 
 def _matches_record(rec: dict[str, Any], *, key: str, key_hash: str) -> bool:
