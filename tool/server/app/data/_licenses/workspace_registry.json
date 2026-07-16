@@ -1,20 +1,4 @@
 {
-  "bindings": [
-    {
-      "created_at": 1783013273,
-      "expires_at": 1783048327,
-      "last_seen": 1783019527,
-      "license_type": "commercial",
-      "lock": {
-        "acquired_at": 1783013273,
-        "device_id": "0e5dffbc-2873-41be-a2e5-8c42fafccc2d",
-        "expires_at": 1783019647,
-        "last_heartbeat_at": 1783019527,
-        "session_id": "223a24d9-43ae-4bda-a292-ad7e235fc2fa"
-      },
-      "owner_key": "comm:YMGA1-RACCP-S5WNG-VFP3P-RCJOW-3GSBB-DR2RB-KKGHT-233EH-A362E-5HKB7-JQ",
-      "workspace_id": "cbebf5649af244eb8e401aac44c7683f"
-    }
-  ],
+  "bindings": [],
   "version": 1
 }

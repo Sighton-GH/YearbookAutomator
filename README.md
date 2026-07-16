@@ -374,6 +374,7 @@ See [website/README.md](website/README.md) for the full Cloudflare Workers deplo
 - **Generation Fails**: You must parse a template first (so `template_clean.png` exists) and have at least one slot/person mapped.
 - **Fonts**: If a font is missing, the backend falls back to system or default fonts. Upload TTF/OTF files if you need a specific font.
 - **Long-Running Tasks**: Generation runs in a background thread; check `/api/generation/status` for progress.
+- **Backend unreachable via Tailscale/LAN IP on `:8000`**: The dev commands above (`--host 0.0.0.0`) bind the backend to all interfaces, so it's reachable directly on `:8000` from another device. But if this backend is instead running as a persistent systemd service (e.g. a staging/production instance), it may deliberately be bound to `127.0.0.1` only — a direct request to `:8000` from another machine gets refused by design in that case. Reach it through the frontend's port instead (`:5173`, which proxies `/api` to the loopback-bound backend) rather than hitting the backend port directly.
 
 ---
 
