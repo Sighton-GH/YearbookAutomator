@@ -10,7 +10,7 @@ export function LicensePage() {
       <section className="ss-content">
         <div className="ss-content-inner document-content">
           <article className="document-article">
-            <h2>Yearbook Grad Mugshot Automator License</h2>
+            <h2>Custom Flow Automator License</h2>
             <p>Copyright © 2025 Bryan</p>
             <p>This software is free for personal, non-commercial use.</p>
             <p>You may use, copy, and modify this software for your own private, non-commercial purposes at no cost.</p>
@@ -20,7 +20,7 @@ export function LicensePage() {
             </p>
             <p>
               To obtain a commercial license, please contact:{" "}
-              <a href="mailto:your-contact@domain.com">your-contact@domain.com</a>
+              <a href="mailto:sightonmedia@gmail.com">sightonmedia@gmail.com</a>
             </p>
             <p>
               Redistribution of this software, in whole or in part, is not permitted without explicit written permission.

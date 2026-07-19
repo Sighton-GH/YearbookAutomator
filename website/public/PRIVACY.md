@@ -2,7 +2,7 @@
 
 Effective Date: December 25, 2025
 
-This Privacy Policy explains how your information is handled by the Yearbook Grad Mugshot Automator software ("the Software").
+This Privacy Policy explains how your information is handled by the Custom Flow Automator software ("the Software").
 
 ## 1. Local and Hosted Use
 - When run on your own computer, the Software is local-first: all data you upload, process, or generate (including images, spreadsheets, and templates) remains on your device unless you choose to share or upload it elsewhere.
@@ -29,4 +29,4 @@ This Privacy Policy explains how your information is handled by the Yearbook Gra
 - This Privacy Policy may be updated from time to time. Updates will be provided with new releases of the Software or posted on the hosted service.
 
 ## 6. Contact
-- For questions about this Privacy Policy or commercial licensing, contact: your-contact@domain.com
+- For questions about this Privacy Policy or commercial licensing, contact: sightonmedia@gmail.com

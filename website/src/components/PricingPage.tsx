@@ -1,23 +1,27 @@
 import { TOOL_URL } from "../lib/env";
 
+const CONTACT_EMAIL = "sightonmedia@gmail.com";
+
 export function PricingPage() {
   return (
     <main className="ss-page pricing-page">
       <section className="ss-cover pricing-cover">
         <div className="ss-cover-inner">
-          <h1 className="ss-cover-title">Simple, Transparent Pricing</h1>
-          <p className="ss-cover-subtitle">Start free. Scale as you grow. No hidden fees.</p>
+          <h1 className="ss-cover-title">Pricing</h1>
+          <p className="ss-cover-subtitle">
+            Free for personal projects. Licensed for schools and businesses, priced to fit the
+            organization — that&rsquo;s why there&rsquo;s no number on this page.
+          </p>
         </div>
       </section>
 
       <section className="ss-content pricing-content">
         <div className="ss-content-inner">
           <div className="pricing-grid">
-            {/* Personal Tier */}
             <div className="pricing-card personal-card">
               <div className="pricing-header">
-                <h3 className="pricing-title">Personal Use</h3>
-                <p className="pricing-description">For individuals and personal projects</p>
+                <h3 className="pricing-title">Personal</h3>
+                <p className="pricing-description">For individual, non-commercial projects</p>
               </div>
 
               <div className="pricing-badge">Free</div>
@@ -25,172 +29,149 @@ export function PricingPage() {
               <div className="pricing-features">
                 <ul className="feature-list">
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span><strong>5 uses per month</strong></span>
+                    <span className="check-icon" />
+                    <span><strong>5 generation runs per month</strong>, reset on the 1st</span>
                   </li>
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span>Local processing (your data stays on your device)</span>
+                    <span className="check-icon" />
+                    <span>Every feature — nothing is held back from the free tier</span>
                   </li>
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span>Full feature access</span>
+                    <span className="check-icon" />
+                    <span>Local processing; your data stays on your device</span>
                   </li>
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span>Community support</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Independent workspace session per device</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>8-hour workspace session duration</span>
+                    <span className="check-icon" />
+                    <span>Independent workspace per device, 8-hour sessions</span>
                   </li>
                 </ul>
               </div>
 
-              <p className="pricing-note">Perfect for creating yearbook pages for yourself or friends.</p>
+              <p className="pricing-note">
+                Get a key inside the tool — no account or credit card, just accept the
+                non-commercial terms.
+              </p>
 
-              <a href={TOOL_URL} className="pricing-btn primary-btn">Get Started Free</a>
+              <a href={TOOL_URL} className="pricing-btn primary-btn">Open the tool</a>
             </div>
 
-            {/* Commercial Tier */}
-            <div className="pricing-card commercial-card featured">
-              <div className="featured-badge">MOST POPULAR</div>
+            <div className="pricing-card commercial-card">
               <div className="pricing-header">
-                <h3 className="pricing-title">Commercial License</h3>
-                <p className="pricing-description">For schools, organizations & businesses</p>
+                <h3 className="pricing-title">Commercial</h3>
+                <p className="pricing-description">For schools, organizations, and businesses</p>
               </div>
 
-              <div className="pricing-badge commercial">Custom Pricing</div>
+              <div className="pricing-badge commercial">Quoted per organization</div>
 
               <div className="pricing-features">
                 <ul className="feature-list">
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span><strong>Unlimited uses</strong></span>
+                    <span className="check-icon" />
+                    <span><strong>Unlimited generation runs</strong></span>
                   </li>
                   <li>
-                    <span className="check-icon">✓</span>
+                    <span className="check-icon" />
+                    <span>Shared team workspace with safe handoffs between staff</span>
+                  </li>
+                  <li>
+                    <span className="check-icon" />
+                    <span>Configurable session duration — or no expiry at all</span>
+                  </li>
+                  <li>
+                    <span className="check-icon" />
                     <span>Priority email support</span>
                   </li>
                   <li>
-                    <span className="check-icon">✓</span>
-                    <span>Custom branding options</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Batch processing & automation</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Hosted solution available</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Regular updates & new features</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span><strong>Shared collaborative workspace</strong> for team projects</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Configurable workspace session duration, or no expiry at all</span>
-                  </li>
-                  <li>
-                    <span className="check-icon">✓</span>
-                    <span>Safe handoffs with workspace session release</span>
+                    <span className="check-icon" />
+                    <span>Hosted setup available if you don&rsquo;t want to run it yourself</span>
                   </li>
                 </ul>
               </div>
 
-              <p className="pricing-note">Great for schools generating yearbook pages at scale.</p>
+              <p className="pricing-note">
+                Most licenses are set up within a day or two of first contact. Volume discounts
+                exist — mention how many schools or teams you have.
+              </p>
 
-              <a href="mailto:your-contact@domain.com" className="pricing-btn primary-btn">Contact for Quote</a>
+              <a href={`mailto:${CONTACT_EMAIL}?subject=Commercial%20license%20inquiry`} className="pricing-btn quiet-btn">
+                Email for a quote
+              </a>
             </div>
           </div>
 
-          {/* FAQ Section */}
+          <div className="pricing-explainer">
+            <h3>How workspaces and sessions work</h3>
+            <p>
+              Every license gets a private workspace on the server — your templates, roster,
+              photos, and settings live there between visits. Opening the tool checks out a
+              <em> session</em> on that workspace; closing it (or the Release Session button)
+              hands it back.
+            </p>
+            <p>
+              Personal licenses are device-locked: each device gets its own independent workspace.
+              Commercial licenses share one workspace across the team, with one person holding the
+              session at a time so two people can&rsquo;t overwrite each other&rsquo;s work. Sessions
+              last 8 hours by default; commercial licenses can lengthen or disable that.
+            </p>
+          </div>
+
           <div className="pricing-faq">
-            <h2>Frequently Asked Questions</h2>
+            <h2>Common questions</h2>
 
             <div className="faq-item">
-              <h4>Can I use the free version for a school?</h4>
+              <h4>Can a school use the free tier?</h4>
               <p>
-                No, schools and educational institutions must use a commercial license, even if they're non-profit. Personal use is limited to individual projects.
+                No — schools and other organizations need a commercial license even if they&rsquo;re
+                non-profit. The free tier is for individuals working on personal projects.
               </p>
             </div>
 
             <div className="faq-item">
-              <h4>How often do my free uses reset?</h4>
+              <h4>What counts as commercial use?</h4>
               <p>
-                Free uses reset on the first day of each calendar month. Your 5 uses are refreshed automatically.
+                Use by any organization, or use that generates revenue — including offering it as
+                part of a service you charge for indirectly.
               </p>
             </div>
 
             <div className="faq-item">
-              <h4>What counts as "commercial use"?</h4>
+              <h4>What happens when I hit the 5-run limit?</h4>
               <p>
-                Any use for business purposes, by organizations, schools, or for generating revenue requires a commercial license. This includes using it as part of a service, even if you don't charge directly.
+                Generation pauses until the counter resets on the first of the next month.
+                Everything else — uploading, matching, styling, previewing — keeps working, so you
+                can have a spread staged and ready.
               </p>
             </div>
 
             <div className="faq-item">
-              <h4>Can I get more free uses?</h4>
+              <h4>Can two people work on the same commercial license at once?</h4>
               <p>
-                If you need more uses, you'll need to upgrade to a commercial license. Contact us for pricing and licensing options.
+                Not simultaneously — one person holds the workspace session at a time, which is what
+                prevents two edits from colliding. Handoffs are quick: when one person closes the
+                tool or releases the session, the next person picks up the same workspace with all
+                templates, settings, and data intact.
               </p>
             </div>
 
             <div className="faq-item">
-              <h4>How long does licensing take?</h4>
+              <h4>Does an expired session delete my work?</h4>
               <p>
-                Commercial licenses can typically be set up within 24-48 hours of agreement. We work with you to customize the solution for your needs.
-              </p>
-            </div>
-
-            <div className="faq-item">
-              <h4>Is there a discount for volume?</h4>
-              <p>
-                Yes! We offer volume discounts for larger organizations. Contact us to discuss your specific needs and get a custom quote.
-              </p>
-            </div>
-
-            <div className="faq-item">
-              <h4>Can two people use the same commercial license at the same time?</h4>
-              <p>
-                No, the software enforces that only one person holds the workspace session at a time. This is a safety feature to prevent accidental conflicts and data loss. Team members can take turns seamlessly—when one person finishes and closes the tool (or releases the session), the next person can immediately start a new workspace session on the same project with all shared templates, settings, and data waiting for them.
-              </p>
-            </div>
-
-            <div className="faq-item">
-              <h4>What happens if my workspace session expires after 8 hours of inactivity?</h4>
-              <p>
-                Your workspace is preserved, so nothing is lost. When you open the tool again, you can start a fresh workspace session and all your previous work (templates, data, settings) remains accessible. It's just a way to keep things organized and clean up unused sessions. Your student data, photos, and styling choices are never deleted. (Commercial licenses can also be configured with a custom expiry, or no expiry at all.)
+                Session expiry ends the checkout, not the workspace. Export your config file for
+                anything you want to keep long-term — it captures the template, slots, fonts, and
+                styling in one JSON file you can reload any time.
               </p>
             </div>
           </div>
 
-          <div style={{ backgroundColor: "#f9f9f9", padding: "32px 24px", borderRadius: "8px", marginTop: "40px", marginBottom: "40px", textAlign: "center" }}>
-            <h3 style={{ marginTop: 0 }}>How Workspaces & Workspace Sessions Work</h3>
-            <p style={{ marginBottom: "12px", fontSize: "15px", lineHeight: "1.6" }}>
-              All users get a secure workspace for their project. Personal licenses are device-locked—each device gets its own separate workspace, so you can work from your laptop, phone, or desktop completely independently with no interference. Commercial licenses provide a shared collaborative workspace—multiple team members can contribute to the same yearbook project from the same workstation, with safe handoffs to prevent conflicts.
-            </p>
-            <p style={{ marginBottom: 0, fontSize: "15px", lineHeight: "1.6" }}>
-              Workspace sessions stay active for 8 hours by default while you're working (commercial licenses can set a custom duration or disable expiry entirely). If you step away and come back later, your workspace is still there with all your templates and settings preserved. No data loss, no hassle.
-            </p>
-          </div>
-
-          {/* CTA Section */}
           <div className="pricing-cta">
-            <h2>Ready to get started?</h2>
-            <p>Choose your plan and start creating beautiful yearbook pages today.</p>
+            <h2>Not sure which you need?</h2>
+            <p>
+              Describe what you&rsquo;re working on and we&rsquo;ll tell you honestly whether the
+              free tier covers it.
+            </p>
             <div className="cta-buttons">
-              <a href={TOOL_URL} className="cta-btn primary-btn">Open the Tool</a>
-              <a href="mailto:your-contact@domain.com" className="cta-btn secondary-btn">Contact Sales</a>
+              <a href={TOOL_URL} className="cta-btn primary-btn">Open the tool</a>
+              <a href={`mailto:${CONTACT_EMAIL}`} className="cta-btn secondary-btn">{CONTACT_EMAIL}</a>
             </div>
           </div>
         </div>

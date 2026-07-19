@@ -187,9 +187,9 @@
 }
 
 .ss-nav-link.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .ss-cover {
@@ -228,11 +228,11 @@
 
 .ss-hero-card {
   max-width: 720px;
-  background: var(--bg-panel);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 22px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-3);
 }
 
 .ss-content-spaced {
@@ -250,17 +250,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 14px 18px;
+  padding: 13px 20px;
   border-radius: 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   text-decoration: none;
-  font-weight: 800;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 15px;
+  transition: background-color 140ms ease;
 }
 
 .ss-cta:hover {
-  background: var(--accent-strong);
+  background: var(--accent-hover);
+}
+
+.ss-cta.ss-cta-quiet {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.ss-cta.ss-cta-quiet:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .ss-cover-inner {
@@ -397,7 +409,7 @@
   display: grid;
   place-items: center;
   background: var(--accent-strong);
-  color: #fff;
+  color: var(--accent-contrast);
   font-size: 12px;
   flex: 0 0 auto;
 }

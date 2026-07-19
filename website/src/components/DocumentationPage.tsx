@@ -93,7 +93,7 @@ function LicensingSessionsSection() {
       <div className="ss-kicker">Fundamentals</div>
       <h2>Understanding Licensing & Workspace Sessions</h2>
       <p className="muted">
-        When you use the Yearbook Grad Mugshot Automator, the tool creates a private <strong>workspace</strong> for your project — an isolated folder on the server that stores your templates, student data, images, and styling choices. Each time you open the tool with your license, you check out a <strong>workspace session</strong> tied to that workspace. Understanding how workspace sessions work helps you get the most out of the tool, especially when using multiple devices or sharing a license.
+        When you use the Custom Flow Automator, the tool creates a private <strong>workspace</strong> for your project — an isolated folder on the server that stores your templates, student data, images, and styling choices. Each time you open the tool with your license, you check out a <strong>workspace session</strong> tied to that workspace. Understanding how workspace sessions work helps you get the most out of the tool, especially when using multiple devices or sharing a license.
       </p>
 
       <h3>What is a Workspace?</h3>
@@ -209,7 +209,7 @@ function GettingStartedSection() {
       <div className="ss-kicker">Getting Started</div>
       <h2>Overview & Workflow</h2>
       <p className="muted">
-        The Yearbook Grad Mugshot Automator streamlines the complex process of creating yearbook spreads by treating your yearbook layout as a data problem, not just a design problem. Instead of manually placing hundreds of photos, names, and quotes, you describe your design once, and our computer vision engine assembles perfect spreads in seconds.
+        The Custom Flow Automator streamlines the complex process of creating yearbook spreads by treating your yearbook layout as a data problem, not just a design problem. Instead of manually placing hundreds of photos, names, and quotes, you describe your design once and the tool assembles the spreads for you.
       </p>
 
       <h3>The Problem We Solve</h3>
@@ -217,25 +217,22 @@ function GettingStartedSection() {
         Every yearbook adviser knows the struggle: you have a folder of 500 senior portraits, a spreadsheet of names, a folder of baby photos, and a list of quotes. Your deadline is in 48 hours. Traditionally, this meant hours of mind-numbing manual labor: dragging a photo onto a canvas, cropping it, typing the name, checking the spelling, finding the quote, typing the quote, resizing the text box... and repeating that 499 more times. If a student drops out or a name is misspelled, you have to shift every single photo on the spread by hand. It's slow, brittle, and prone to human error.
       </p>
 
-      <h3>How It Works: The 8-Step Process</h3>
+      <h3>How It Works: The 5 Steps</h3>
       <p className="muted">
-        The tool follows a logical, guided workflow that breaks the complexity into manageable steps:
+        The tool walks you through five steps, shown in the rail on the left of the app:
       </p>
       <ol className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Import Template</strong> — Upload your clean and annotated templates</li>
-        <li><strong>Review Parsing</strong> — Verify the system understood your layout</li>
-        <li><strong>Portraits</strong> — Upload student roster and mugshots</li>
-        <li><strong>Quotes</strong> — (Optional) Add student quotes</li>
-        <li><strong>Baby Photos</strong> — (Optional) Add baby photos</li>
-        <li><strong>Styling</strong> — Customize fonts, sizes, and alignment</li>
-        <li><strong>Review</strong> — Generate a preview to check quality</li>
-        <li><strong>Results</strong> — Download final high-resolution spreads</li>
+        <li><strong>Template</strong> — Upload your clean and annotated templates, then review the detected layout</li>
+        <li><strong>Uploads</strong> — Upload your roster and portraits, plus optional quotes and baby photos</li>
+        <li><strong>People</strong> — Review every student's matches and fix any exceptions</li>
+        <li><strong>Style</strong> — Set fonts, sizes, and alignment for names and quotes</li>
+        <li><strong>Generate</strong> — Preview one page, then render and download everything</li>
       </ol>
 
       <h3>Key Capabilities</h3>
       <ul className="muted" style={{ marginTop: 6 }}>
         <li>
-          <strong>Template-Aware Computer Vision:</strong> We don't force you into rigid grid layouts. Draw your design in Photoshop, InDesign, or Canva, mark the spots with our guide colours, and our engine "sees" your design intent.
+          <strong>Template-Aware Computer Vision:</strong> We don't force you into rigid grid layouts. Draw your design in Photoshop, InDesign, or Canva, mark the spots with our guide colours, and the parser picks up your layout from the coloured boxes.
         </li>
         <li>
           <strong>Smart Data Ingest:</strong> Drag and drop your spreadsheets and photo folders. The system handles the messy work of matching "Smith, John.jpg" to the student record for John Smith, even catching fuzzy matches and typos.
@@ -277,7 +274,7 @@ function TemplateSetupSection() {
           <strong>1. The Clean Template:</strong> This is the blank background image that will be used for the final generated result. It should contain all your static design elements (background graphics, page numbers, headers) but <em>no</em> placeholder boxes or guide colours. Think of it as the "canvas" onto which we'll place the dynamic elements.
         </li>
         <li>
-          <strong>2. The Annotated Template:</strong> This is a copy of your template where you have drawn coloured rectangles to tell the system exactly where each item belongs. The system analyzes this image to detect the position and size of every slot. This is where our computer vision magic happens.
+          <strong>2. The Annotated Template:</strong> This is a copy of your template where you have drawn coloured rectangles to tell the system exactly where each item belongs. The system analyzes this image to detect the position and size of every slot. This is what the parser reads to learn your layout.
         </li>
       </ul>
 
@@ -365,7 +362,7 @@ function TemplateSetupSection() {
 
       <h3>Advanced: Custom Detection Colours</h3>
       <p className="muted">
-        If you need to use different colours (e.g., your design already uses green), the system allows you to customize the detection colours in the Import Template step. However, we recommend sticking with the defaults for best results.
+        If you need to use different colours (e.g., your design already uses green), the system allows you to customize the detection colours in the Template step. However, we recommend sticking with the defaults for best results.
       </p>
     </div>
   );
@@ -456,18 +453,15 @@ function DataPreparationSection() {
       </p>
 
       <h3>File Organization Checklist</h3>
-      <div style={{ backgroundColor: '#f5f5f5', padding: 12, borderRadius: 4, marginTop: 12 }}>
-        <input type="checkbox" checked disabled /> Student roster spreadsheet (Excel or CSV)
-        <br />
-        <input type="checkbox" checked disabled /> All mugshots in one ZIP file
-        <br />
-        <input type="checkbox" checked disabled /> (Optional) Baby photos in a separate ZIP file
-        <br />
-        <input type="checkbox" checked disabled /> (Optional) Quotes in a separate spreadsheet
-        <br />
-        <input type="checkbox" checked disabled /> Clean template image
-        <br />
-        <input type="checkbox" checked disabled /> Annotated template image
+      <div className="ss-doc-callout">
+        <ul className="muted" style={{ margin: 0 }}>
+          <li>Student roster spreadsheet (Excel or CSV)</li>
+          <li>All mugshots in one ZIP file</li>
+          <li>(Optional) Baby photos in a separate ZIP file</li>
+          <li>(Optional) Quotes in a separate spreadsheet</li>
+          <li>Clean template image</li>
+          <li>Annotated template image</li>
+        </ul>
       </div>
     </div>
   );
@@ -479,144 +473,81 @@ function WorkflowSection() {
       <div className="ss-kicker">Workflow</div>
       <h2>Step-by-Step Workflow Guide</h2>
       <p className="muted">
-        The tool guides you through an 8-step process. Here's what happens at each step and what you need to do.
+        The tool walks you through five steps. Here's what happens at each one and what you need to do.
       </p>
 
-      <h3>Step 1: Import Template</h3>
+      <h3>Step 1: Template</h3>
       <p className="muted">
-        Upload both your <strong>Clean Template</strong> (for the background) and your <strong>Annotated Template</strong> (for parsing). You can also customize the detection colours if needed, though the defaults are recommended.
+        Upload both your <strong>Clean Template</strong> (the background art) and your <strong>Annotated Template</strong> (the copy with coloured guide boxes). The parser detects every box, groups them into per-student slots, and overlays the result on your template so you can check it.
       </p>
       <h4>What Happens Here:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li>The system stores both template images</li>
-        <li>It begins analyzing the annotated template for coloured boxes</li>
-        <li>You can preview both images before proceeding</li>
-      </ul>
-      <h4>Pro Tips:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Check the preview to ensure both images loaded correctly</li>
-        <li>If the images appear blurry or low-res, re-export at higher DPI</li>
-        <li>Verify dimensions match between clean and annotated</li>
-      </ul>
-
-      <h3>Step 2: Review Parsing</h3>
-      <p className="muted">
-        The system analyzes your annotated template and displays what it detected. Verify that every student slot has been found and that the boxes are correctly grouped. Each "slot" should contain one portrait, one name, one quote, and optionally one baby photo.
-      </p>
-      <h4>What Happens Here:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>The system highlights detected boxes on your template</li>
-        <li>It groups boxes into student slots</li>
-        <li>It calculates precise positioning and sizing</li>
+        <li>Both template images are stored in your workspace</li>
+        <li>The annotated template is scanned for the guide colours (you can customize the colours if your design already uses one of them)</li>
+        <li>Detected boxes are grouped into slots and drawn over the template preview</li>
       </ul>
       <h4>What to Check:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Count: Are the number of slots equal to the number of students you have?</li>
-        <li>Grouping: Is each slot's boxes (portrait, name, quote, baby) correctly grouped together?</li>
-        <li>Positioning: Do the preview outlines align with your actual template design?</li>
-        <li>Order: Are slots arranged in the correct reading order (left-to-right, top-to-bottom)?</li>
+        <li>Count: does the number of slots match the number of students per spread you designed for?</li>
+        <li>Grouping: is each slot's set of boxes (portrait, name, quote, baby) grouped correctly? Use "Regroup nearby slots" if not</li>
+        <li>Positioning: click any slot box to fine-tune its exact coordinates in the inspector</li>
       </ul>
       <h4>If Something is Wrong:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Boxes not detected:</strong> Check that your annotated template uses the exact hex codes (#00BF63, #004AAD, #FF751F, #FF3131)</li>
-        <li><strong>Wrong box grouped:</strong> Ensure boxes are closer to their student's boxes than to neighbours</li>
-        <li><strong>Color drift:</strong> Use a colour picker tool to verify your hex codes match exactly</li>
-        <li>You can go back and re-upload the templates after fixing the annotated version</li>
+        <li><strong>Boxes not detected:</strong> check your annotated template uses the exact hex codes (#00BF63, #004AAD, #FF751F, #FF3131), with filled, fully opaque rectangles</li>
+        <li><strong>Wrong grouping:</strong> ensure each student's boxes are closer to each other than to their neighbours' boxes</li>
+        <li>You can re-upload the templates after fixing the annotated version — the step is retryable</li>
       </ul>
 
-      <h3>Step 3: Portraits</h3>
+      <h3>Step 2: Uploads</h3>
       <p className="muted">
-        Upload your student roster (Excel/CSV) and a ZIP file containing all student portraits. The system will attempt to match photos to students based on filenames.
+        Upload your roster spreadsheet (Excel/CSV) and a ZIP of portraits. Quotes (a spreadsheet) and baby photos (a ZIP) are optional cards on the same page — add them now or skip them entirely. "Process all uploads" runs everything in one go.
       </p>
-      <h4>What Happens Here:</h4>
+      <h4>Matching Rules:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li>The roster is parsed and imported</li>
-        <li>Portrait filenames are matched to students</li>
-        <li>The system generates a preview showing the matches</li>
-        <li>You can review and manually correct any mismatches</li>
+        <li><strong>Numeric filenames:</strong> <code>001.jpg</code> maps to row 1, <code>002.jpg</code> to row 2, and so on</li>
+        <li><strong>Name filenames:</strong> fuzzy matching finds the closest roster name, including "Last, First" order and near-misses</li>
+        <li><strong>Mixed:</strong> numeric matching is tried first, then name matching for whatever's left</li>
       </ul>
-      <h4>Matching Algorithm:</h4>
+      <h4>Pro Tips:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>If filenames are numeric:</strong> <code>001.jpg</code> maps to row 1, <code>002.jpg</code> to row 2, etc.</li>
-        <li><strong>If filenames are names:</strong> Fuzzy matching finds the closest student name in your roster</li>
-        <li><strong>If filenames are mixed:</strong> The system tries numeric first, then name matching for unmatched files</li>
-      </ul>
-      <h4>Manual Corrections:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Click on any student to view or change their assigned portrait</li>
-        <li>You can upload additional portraits or remove mismatched ones</li>
-        <li>All corrections are saved to your workspace and can be reviewed later</li>
+        <li>Roster headers must contain "First Name" and "Last Name" (any capitalization)</li>
+        <li>Keep images at the root of the ZIP, not in nested folders</li>
+        <li>Each upload card can be re-run independently if one file was wrong</li>
       </ul>
 
-      <h3>Step 4: Quotes</h3>
+      <h3>Step 3: People</h3>
       <p className="muted">
-        (Optional) Upload a spreadsheet or ZIP file containing student quotes. The system matches these to students by name. You can skip this step if your yearbook doesn't include quotes.
+        Every student appears as a card showing their portrait, baby photo, and quote together. This is where you catch and fix exceptions before they reach the final render.
       </p>
-      <h4>What Happens Here:</h4>
+      <h4>What You Can Do:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Quote file is parsed</li>
-        <li>Quotes are matched to students by name (fuzzy matching)</li>
-        <li>Unmatched quotes are flagged for review</li>
+        <li>Click a card to open the inspector: replace or remove the portrait, edit the quote, manage the baby photo</li>
+        <li>Open the baby photo editor to crop, rotate, remove the background, and center on the face</li>
+        <li>Apply mapping adjustments — keep, replace, shift, or skip — and removals cascade the rest of the list up correctly</li>
+        <li>Set default portraits or quotes for students missing one</li>
       </ul>
 
-      <h3>Step 5: Baby Photos</h3>
+      <h3>Step 4: Style</h3>
       <p className="muted">
-        (Optional) Upload a ZIP file of baby photos. The system uses smart fuzzy matching to pair filenames like "Smith, John - baby.jpg" with the student "John Smith". You'll have a chance to review these matches.
+        Configure typography for names and quotes independently: font family (system fonts or your own TTF/OTF uploads), size, weight, alignment, and casing. A live preview shows roughly how a card will look; the final render uses your exact font.
       </p>
-      <h4>What Happens Here:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Baby photos are extracted and analyzed</li>
-        <li>Names in filenames are extracted and matched to students</li>
-        <li>Face detection helps center the baby's face in the final output</li>
-        <li>You can customize the baby photo background colour (e.g., white, transparent)</li>
-      </ul>
 
-      <h3>Step 6: Styling</h3>
+      <h3>Step 5: Generate</h3>
       <p className="muted">
-        Customize the typography for names and quotes. You can upload your own font files (TTF/OTF) or use system fonts. Adjust size, alignment, and casing to match your school's style guide.
+        The stats bar summarizes what will render — total students, estimated spreads, anything missing. Render a one-page preview first (it doesn't count against your monthly limit), then "Render all" for the full batch.
       </p>
-      <h4>Options Available:</h4>
+      <h4>Settings:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Font Family:</strong> Select from system fonts or upload custom TTF/OTF files</li>
-        <li><strong>Font Size:</strong> Specify in pixels or let the system auto-fit to the box</li>
-        <li><strong>Font Weight:</strong> Regular, bold, or extra bold</li>
-        <li><strong>Alignment:</strong> Left, center, or right</li>
-        <li><strong>Text Transform:</strong> Uppercase, lowercase, or as-is</li>
-        <li><strong>Colour:</strong> Custom hex colour for text</li>
-        <li><strong>Letter Spacing:</strong> Adjust spacing between characters</li>
+        <li><strong>Placement:</strong> fill both pages simultaneously or left page then right; optionally force alphabetical order by last name</li>
+        <li><strong>Export format:</strong> PNG (default), PDF, or TIFF</li>
+        <li><strong>Export quality:</strong> full template resolution by default, with optional downscaling</li>
       </ul>
-
-      <h3>Step 7: Review</h3>
-      <p className="muted">
-        Generate a low-resolution preview of a single spread to check alignment, font sizes, and image crops. This is your last chance to make changes before the final render. The preview is fast to generate, so don't hesitate to iterate.
-      </p>
-      <h4>What to Check:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Portrait alignment and crop (faces should be centered)</li>
-        <li>Baby photo positioning and sizing</li>
-        <li>Name text size and readability</li>
-        <li>Quote text size and alignment</li>
-        <li>Overall layout balance and spacing</li>
-        <li>Colour combinations and contrast</li>
-      </ul>
-
-      <h3>Step 8: Results</h3>
-      <p className="muted">
-        The system generates high-resolution PNGs of your spreads. If you have more students than fit on one page, it will automatically generate multiple output files (e.g., output_01.png, output_02.png, etc.). Download them and drop them straight into your yearbook software.
-      </p>
       <h4>What You Get:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li>High-resolution PNG files (same resolution as your clean template)</li>
-        <li>Named sequentially for easy identification</li>
-        <li>One spread per file (or multiple spreads if configured)</li>
-        <li>Option to download all at once or individually</li>
-      </ul>
-      <h4>Next Steps:</h4>
-      <ul className="muted" style={{ marginTop: 6 }}>
-        <li>Import the PNG files into your yearbook software (InDesign, Publisher, etc.)</li>
-        <li>Place them on your spread pages</li>
-        <li>Make any final adjustments or annotations</li>
-        <li>Export to PDF or print</li>
+        <li>One file per spread, numbered sequentially, at your chosen resolution</li>
+        <li>Download individually or as a single ZIP</li>
+        <li>Drop the files into InDesign, Publisher, or your yearbook vendor's uploader — they're plain images</li>
       </ul>
     </div>
   );
@@ -628,7 +559,7 @@ function StylingSection() {
       <div className="ss-kicker">Customization</div>
       <h2>Styling & Typography Control</h2>
       <p className="muted">
-        The Styling step allows you to control exactly how names and quotes appear on your spreads. You have full control over fonts, sizes, alignment, and more.
+        The Style step allows you to control exactly how names and quotes appear on your spreads. You have full control over fonts, sizes, alignment, and more.
       </p>
 
       <h3>Font Selection</h3>
@@ -714,7 +645,7 @@ function StylingSection() {
 
       <h3>Preview & Iteration</h3>
       <p className="muted">
-        After configuring your styling, the Review step generates a preview of one student's spread. This preview is low-resolution but fast to generate, so you can quickly iterate on styling choices.
+        After configuring your styling, the Generate step can render a one-page preview. This preview is low-resolution but fast to generate, so you can quickly iterate on styling choices.
       </p>
       <h4>Use the Preview to Verify:</h4>
       <ul className="muted" style={{ marginTop: 6 }}>
@@ -726,7 +657,7 @@ function StylingSection() {
       </ul>
 
       <h3>Common Styling Scenarios</h3>
-      <div style={{ backgroundColor: '#f5f5f5', padding: 12, borderRadius: 4, marginTop: 12 }}>
+      <div className="ss-doc-callout">
         <strong>Classic Yearbook Style:</strong>
         <ul style={{ marginTop: 8, marginBottom: 12 }}>
           <li>Name: Large (36-48px), bold, black, uppercase, center-aligned</li>
@@ -834,7 +765,7 @@ function ConfigurationSection() {
           The tool will import all templates, parsed slots, styling settings, and fonts
         </li>
         <li>
-          You can now proceed to the Portraits step and upload new student data
+          You can now proceed to the Uploads step and upload new student data
         </li>
       </ol>
 
@@ -844,7 +775,7 @@ function ConfigurationSection() {
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
         <li>Restore all template and styling settings to exactly how you saved them</li>
-        <li>Skip you directly to the Portraits step (since templates and styling are already configured)</li>
+        <li>Skip you directly to the Uploads step (since templates and styling are already configured)</li>
         <li>Prepare you to upload new student rosters and photos</li>
         <li>Maintain all custom fonts and styling choices</li>
       </ul>
@@ -895,7 +826,7 @@ function ConfigurationSection() {
       <p className="muted">
         Config files are JSON with the following structure (simplified):
       </p>
-      <div style={{ backgroundColor: '#f5f5f5', padding: 12, borderRadius: 4, marginTop: 12, overflow: 'auto', fontSize: '12px', fontFamily: 'monospace' }}>
+      <div className="ss-doc-callout" style={{ overflow: 'auto', fontSize: 12, fontFamily: 'monospace' }}>
         <pre style={{ margin: 0 }}>
 {`{
   "version": "1",
@@ -938,7 +869,7 @@ function ConfigurationSection() {
       </ul>
 
       <h3>Troubleshooting Configs</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Config file won't load / "Invalid config file" error</strong>
         <ul className="muted" style={{ marginTop: 8 }}>
           <li>Ensure the file is a valid JSON file (not corrupted or edited incorrectly)</li>
@@ -948,7 +879,7 @@ function ConfigurationSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Config loads but templates are blurry / low quality</strong>
         <ul className="muted" style={{ marginTop: 8 }}>
           <li>Configs embed images as base64, which can slightly compress them during encoding</li>
@@ -1031,7 +962,7 @@ function BackgroundRemovalSection() {
       <h4>For Baby Photos (Baby Photos Step):</h4>
       <ol className="muted" style={{ marginTop: 6 }}>
         <li>
-          In the Baby Photos step, look for the "Remove backgrounds" option
+          In the Uploads step’s Baby photos card, look for the "Remove backgrounds" option
         </li>
         <li>
           Toggle it ON to enable background removal processing
@@ -1048,7 +979,7 @@ function BackgroundRemovalSection() {
           The tool will process all baby photos in the background
         </li>
         <li>
-          Preview the results in the Review step before final generation
+          Preview the results with a preview render in the Generate step before the final render
         </li>
       </ol>
 
@@ -1064,7 +995,7 @@ function BackgroundRemovalSection() {
           <strong>Parallel Processing:</strong> Multiple photos are processed simultaneously to speed up the overall workflow
         </li>
         <li>
-          <strong>Progress Tracking:</strong> You can monitor progress via the status indicator in the Baby Photos step
+          <strong>Progress Tracking:</strong> You can monitor progress via the status indicator on the Baby photos card
         </li>
         <li>
           <strong>Memory Usage:</strong> Ensure your system has at least 2GB of available RAM for optimal performance
@@ -1135,7 +1066,7 @@ function BackgroundRemovalSection() {
       </ul>
 
       <h3>Common Background Removal Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Hairline or edges are jagged / "frayed"</strong>
         <p className="muted">
           The algorithm had difficulty with fine hair or clothing edges.
@@ -1147,7 +1078,7 @@ function BackgroundRemovalSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Part of the subject was removed / "holes" in the photo</strong>
         <p className="muted">
           The algorithm mistakenly identified part of the subject as background.
@@ -1159,7 +1090,7 @@ function BackgroundRemovalSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Background wasn't fully removed / patches of original background remain</strong>
         <p className="muted">
           The algorithm didn't fully detect the background boundary.
@@ -1211,7 +1142,7 @@ function TroubleshootingSection() {
       </p>
 
       <h3>Template Parsing Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Parsing finds zero slots</strong>
         <p className="muted">
           The system cannot detect any coloured boxes in your annotated template.
@@ -1227,7 +1158,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Some boxes detected, but not all</strong>
         <p className="muted">
           Only some of your coloured boxes are being found.
@@ -1249,7 +1180,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Boxes grouped incorrectly</strong>
         <p className="muted">
           Boxes from different students are being grouped together into one slot.
@@ -1269,21 +1200,21 @@ function TroubleshootingSection() {
       </div>
 
       <h3>Data Import Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Spreadsheet errors / Column not found</strong>
         <p className="muted">
           The system can't find required columns in your roster.
         </p>
         <strong style={{ marginTop: 8, display: 'block' }}>Solutions:</strong>
         <ul className="muted">
-          <li>Ensure your spreadsheet has columns named exactly <strong>"First Name"</strong> and <strong>"Last Name"</strong> (case-sensitive)</li>
+          <li>Ensure your spreadsheet has column headers containing <strong>"First Name"</strong> and <strong>"Last Name"</strong> (any capitalization, but the words must be spelled out — <code>first_name</code> with an underscore won't match)</li>
           <li>Check for extra spaces in column headers (e.g., "First Name " with a trailing space won't work)</li>
           <li>If using CSV, ensure the file is properly formatted and doesn't have encoding issues</li>
           <li>Try exporting from Excel as a fresh CSV file and uploading that</li>
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Mismatched photos</strong>
         <p className="muted">
           Students are being matched to the wrong portraits.
@@ -1294,10 +1225,10 @@ function TroubleshootingSection() {
             <strong>If using numeric filenames:</strong> Ensure they correspond to spreadsheet row numbers. Row 1 (first student) should be <code>001.jpg</code> or <code>1.jpg</code>.
           </li>
           <li>
-            <strong>If using name filenames:</strong> Try enabling "Advanced Name Matching" in the Portraits step to catch variations like "Matt" vs "Matthew".
+            <strong>If using name filenames:</strong> Try enabling "Advanced name matching" in the Uploads step to catch variations like "Matt" vs "Matthew".
           </li>
           <li>
-            <strong>Manual correction:</strong> You can manually reassign portraits for any student in the Portraits step.
+            <strong>Manual correction:</strong> You can manually reassign portraits for any student in the People step.
           </li>
           <li>
             <strong>File organization:</strong> Verify your ZIP file contains only image files at the root level (not in nested folders).
@@ -1305,7 +1236,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: ZIP file errors</strong>
         <p className="muted">
           The system can't read your ZIP files (mugshots, baby photos, etc.).
@@ -1321,7 +1252,7 @@ function TroubleshootingSection() {
       </div>
 
       <h3>Generation Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Generation hangs or times out</strong>
         <p className="muted">
           The final render is taking too long or not completing.
@@ -1343,7 +1274,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Text doesn't fit in the box / Gets cut off</strong>
         <p className="muted">
           Names or quotes are overflowing their designated areas.
@@ -1351,7 +1282,7 @@ function TroubleshootingSection() {
         <strong style={{ marginTop: 8, display: 'block' }}>Solutions:</strong>
         <ul className="muted">
           <li>
-            <strong>Reduce font size:</strong> In the Styling step, use a smaller point size.
+            <strong>Reduce font size:</strong> In the Style step, use a smaller point size.
           </li>
           <li>
             <strong>Enable auto-fit:</strong> Let the system automatically reduce font size for long names/quotes.
@@ -1369,7 +1300,7 @@ function TroubleshootingSection() {
       </div>
 
       <h3>Quality Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Output images are blurry or low quality</strong>
         <p className="muted">
           Your final spreads don't look crisp enough for print.
@@ -1391,7 +1322,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Photos have wrong crop / Face is cut off</strong>
         <p className="muted">
           Student portraits are cropped awkwardly or important parts are missing.
@@ -1399,10 +1330,10 @@ function TroubleshootingSection() {
         <strong style={{ marginTop: 8, display: 'block' }}>Solutions:</strong>
         <ul className="muted">
           <li>
-            <strong>Manual correction:</strong> In the Portraits step, click on a student to adjust their photo crop manually.
+            <strong>Manual correction:</strong> In the People step, click a student to adjust their photo manually.
           </li>
           <li>
-            <strong>Face detection:</strong> Enable face detection in the Mapping step to automatically center faces.
+            <strong>Face detection:</strong> Face detection centers faces automatically; check the People step to review individual crops.
           </li>
           <li>
             <strong>Template box size:</strong> If the portrait box is very small or non-standard, the crop may be aggressive. Consider expanding it.
@@ -1411,7 +1342,7 @@ function TroubleshootingSection() {
       </div>
 
       <h3>Other Issues</h3>
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Custom font not found</strong>
         <p className="muted">
           You uploaded a font, but it's not appearing in the font selector.
@@ -1425,7 +1356,7 @@ function TroubleshootingSection() {
         </ul>
       </div>
 
-      <div style={{ marginTop: 12, marginBottom: 12, borderLeft: '4px solid #ff6b6b', paddingLeft: 12 }}>
+      <div className="ss-doc-warning">
         <strong>Problem: Baby photo not detected / Mismatched</strong>
         <p className="muted">
           Baby photos aren't being matched to the right students.
@@ -1439,7 +1370,7 @@ function TroubleshootingSection() {
             <strong>Fuzzy matching:</strong> The system is forgiving with names, but try using exact names for best results.
           </li>
           <li>
-            <strong>Manual correction:</strong> In the Baby Photos step, you can manually reassign photos.
+            <strong>Manual correction:</strong> In the People step, you can manually reassign baby photos.
           </li>
         </ul>
       </div>
@@ -1451,7 +1382,7 @@ function TipsSection() {
   return (
     <div className="panel">
       <div className="ss-kicker">Tips & Best Practices</div>
-      <h2>Pro Tips for Great Results</h2>
+      <h2>Tips & Best Practices</h2>
       <p className="muted">
         These tips and best practices will help you get the most out of the tool and produce professional-quality yearbook spreads.
       </p>
@@ -1525,7 +1456,7 @@ function TipsSection() {
           <strong>Generous font sizing:</strong> When in doubt, go larger. Names should be legible from arm's length. Don't make text so small it's hard to read.
         </li>
         <li>
-          <strong>Test with longest names:</strong> During the Review step, make sure you can see how long names look. A name like "Alexander Montgomery" should still be readable.
+          <strong>Test with longest names:</strong> When you render a preview in the Generate step, check how the longest names look. A name like "Alexander Montgomery" should still be readable.
         </li>
         <li>
           <strong>Contrast:</strong> Ensure text colour provides enough contrast with your background. Dark text on dark background or light on light will be hard to read.
@@ -1537,7 +1468,7 @@ function TipsSection() {
           <strong>Quote styling:</strong> Quotes are secondary to names and portraits. Consider making them smaller and/or a different colour.
         </li>
         <li>
-          <strong>Preview iteration:</strong> Use the Review step liberally. Generate previews of different students to see how text fits with varying name/quote lengths.
+          <strong>Preview iteration:</strong> Preview renders are quick — use them liberally to see to see how text fits with varying name/quote lengths.
         </li>
       </ul>
 
@@ -1588,7 +1519,7 @@ function TipsSection() {
           <strong>Test with small sets:</strong> When trying new font or styling, test with 2-3 students first before committing to 200.
         </li>
         <li>
-          <strong>Read error messages:</strong> If something goes wrong, the tool provides specific error messages. Read them carefully; they often point to the solution.
+          <strong>Read error messages:</strong> If something goes wrong, the tool shows specific error messages. Read them carefully; they often point to the solution.
         </li>
         <li>
           <strong>Use the preview religiously:</strong> The Preview step is your safety net. Use it to catch issues before the final high-resolution render.

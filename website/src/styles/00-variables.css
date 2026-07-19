@@ -1,16 +1,53 @@
 :root {
-  color: #0f172a;
-  background-color: #f7fdf9;
+  color-scheme: dark;
+  color: var(--text);
+  background-color: var(--bg-app);
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   line-height: 1.6;
-  --accent: #16a34a;
-  --accent-strong: #15803d;
-  --danger: #dc2626;
-  --danger-strong: #b91c1c;
-  --muted: #64748b;
-  --border: #d1e3d4;
-  --bg-panel: #ffffff;
-  --bg-quiet: #eef7ef;
-  --bg-warn: #fff7d6;
-  --border-warn: #f3d28c;
+
+  /* Palette lifted from tool/web (dark theme) so the site and the app read as
+     one product. Legacy names (--bg-panel, --bg-quiet, --muted) are aliases
+     used throughout the older CSS files. */
+  --text: #e8eef2;
+  --text-soft: #b7c4ca;
+  --text-muted: #8a9aa0;
+  --muted: #8a9aa0;
+
+  --bg-app: #090d11;
+  --surface: #11171d;
+  --surface-raised: #161e25;
+  --surface-sunken: #0c1217;
+  --surface-hover: #1a242b;
+  --bg-panel: #11171d;
+  --bg-quiet: #0e141a;
+
+  --border-subtle: #1b242b;
+  --border: #25323a;
+  --border-strong: #34454e;
+
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-hover: #5eead4;
+  --accent-contrast: #042925;
+  --accent-soft: rgba(45, 212, 191, 0.14);
+  --accent-line: rgba(45, 212, 191, 0.42);
+
+  --danger: #f87171;
+  --danger-strong: #ef4444;
+  --warn: #fbbf24;
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+
+  --bg-warn: #241d08;
+  --border-warn: #5a4313;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.46);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.52);
+  --focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.34);
+}
+
+::selection {
+  background: var(--accent-line);
+  color: var(--text);
 }

@@ -17,7 +17,7 @@ export function PrivacyPage() {
               <em>Effective Date: December 25, 2025</em>
             </p>
             <p>
-              This Privacy Policy explains how your information is handled by the Yearbook Grad Mugshot Automator software
+              This Privacy Policy explains how your information is handled by the Custom Flow Automator software
               ("the Software").
             </p>
 
@@ -95,7 +95,7 @@ export function PrivacyPage() {
             <ul>
               <li>
                 For questions about this Privacy Policy or commercial licensing, contact:{" "}
-                <a href="mailto:your-contact@domain.com">your-contact@domain.com</a>
+                <a href="mailto:sightonmedia@gmail.com">sightonmedia@gmail.com</a>
               </li>
             </ul>
           </article>
