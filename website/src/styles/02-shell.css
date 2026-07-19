@@ -15,6 +15,41 @@
   border-bottom: 1px solid var(--border);
 }
 
+.ss-beta-banner {
+  display: block;
+  background: var(--bg-warn);
+  border-bottom: 1px solid var(--border-warn);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 9px 16px;
+}
+
+.ss-beta-banner:hover {
+  text-decoration: underline;
+}
+
+.ss-beta-banner strong {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.ss-beta-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--warn);
+  background: var(--bg-warn);
+  border: 1px solid var(--border-warn);
+  border-radius: 999px;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+
 .ss-footer {
   background: var(--bg-panel);
   border-top: 1px solid var(--border);

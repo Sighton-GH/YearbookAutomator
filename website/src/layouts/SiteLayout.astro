@@ -17,7 +17,7 @@ const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Custom Flow Automator assembles yearbook grad spreads automatically: upload your template, roster, and portraits, and get print-ready pages with names, quotes, and baby photos placed."
+      content="Custom Flow Automator assembles yearbook grad spreads automatically: upload your template, roster, and portraits, and get print-ready pages with names, quotes, and baby photos placed. Currently in open beta — free for schools and organizations helping us test it."
     />
     <meta name="theme-color" content="#f3f7f6" />
     <link rel="icon" type="image/png" href="/assets/Sighton_Logo.png" />
@@ -35,6 +35,13 @@ const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
   </head>
   <body>
     <div class="ss-shell">
+      <a
+        class="ss-beta-banner"
+        href="mailto:sightonmedia@gmail.com?subject=Beta%20testing%20inquiry"
+      >
+        <strong>Beta:</strong> Custom Flow Automator isn&rsquo;t fully finished yet — we&rsquo;re
+        inviting schools and organizations to test it for free before general release. Email us to join &rarr;
+      </a>
       <SiteTopBar currentPath={currentPath} client:load />
       <main class="ss-main">
         <slot />

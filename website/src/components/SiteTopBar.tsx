@@ -63,6 +63,7 @@ export function SiteTopBar({ currentPath }: { currentPath: string }) {
           />
           <span className="ss-brand-main">Sighton Yearbook Tools</span>
           <span className="ss-brand-sub">Custom Flow Automator</span>
+          <span className="ss-beta-badge">Beta</span>
         </a>
 
         <div className="ss-topbar-right">

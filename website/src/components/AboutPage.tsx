@@ -41,7 +41,9 @@ export function AboutPage() {
             <a className="ss-cta ss-cta-quiet" href={withBase("how-to-use")}>Read the documentation</a>
           </div>
           <p className="home-hero-note">
-            Free for personal use (5 runs a month). Your student data is processed locally and never sold or shared.
+            Currently in open beta and not fully finished yet. Free for personal use (5 runs a month), and free
+            for schools and organizations who help us test it before general release. Your student data is
+            processed locally and never sold or shared.
           </p>
           <div className="home-hero-shot">
             <ShotFrame

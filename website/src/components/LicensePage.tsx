@@ -16,7 +16,9 @@ export function LicensePage() {
             <p>You may use, copy, and modify this software for your own private, non-commercial purposes at no cost.</p>
             <p>
               Commercial use (including use by businesses, schools, organizations, or for any revenue-generating activity)
-              requires a paid commercial license.
+              requires a commercial license. The software is currently in open beta and not fully finished; commercial
+              licenses may be issued free of charge to selected organizations for the duration of the beta, at the
+              licensor's discretion, before standard paid terms apply.
             </p>
             <p>
               To obtain a commercial license, please contact:{" "}
