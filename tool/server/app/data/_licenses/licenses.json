@@ -782,6 +782,26 @@
       "revoked": false,
       "unlock_all_steps": true,
       "uses": 0
+    },
+    {
+      "bound_device_id": "aab7d4ab-a93f-4c2b-9381-879a2a40c260",
+      "bound_ip": "2001:569:500e:a600:b955:d78b:e76:c654",
+      "expires_at": null,
+      "issued_at": 1784481381,
+      "key": "YMGA1-M2I5W-VBABW-2LR77-7PYVK-VC65G-HOCES-Y2GAJ-HXKDB-DEPLK-QC4LJ-RQ",
+      "last_seen_device_id": "aab7d4ab-a93f-4c2b-9381-879a2a40c260",
+      "last_seen_ip": "2001:569:500e:a600:b955:d78b:e76:c654",
+      "last_used_at": 1784491269,
+      "license_type": "personal",
+      "max_uses": null,
+      "monthly_limit": 5,
+      "monthly_uses": {},
+      "note": "free personal",
+      "revoked": false,
+      "unlock_all_steps": false,
+      "uses": 0,
+      "workspace_expiry_disabled": false,
+      "workspace_expiry_seconds": null
     }
   ],
   "version": 2

@@ -161,12 +161,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-soft);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-quiet);
+  color: var(--text);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -175,8 +175,8 @@
 .ss-theme-toggle:hover,
 .ss-menu-btn:hover {
   background: var(--surface-hover);
-  border-color: var(--border-strong);
-  color: var(--text);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .ss-menu-btn[aria-expanded="true"] {

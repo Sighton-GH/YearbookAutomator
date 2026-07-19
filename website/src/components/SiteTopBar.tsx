@@ -93,8 +93,10 @@ export function SiteTopBar({ currentPath }: { currentPath: string }) {
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <svg width="26" height="26" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <rect x="1.5" y="3.2" width="15" height="2.7" rx="1.35" fill="currentColor" />
+                <rect x="1.5" y="7.65" width="15" height="2.7" rx="1.35" fill="currentColor" />
+                <rect x="1.5" y="12.1" width="15" height="2.7" rx="1.35" fill="currentColor" />
               </svg>
             </button>
 

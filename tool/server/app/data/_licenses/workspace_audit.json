@@ -1431,6 +1431,14 @@
       "license_type": "personal",
       "ts": 1783909889,
       "workspace_id": "c1f42a04d8124c10bca55b2841502045"
+    },
+    {
+      "detail": "",
+      "device_id": "aab7d4ab-a93f-4c2b-9381-879a2a40c260",
+      "event": "workspace_created",
+      "license_type": "personal",
+      "ts": 1784481382,
+      "workspace_id": "b9b74116775a4360ba9f589af7b2fb3d"
     }
   ]
 }
