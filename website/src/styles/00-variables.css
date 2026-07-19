@@ -1,13 +1,56 @@
 :root {
-  color-scheme: dark;
-  color: var(--text);
-  background-color: var(--bg-app);
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   line-height: 1.6;
+}
 
-  /* Palette lifted from tool/web (dark theme) so the site and the app read as
-     one product. Legacy names (--bg-panel, --bg-quiet, --muted) are aliases
-     used throughout the older CSS files. */
+/* Palette lifted from tool/web so the site and the app read as one product.
+   Legacy names (--bg-panel, --bg-quiet, --muted) are aliases used throughout
+   the older CSS files. Light is the default theme; dark is opt-in via the
+   toggle in SiteTopBar (persisted to localStorage, see SiteLayout.astro's
+   pre-paint script). */
+[data-theme="light"] {
+  color-scheme: light;
+  --text: #0e1a1c;
+  --text-soft: #41535a;
+  --text-muted: #647079;
+  --muted: #647079;
+
+  --bg-app: #f3f7f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef4f3;
+  --surface-hover: #e9f1ef;
+  --bg-panel: #ffffff;
+  --bg-quiet: #eef4f3;
+
+  --border-subtle: #e4ecea;
+  --border: #d4e1de;
+  --border-strong: #b9cbc7;
+
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-hover: #0b7d73;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  --accent-line: rgba(13, 148, 136, 0.4);
+
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --warn: #b45309;
+  --success: #047857;
+  --success-soft: rgba(4, 120, 87, 0.1);
+
+  --bg-warn: #fff7e6;
+  --border-warn: #f0cf8c;
+
+  --shadow-1: 0 1px 2px rgba(15, 35, 32, 0.06);
+  --shadow-2: 0 8px 22px rgba(15, 35, 32, 0.09);
+  --shadow-3: 0 18px 44px rgba(15, 35, 32, 0.13);
+  --focus-ring: 0 0 0 3px rgba(13, 148, 136, 0.26);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
   --text: #e8eef2;
   --text-soft: #b7c4ca;
   --text-muted: #8a9aa0;
@@ -45,6 +88,11 @@
   --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.46);
   --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.52);
   --focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.34);
+}
+
+html {
+  color: var(--text);
+  background-color: var(--bg-app);
 }
 
 ::selection {

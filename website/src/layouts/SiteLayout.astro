@@ -19,10 +19,19 @@ const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
       name="description"
       content="Custom Flow Automator assembles yearbook grad spreads automatically: upload your template, roster, and portraits, and get print-ready pages with names, quotes, and baby photos placed."
     />
-    <meta name="theme-color" content="#090d11" />
+    <meta name="theme-color" content="#f3f7f6" />
     <link rel="icon" type="image/png" href="/assets/Sighton_Logo.png" />
     <link rel="apple-touch-icon" href="/assets/Sighton_Logo.png" />
     <title>{title}</title>
+    <script is:inline>
+      (function () {
+        var theme = "light";
+        try {
+          if (window.localStorage.getItem("ss-site-theme") === "dark") theme = "dark";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div class="ss-shell">
