@@ -23,6 +23,10 @@ class BackgroundAlreadyRemovedError(RuntimeError):
     """Raised when background removal is skipped due to existing alpha."""
 
 
+class BackgroundCapacityError(RuntimeError):
+    """Raised when all background-removal workers are busy."""
+
+
 logger = logging.getLogger("uvicorn.error")
 
 _rembg_pool_lock = threading.Lock()
@@ -32,6 +36,12 @@ _rembg_pool_created = 0
 _rembg_pool_max: int | None = None
 _rembg_pool_providers: list[str] | None = None
 _rembg_providers_logged = False
+
+try:
+    _background_worker_count = max(1, int(os.getenv("YMGA_MAX_CONCURRENT_BACKGROUND_OPS", "1") or "1"))
+except ValueError:
+    _background_worker_count = 1
+_background_capacity = threading.BoundedSemaphore(_background_worker_count)
 
 _opencl_configured = False
 _opencl_enabled = False
@@ -436,7 +446,7 @@ def _grabcut_foreground_mask_seeded(bgr: np.ndarray) -> np.ndarray:
     return fg
 
 
-def remove_background(
+def _remove_background_impl(
     image_bytes: bytes,
     mode: BackgroundMode = "simple",
     *,
@@ -527,6 +537,31 @@ def remove_background(
             (time.perf_counter() - t0) * 1000,
         )
     return out
+
+
+def remove_background(
+    image_bytes: bytes,
+    mode: BackgroundMode = "simple",
+    *,
+    force: bool = False,
+    report_already_removed: bool = False,
+) -> bytes:
+    """Run one bounded background-removal operation."""
+    try:
+        wait_seconds = max(0.1, float(os.getenv("YMGA_BACKGROUND_CAPACITY_WAIT_SECONDS", "5") or "5"))
+    except ValueError:
+        wait_seconds = 5.0
+    if not _background_capacity.acquire(timeout=wait_seconds):
+        raise BackgroundCapacityError("Background-removal capacity is busy; retry shortly")
+    try:
+        return _remove_background_impl(
+            image_bytes,
+            mode=mode,
+            force=force,
+            report_already_removed=report_already_removed,
+        )
+    finally:
+        _background_capacity.release()
 
 
 def background_removed_filename(original_filename: str, person_index: int | None = None) -> str:

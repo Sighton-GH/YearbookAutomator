@@ -42,8 +42,8 @@ export function AboutPage() {
           </div>
           <p className="home-hero-note">
             Currently in open beta and not fully finished yet. Free for personal use (5 runs a month), and free
-            for schools and organizations who help us test it before general release. Your student data is
-            processed locally and never sold or shared.
+            for schools and organizations who help us test it before general release. Student data is sent over
+            HTTPS to our Canadian server for processing and is never sold or shared for advertising.
           </p>
           <div className="home-hero-shot">
             <ShotFrame
@@ -237,10 +237,10 @@ export function AboutPage() {
         </div>
         <div className="home-facts">
           <div className="home-fact">
-            <h3>Student data stays local</h3>
+            <h3>Hosted securely in Canada</h3>
             <p>
-              Photos and rosters are processed on the machine running the tool, not shipped to a
-              cloud service. That tends to make school privacy sign-off much easier.
+              Nothing needs to be installed. Photos and rosters are encrypted in transit with HTTPS,
+              processed in a private workspace on our Canadian server, and removed under the workspace retention policy.
             </p>
           </div>
           <div className="home-fact">

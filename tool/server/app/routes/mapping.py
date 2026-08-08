@@ -17,7 +17,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.mapping_review import apply_mapping_decisions
 from app.services.spreadsheet import ingest_spreadsheet
-from app.services.storage import save_upload, workspace_dir
+from app.services.storage import safe_filename, save_upload, workspace_dir, workspace_file
+from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
 from app.services.background_removal import (
     BackgroundMode,
     background_removed_filename,
@@ -25,7 +26,9 @@ from app.services.background_removal import (
     BackgroundAlreadyRemovedError,
 )
 from app.services.background_jobs import (
+    release_job as release_bg_job,
     start_job as start_bg_job,
+    try_reserve_job as try_reserve_bg_job,
     update_job as update_bg_job,
     get_job as get_bg_job,
     pop_result_bytes as pop_bg_result_bytes,
@@ -33,7 +36,7 @@ from app.services.background_jobs import (
 )
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import detect_face_center
-from app.services.workspace_registry import ensure_workspace_write_access
+from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
@@ -44,21 +47,6 @@ import time
 router = APIRouter()
 
 
-def _enforce_workspace_write_access(request: Request, workspace_id: str) -> None:
-    meta = getattr(request.state, "license_meta", None) or {}
-    license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
-    ok, reason = ensure_workspace_write_access(
-        workspace_id=workspace_id,
-        license_key=str(getattr(request.state, "license_key", "") or ""),
-        license_type=license_type,
-        device_id=getattr(request.state, "license_device_id", None),
-        session_id=getattr(request.state, "client_session_id", None),
-    )
-    if not ok:
-        status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
-        raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
-
-
 def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[bytes, int]:
     """Render the first page of a PDF to PNG bytes.
 
@@ -67,6 +55,8 @@ def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[b
 
     if not pdf_bytes:
         raise ValueError("Empty PDF")
+    if len(pdf_bytes) > 25 * 1024 * 1024:
+        raise ValueError("PDF exceeds the 25 MiB conversion limit")
     try:
         import fitz  # PyMuPDF
     except Exception as exc:
@@ -77,8 +67,13 @@ def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[b
         page_count = int(getattr(doc, "page_count", 0) or 0)
         if page_count <= 0:
             raise ValueError("PDF has no pages")
+        if page_count > 500:
+            raise ValueError("PDF contains too many pages")
         page = doc.load_page(0)
         scale = float(dpi) / 72.0
+        rect = page.rect
+        if int(rect.width * scale) * int(rect.height * scale) > 40_000_000:
+            raise ValueError("PDF page is too large to render safely")
         mat = fitz.Matrix(scale, scale)
         pix = page.get_pixmap(matrix=mat, alpha=False)
         return pix.tobytes("png"), page_count
@@ -89,6 +84,7 @@ def _pdf_first_page_to_png_bytes(pdf_bytes: bytes, *, dpi: int = 200) -> tuple[b
 @router.get("/baby-mask")
 async def get_baby_mask(
     workspace_id: str,
+    request: Request,
     x: int,
     y: int,
     width: int,
@@ -101,6 +97,7 @@ async def get_baby_mask(
     """
     if width <= 0 or height <= 0:
         raise HTTPException(status_code=400, detail="Invalid mask dimensions")
+    enforce_workspace_read(request, workspace_id)
 
     path = workspace_dir(workspace_id) / "masks" / "baby" / f"{int(x)}_{int(y)}_{int(width)}_{int(height)}.png"
     if not path.exists():
@@ -115,10 +112,14 @@ async def detect_face_center_api(image: UploadFile = File(...)):
     This is used by the baby-photo editor to auto-center the crop on a face.
     """
 
+    if not get_face_detection_settings().enable_center_on_face_ops:
+        raise HTTPException(status_code=403, detail="Face detection is disabled by admin settings")
+
     try:
         raw = await image.read()
         if not raw:
             raise HTTPException(status_code=400, detail="Empty image")
+        validate_image_bytes(raw, label="Face-detection image")
         from PIL import Image, ImageOps
 
         img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
@@ -329,7 +330,11 @@ async def ingest(
     naming_pattern: str = Form(r"\d{3,4}"),
     advanced_name_match: bool = Form(False),
 ) -> SpreadsheetPreview:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
+    if len(naming_pattern) > 80:
+        raise HTTPException(status_code=400, detail="Naming pattern is too long")
+    if not get_face_detection_settings().enable_advanced_name_matching:
+        advanced_name_match = False
 
     # If caller didn't re-upload inputs (e.g., after refresh), fall back to saved uploads.
     spreadsheet_file = spreadsheet.file if spreadsheet else None
@@ -363,14 +368,24 @@ async def ingest(
     # Save current uploads so they can be reused later.
     if spreadsheet is not None:
         ext = Path(spreadsheet.filename).suffix.lower() or ".xlsx"
-        save_upload(workspace_id, f"uploads/spreadsheet{ext}", io.BytesIO(await spreadsheet.read()))
+        if ext not in {".csv", ".xlsx"}:
+            raise HTTPException(status_code=400, detail="Roster spreadsheet must be CSV or XLSX")
+        spreadsheet_bytes = await spreadsheet.read()
+        validate_spreadsheet_bytes(spreadsheet_bytes, spreadsheet.filename or f"spreadsheet{ext}", label="Roster spreadsheet")
+        save_upload(workspace_id, f"uploads/spreadsheet{ext}", io.BytesIO(spreadsheet_bytes))
         # Reset spreadsheet_file/name to match what we just saved (avoid consumed stream issues).
         spreadsheet_file = io.BytesIO((root / f"uploads/spreadsheet{ext}").read_bytes())
         spreadsheet_name = f"spreadsheet{ext}"
 
     if mugshots_zip is not None:
         # ingest_spreadsheet also saves mugshots.zip, but we save here as well so it's available even if ingest fails.
-        save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(await mugshots_zip.read()))
+        mugshot_bytes = await mugshots_zip.read()
+        try:
+            with zipfile.ZipFile(io.BytesIO(mugshot_bytes)) as zf:
+                validate_zip_archive(zf, label="Portrait ZIP")
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid portrait ZIP archive") from None
+        save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(mugshot_bytes))
         mugshots_file = io.BytesIO((root / "uploads" / "mugshots.zip").read_bytes())
 
     return ingest_spreadsheet(
@@ -385,7 +400,7 @@ async def ingest(
 
 @router.post("/review", response_model=SpreadsheetPreview)
 async def review_mapping(payload: MappingRequest, request: Request) -> SpreadsheetPreview:
-    _enforce_workspace_write_access(request, payload.workspace_id)
+    enforce_workspace_write(request, payload.workspace_id)
 
     people = list(payload.people)
     apply_mapping_decisions(people, list(payload.decisions))
@@ -401,30 +416,39 @@ async def upload_image(
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
 
     feature_settings = get_face_detection_settings()
-    if kind == "baby" and not feature_settings.enable_background_removal_ops:
+    if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
-    filename = Path(file.filename).name
+    filename = safe_filename(Path(file.filename or "").name)
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
         raise HTTPException(status_code=400, detail="Only image files are supported (.png, .jpg, .jpeg, .webp, .bmp, .tif, .tiff)")
     # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
     subdir = "mugshots" if kind == "mugshot" else kind
 
+    raw = await file.read()
+    validate_image_bytes(raw, label="Uploaded image")
+
     if kind == "baby" and remove_background:
-        raw = file.file.read()
+        reserved, reason = try_reserve_bg_job(workspace_id)
+        if not reserved:
+            status_code = 409 if reason == "workspace_image_job_in_progress" else 503
+            raise HTTPException(status_code=status_code, detail=reason, headers={"Retry-After": "10"})
         try:
-            out_png = remove_background_bytes(raw, mode=background_mode)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Could not remove background: {exc}")
+            try:
+                out_png = remove_background_bytes(raw, mode=background_mode)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Could not remove background: {exc}")
+        finally:
+            release_bg_job(workspace_id)
         out_name = background_removed_filename(filename)
         save_upload(workspace_id, f"{subdir}/{out_name}", io.BytesIO(out_png))
         return {"filename": out_name}
 
-    save_upload(workspace_id, f"{subdir}/{filename}", file.file)
+    save_upload(workspace_id, f"{subdir}/{filename}", io.BytesIO(raw))
     return {"filename": filename}
 
 
@@ -436,7 +460,7 @@ async def remove_background_job(
     filename: str = Form(...),
     background_mode: BackgroundMode = Form("simple"),
 ) -> dict[str, str]:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
 
     """Start a background-removal job for an already-uploaded image.
 
@@ -444,21 +468,28 @@ async def remove_background_job(
     """
 
     feature_settings = get_face_detection_settings()
-    if kind == "baby" and not feature_settings.enable_background_removal_ops:
+    if not feature_settings.enable_background_removal_ops:
         raise HTTPException(status_code=403, detail="Background removal is disabled by admin settings")
 
     # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
     subdir = "mugshots" if kind == "mugshot" else kind
-    safe_name = Path(filename).name
-    src_path = workspace_dir(workspace_id) / subdir / safe_name
+    safe_name = safe_filename(filename)
+    src_path = workspace_file(workspace_id, subdir, safe_name)
     if not src_path.exists():
         raise HTTPException(status_code=404, detail="Source image not found")
 
     out_name = background_removed_filename(safe_name)
-    out_path = workspace_dir(workspace_id) / subdir / out_name
 
     job_id = uuid4().hex
-    start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+    reserved, reason = try_reserve_bg_job(workspace_id)
+    if not reserved:
+        status_code = 409 if reason == "workspace_image_job_in_progress" else 503
+        raise HTTPException(status_code=status_code, detail=reason, headers={"Retry-After": "10"})
+    try:
+        start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+    except Exception:
+        release_bg_job(workspace_id)
+        raise
 
     def run():
         try:
@@ -474,16 +505,23 @@ async def remove_background_job(
             update_bg_job(job_id, progress=100, status="done", message="Done")
         except Exception as exc:
             update_bg_job(job_id, error=str(exc), message="Failed")
+        finally:
+            release_bg_job(workspace_id)
 
-    Thread(target=run, daemon=True).start()
+    try:
+        Thread(target=run, daemon=True).start()
+    except Exception:
+        release_bg_job(workspace_id)
+        raise
     return {"job_id": job_id, "output_filename": out_name}
 
 
 @router.get("/remove-background-status")
-async def remove_background_status(job_id: str):
+async def remove_background_status(job_id: str, request: Request):
     job = get_bg_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return to_status_payload(job)
 
 
@@ -496,7 +534,7 @@ async def remove_background_preview_job(
     background_mode: BackgroundMode = Form("simple"),
     force: bool = Form(False),
 ) -> dict[str, str]:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
 
     """Start a non-destructive background-removal job.
 
@@ -505,19 +543,27 @@ async def remove_background_preview_job(
     """
 
     feature_settings = get_face_detection_settings()
-    if kind == "baby" and not feature_settings.enable_background_removal_ops:
+    if not feature_settings.enable_background_removal_ops:
         raise HTTPException(status_code=403, detail="Background removal is disabled by admin settings")
 
     subdir = "mugshots" if kind == "mugshot" else kind
-    safe_name = Path(filename).name
-    src_path = workspace_dir(workspace_id) / subdir / safe_name
+    safe_name = safe_filename(filename)
+    src_path = workspace_file(workspace_id, subdir, safe_name)
     if not src_path.exists():
         raise HTTPException(status_code=404, detail="Source image not found")
 
     job_id = uuid4().hex
+    reserved, reason = try_reserve_bg_job(workspace_id)
+    if not reserved:
+        status_code = 409 if reason == "workspace_image_job_in_progress" else 503
+        raise HTTPException(status_code=status_code, detail=reason, headers={"Retry-After": "10"})
     # output_filename is informational here.
     out_name = background_removed_filename(safe_name)
-    start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+    try:
+        start_bg_job(job_id, workspace_id, kind=kind, source_filename=safe_name, mode=background_mode, output_filename=out_name)
+    except Exception:
+        release_bg_job(workspace_id)
+        raise
 
     def run():
         try:
@@ -543,16 +589,23 @@ async def remove_background_preview_job(
             update_bg_job(job_id, progress=100, status="done", message="Done")
         except Exception as exc:
             update_bg_job(job_id, error=str(exc), message="Failed")
+        finally:
+            release_bg_job(workspace_id)
 
-    Thread(target=run, daemon=True).start()
+    try:
+        Thread(target=run, daemon=True).start()
+    except Exception:
+        release_bg_job(workspace_id)
+        raise
     return {"job_id": job_id}
 
 
 @router.get("/remove-background-preview-result")
-async def remove_background_preview_result(job_id: str):
+async def remove_background_preview_result(job_id: str, request: Request):
     job = get_bg_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     if job.get("status") != "done":
         raise HTTPException(status_code=409, detail="Job not completed")
     b = pop_bg_result_bytes(job_id)
@@ -573,19 +626,22 @@ async def upload_baby_zip(
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
 ) -> SpreadsheetPreview:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
 
     feature_settings = get_face_detection_settings()
+    if not feature_settings.enable_baby_photos_feature:
+        raise HTTPException(status_code=403, detail="Baby photo uploads are disabled")
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
     # Parse people passed from frontend (source of truth for indices/names).
     people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
+    if len(people) > 2_000:
+        raise HTTPException(status_code=400, detail="Too many people in one request")
 
     zip_bytes: bytes | None = None
     if baby_zip is not None:
-        zip_bytes = baby_zip.file.read()
-        save_upload(workspace_id, "uploads/baby.zip", io.BytesIO(zip_bytes))
+        zip_bytes = await baby_zip.read()
     else:
         saved = workspace_dir(workspace_id) / "uploads" / "baby.zip"
         if saved.exists():
@@ -623,12 +679,19 @@ async def upload_baby_zip(
 
     image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        for member in zf.namelist():
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid baby-photo ZIP archive") from None
+
+    with archive as zf:
+        archive_members = validate_zip_archive(zf, label="Baby-photo ZIP")
+        if baby_zip is not None:
+            save_upload(workspace_id, "uploads/baby.zip", io.BytesIO(zip_bytes))
+        for member_info in archive_members:
             await _abort_if_disconnected()
-            if member.endswith("/"):
-                continue
-            filename_only = Path(member).name
+            member = member_info.filename
+            filename_only = safe_filename(Path(member).name)
             suffix = Path(filename_only).suffix.lower()
             is_pdf = suffix == ".pdf"
             if suffix not in image_exts and not (convert_pdfs and is_pdf):
@@ -671,8 +734,7 @@ async def upload_baby_zip(
                     )
                     continue
                 await _abort_if_disconnected()
-                with zf.open(member) as src:
-                    raw_content = src.read()
+                raw_content = read_zip_member(zf, member_info)
 
                 out_name = filename_only
                 content = raw_content
@@ -687,6 +749,8 @@ async def upload_baby_zip(
                     except Exception as exc:
                         warnings.append(f"Skipped baby file '{filename_only}' (PDF conversion failed: {exc}).")
                         continue
+                else:
+                    validate_image_bytes(content, label=f"Baby photo '{filename_only}'")
 
                 if remove_background:
                     await _abort_if_disconnected()
@@ -700,8 +764,9 @@ async def upload_baby_zip(
                         continue
                     await _abort_if_disconnected()
 
-                out_path = target_dir / out_name
-                out_path.write_bytes(content)
+                validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+
+                out_path = save_upload(workspace_id, f"baby/{safe_filename(out_name)}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:
                         people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
@@ -727,17 +792,25 @@ async def upload_quotes_spreadsheet(
     quotes_spreadsheet: UploadFile | None = File(None),
     advanced_name_match: bool = Form(True),
 ) -> SpreadsheetPreview:
-    _enforce_workspace_write_access(request, workspace_id)
+    enforce_workspace_write(request, workspace_id)
+
+    if not get_face_detection_settings().enable_quotes_feature:
+        raise HTTPException(status_code=403, detail="Quote uploads are disabled")
 
     people = TypeAdapter(list[PersonRecord]).validate_json(people_json)
+    if len(people) > 2_000:
+        raise HTTPException(status_code=400, detail="Too many people in one request")
 
     data: bytes | None = None
     filename: str | None = None
     if quotes_spreadsheet is not None:
         filename = quotes_spreadsheet.filename
-        data = quotes_spreadsheet.file.read()
+        data = await quotes_spreadsheet.read()
         # Persist for later re-processing even if parsing fails.
         ext = Path(filename).suffix.lower() if filename else ".xlsx"
+        if ext not in {".csv", ".xlsx"}:
+            raise HTTPException(status_code=400, detail="Quotes spreadsheet must be CSV or XLSX")
+        validate_spreadsheet_bytes(data, filename or f"quotes{ext}", label="Quotes spreadsheet")
         save_upload(workspace_id, f"uploads/quotes{ext}", io.BytesIO(data))
     else:
         root = workspace_dir(workspace_id) / "uploads"
@@ -752,6 +825,8 @@ async def upload_quotes_spreadsheet(
             detail="Missing quotes spreadsheet. Upload one, or reuse a workspace that already has uploads/quotes.* saved.",
         )
 
+    validate_spreadsheet_bytes(data, filename, label="Quotes spreadsheet")
+
     buf = io.BytesIO(data)
     try:
         if filename.lower().endswith(".csv"):
@@ -760,6 +835,9 @@ async def upload_quotes_spreadsheet(
             df = pd.read_excel(buf)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not read quotes spreadsheet: {exc}")
+
+    if len(df) > 5_000:
+        raise HTTPException(status_code=400, detail="Quotes spreadsheet contains more than 5,000 rows")
 
     warnings: list[str] = []
 
@@ -875,8 +953,9 @@ async def upload_quotes_spreadsheet(
 
 
 @router.api_route("/asset", methods=["GET", "HEAD"])
-async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filename: str):
-    root = workspace_dir(workspace_id)
+async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filename: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
+    safe_name = safe_filename(filename)
     if kind == "mugshot":
         # Canonical folder is `mugshots/`; fall back to legacy `mugshot/`.
         candidate_dirs = ["mugshots", "mugshot"]
@@ -884,7 +963,7 @@ async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filenam
         candidate_dirs = [kind]
 
     for dir_name in candidate_dirs:
-        path = root / dir_name / filename
+        path = workspace_file(workspace_id, dir_name, safe_name)
         if path.exists():
             media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             return FileResponse(path, media_type=media_type)

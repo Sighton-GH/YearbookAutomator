@@ -14,10 +14,10 @@ cd tool/server
 python3.12 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Binds `0.0.0.0` so it's reachable over Tailscale/LAN in dev (contrast with the production systemd service, which binds `127.0.0.1` only — see [`08-deployment.md`](08-deployment.md)). Always invoke `.venv/bin/python` explicitly rather than relying on an activated shell, so the `--reload` subprocess uses the right interpreter.
+Binds to loopback so development uploads are not exposed over unencrypted LAN/Tailscale ports. Always invoke `.venv/bin/python` explicitly rather than relying on an activated shell, so the `--reload` subprocess uses the right interpreter.
 
 Windows: `py -3.12 -m venv .venv`, then `.venv\Scripts\python.exe -m pip install -r requirements.txt` and the equivalent `uvicorn` invocation.
 
@@ -37,7 +37,7 @@ npm run lint       # eslint .
 bash start-dev.sh
 ```
 
-Starts backend + frontend in one go. On Windows, `start-dev.cmd` also sets local-dev admin credentials (username `sighton_admin`, password `Sighton!2026`) so the admin panel at `http://127.0.0.1:8000/` is reachable without hunting for env vars.
+Starts backend + frontend in one go. Set `YMGA_LICENSE_ADMIN_PASSWORD` to a unique value of at least 14 characters if you need the admin panel; admin access fails closed when no strong password is configured.
 
 ## Website
 
@@ -84,13 +84,13 @@ Most runtime knobs are **admin-settings-overridable** (`/admin/settings`, persis
 | `YMGA_ADMIN_IDLE_TIMEOUT_SECONDS` | `900` | Admin session idle timeout |
 | `YMGA_ADMIN_MAX_SESSION_SECONDS` | `28800` | Admin session absolute lifetime |
 | `YMGA_PERSONAL_MONTHLY_LIMIT` | `5` | Free personal-license uses per month |
-| `YMGA_NETWORK_UPLOAD_LIMIT_KBPS` / `..._DOWNLOAD_LIMIT_KBPS` | `0` (unlimited) | Network throttling, see [`03-backend.md`](03-backend.md#performance--resource-limits) |
+| `YMGA_NETWORK_UPLOAD_LIMIT_KBPS` / `..._DOWNLOAD_LIMIT_KBPS` | `25000` / `50000` | Network throttling, see [`03-backend.md`](03-backend.md#performance--resource-limits) |
 | `YMGA_CPU_MAX_THREADS` | `0` (all cores) | OpenCV/ONNX Runtime thread cap |
 | `YMGA_CPU_THROTTLE_PERCENT` | `100` | CPU duty-cycle pacing |
 | `YMGA_CPU_LOW_PRIORITY` | `false` | Lower OS scheduling priority (POSIX: raising back may need a restart) |
 | `YMGA_GPU_DISABLED` | `false` | Force CPU-only inference |
 | `YMGA_GPU_THROTTLE_PERCENT` | `100` | GPU duty-cycle pacing |
-| `YMGA_GPU_MAX_CONCURRENT_OPS` | `0` (unlimited) | Cap concurrent GPU-bound inference calls |
+| `YMGA_GPU_MAX_CONCURRENT_OPS` | `1` | Cap concurrent GPU-bound inference calls |
 | `YMGA_REMBG_PROVIDER` | auto-detected | Force an ONNX execution provider for background removal (e.g. `CUDAExecutionProvider`, `DmlExecutionProvider`) |
 | `YMGA_REMBG_POOL_SIZE` | `min(cpu_count, 3)` (non-Windows) | `rembg` session pool size |
 | `YMGA_REMBG_VERBOSE` | `false` | Show `rembg`/pymatting's normally-suppressed perf-warning output |

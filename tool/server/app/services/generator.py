@@ -10,7 +10,7 @@ from PIL import UnidentifiedImageError
 
 from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.placement import auto_place_slots_for_people
-from app.services.storage import workspace_dir
+from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
 
 
@@ -165,13 +165,18 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
     candidates = _font_candidates(font_family)
 
     for cand in candidates:
-        uploaded = fonts_dir / cand
+        try:
+            uploaded = workspace_file(workspace_id, "fonts", safe_filename(cand))
+        except InvalidWorkspacePath:
+            continue
         if uploaded.exists():
             loaded = _try_truetype(str(uploaded), size=size)
             if loaded is not None:
                 return loaded
 
     for cand in candidates:
+        if Path(cand).is_absolute() or "/" in cand or "\\" in cand:
+            continue
         loaded = _try_truetype(cand, size=size)
         if loaded is not None:
             return loaded
@@ -566,6 +571,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     base = Image.open(template_path).convert("RGB")
     template_ref = base.copy()
     template_w, template_h = base.size
+    for slot in payload.slots:
+        for box in (slot.mugshot, slot.baby_photo, slot.name, slot.quote):
+            if box.x < 0 or box.y < 0 or box.x + box.width > template_w or box.y + box.height > template_h:
+                raise ValueError("A requested layout box falls outside the template canvas")
 
     name_font_family = payload.name_font_family or payload.font_family
     name_font_weight = payload.name_font_weight or payload.font_weight
@@ -630,7 +639,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         _loop_started = time.monotonic()
         mugshot_filename = person.mugshot_filename or payload.default_mugshot_filename
         if mugshot_filename:
-            mug_path = root / "mugshots" / mugshot_filename
+            try:
+                mug_path = workspace_file(payload.workspace_id, "mugshots", safe_filename(mugshot_filename))
+            except InvalidWorkspacePath:
+                mug_path = root / "mugshots" / "__invalid__"
             if mug_path.exists() and _looks_like_image(mug_path):
                 m_img = _try_open_rgb(mug_path)
                 if m_img is not None:
@@ -646,7 +658,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             baby_to_try.append(default_baby)
 
         for baby_filename in baby_to_try:
-            baby_path = root / "baby" / baby_filename
+            try:
+                baby_path = workspace_file(payload.workspace_id, "baby", safe_filename(baby_filename))
+            except InvalidWorkspacePath:
+                continue
             if not baby_path.exists():
                 continue
             if not _looks_like_image(baby_path):
@@ -699,7 +714,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         throttle.cpu_pace(_loop_started)
 
     out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
-    out_path = root / out_name
+    out_path = workspace_file(payload.workspace_id, out_name)
 
     # Optional export resolution override.
     # Rules:
@@ -750,13 +765,18 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     if output_format == "tiff":
         tick(92, "Saving TIFF")
+        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
         base.save(out_path, format="TIFF", compression="tiff_deflate")
     elif output_format == "pdf":
         tick(92, "Saving PDF")
+        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
         base.save(out_path, format="PDF")
     else:
         tick(92, "Saving PNG")
+        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
         base.save(out_path, format="PNG")
+
+    restrict_file_permissions(out_path)
 
     tick(100, "Done")
     return out_path

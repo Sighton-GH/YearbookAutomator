@@ -578,20 +578,12 @@ export async function deleteWorkspace(workspaceId: string): Promise<boolean> {
   return Boolean(data.deleted);
 }
 
-function addLicenseParams(params: URLSearchParams) {
-  const key = getStoredLicenseKey();
-  const deviceId = getOrCreateDeviceId();
-  if (key) params.set("license_key", key);
-  if (deviceId) params.set("device_id", deviceId);
-}
-
 export function assetUrl(workspaceId: string, kind: "mugshot" | "baby", filename: string) {
   const params = new URLSearchParams({
     workspace_id: workspaceId,
     kind,
     filename
   });
-  addLicenseParams(params);
   return `/api/mapping/asset?${params.toString()}`;
 }
 
@@ -603,19 +595,16 @@ export function babyMaskUrl(workspaceId: string, box: Box) {
     width: String(Math.round(box.width)),
     height: String(Math.round(box.height))
   });
-  addLicenseParams(params);
   return `/api/mapping/baby-mask?${params.toString()}`;
 }
 
 export function templateCleanUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  addLicenseParams(params);
   return `/api/templates/clean?${params.toString()}`;
 }
 
 export function templateAnnotatedUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  addLicenseParams(params);
   return `/api/templates/annotated?${params.toString()}`;
 }
 
@@ -631,18 +620,15 @@ export function generationDownloadUrl(
   if (extra) {
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
   }
-  addLicenseParams(params);
   return `/api/generation/download?${params.toString()}`;
 }
 
 export function generationDownloadAllUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  addLicenseParams(params);
   return `/api/generation/download-all?${params.toString()}`;
 }
 
 export function generationDownloadSpreadsheetUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
-  addLicenseParams(params);
   return `/api/generation/download-spreadsheet?${params.toString()}`;
 }

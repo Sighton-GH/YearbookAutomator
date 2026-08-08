@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import time
 from pathlib import Path
+from threading import RLock
 from typing import BinaryIO
 from uuid import uuid4
 
-BASE_DATA = Path(__file__).resolve().parent.parent / "data"
-BASE_DATA.mkdir(exist_ok=True)
+_DEFAULT_BASE_DATA = Path(__file__).resolve().parent.parent / "data"
+BASE_DATA = Path(os.getenv("YMGA_WORKSPACE_DATA_DIR", str(_DEFAULT_BASE_DATA))).expanduser().resolve()
+BASE_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+try:
+    BASE_DATA.chmod(0o700)
+except OSError:
+    pass
 
 # Accept hex IDs (default) and human-friendly IDs (tests/dev), alnum plus _ or -.
 _WORKSPACE_ID_RE = re.compile(r"^[0-9A-Za-z_-]{3,64}$")
 DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
+_STORAGE_QUOTA_LOCK = RLock()
 
 
 def _tool_session_ttl_seconds() -> int:
@@ -38,6 +46,47 @@ class InvalidWorkspaceId(ValueError):
     pass
 
 
+class InvalidWorkspacePath(ValueError):
+    pass
+
+
+class UploadTooLarge(ValueError):
+    pass
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default)) or str(default)))
+    except ValueError:
+        return default
+
+
+def workspace_usage_bytes(workspace_id: str) -> int:
+    root = workspace_path(workspace_id)
+    if not root.exists():
+        return 0
+    total = 0
+    for path in root.rglob("*"):
+        if path.is_file():
+            try:
+                total += path.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def ensure_workspace_capacity(workspace_id: str, incoming_bytes: int, *, replacing: Path | None = None) -> None:
+    max_bytes = _env_positive_int("YMGA_MAX_WORKSPACE_BYTES", 10 * 1024 * 1024 * 1024)
+    current = workspace_usage_bytes(workspace_id)
+    if replacing is not None and replacing.exists():
+        try:
+            current -= replacing.stat().st_size
+        except OSError:
+            pass
+    if current + max(0, int(incoming_bytes)) > max_bytes:
+        raise UploadTooLarge(f"Workspace exceeds the {max_bytes // (1024 * 1024)} MiB storage quota")
+
+
 def validate_workspace_id(workspace_id: str) -> None:
     if not _WORKSPACE_ID_RE.fullmatch(workspace_id or ""):
         raise InvalidWorkspaceId("Invalid workspace_id")
@@ -50,7 +99,11 @@ def new_workspace_id() -> str:
 def workspace_dir(workspace_id: str) -> Path:
     validate_workspace_id(workspace_id)
     root = BASE_DATA / workspace_id
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        root.chmod(0o700)
+    except OSError:
+        pass
     return root
 
 
@@ -58,6 +111,45 @@ def workspace_path(workspace_id: str) -> Path:
     """Return workspace path without creating it."""
     validate_workspace_id(workspace_id)
     return BASE_DATA / workspace_id
+
+
+def workspace_file(workspace_id: str, *relative_parts: str) -> Path:
+    """Return a path contained by one workspace, rejecting traversal and symlinks."""
+    root = workspace_dir(workspace_id).resolve()
+    if not relative_parts:
+        raise InvalidWorkspacePath("A workspace-relative file path is required")
+    try:
+        candidate = root.joinpath(*relative_parts).resolve(strict=False)
+        candidate.relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        raise InvalidWorkspacePath("Invalid workspace file path") from None
+    if candidate == root:
+        raise InvalidWorkspacePath("A workspace-relative file path is required")
+    return candidate
+
+
+def safe_filename(filename: str, *, max_length: int = 180) -> str:
+    """Validate a single user-controlled filename without changing its meaning."""
+    name = str(filename or "").strip()
+    if (
+        not name
+        or len(name) > max_length
+        or name in {".", ".."}
+        or "\x00" in name
+        or Path(name).name != name
+        or "/" in name
+        or "\\" in name
+    ):
+        raise InvalidWorkspacePath("Invalid filename")
+    return name
+
+
+def restrict_file_permissions(path: Path) -> None:
+    """Best-effort owner-only permissions on filesystems that support POSIX modes."""
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def _meta_path(workspace_id: str) -> Path:
@@ -79,6 +171,7 @@ def _write_workspace_meta(workspace_id: str, meta: dict) -> None:
     path = root / "meta.json"
     tmp = root / "meta.json.tmp"
     tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    restrict_file_permissions(tmp)
     tmp.replace(path)
 
 
@@ -226,11 +319,32 @@ def clear_all_workspaces() -> int:
 
 
 def save_upload(workspace_id: str, filename: str, fileobj: BinaryIO) -> Path:
-    target_dir = workspace_dir(workspace_id)
-    target = target_dir / filename
+    target = workspace_file(workspace_id, filename)
     target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "wb") as f:
-        f.write(fileobj.read())
+    max_bytes = _env_positive_int("YMGA_MAX_STORED_FILE_BYTES", 512 * 1024 * 1024)
+    written = 0
+    with _STORAGE_QUOTA_LOCK:
+        existing_bytes = target.stat().st_size if target.exists() else 0
+        workspace_bytes = max(0, workspace_usage_bytes(workspace_id) - existing_bytes)
+        workspace_limit = _env_positive_int("YMGA_MAX_WORKSPACE_BYTES", 10 * 1024 * 1024 * 1024)
+        temp_target = target.with_name(f".{target.name}.{uuid4().hex}.upload")
+        try:
+            with open(temp_target, "xb") as f:
+                while True:
+                    chunk = fileobj.read(min(1024 * 1024, max_bytes - written + 1))
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise UploadTooLarge(f"File exceeds the {max_bytes // (1024 * 1024)} MiB storage limit")
+                    if workspace_bytes + written > workspace_limit:
+                        raise UploadTooLarge(f"Workspace exceeds the {workspace_limit // (1024 * 1024)} MiB storage quota")
+                    f.write(chunk)
+            restrict_file_permissions(temp_target)
+            temp_target.replace(target)
+        except Exception:
+            temp_target.unlink(missing_ok=True)
+            raise
     return target
 
 

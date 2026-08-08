@@ -8,13 +8,15 @@ from fastapi.responses import FileResponse
 from app.models.schemas import TemplateParseResponse
 from app.services.storage import save_upload, workspace_dir
 from app.services.template_parser import extract_slots
-from app.services.workspace_registry import ensure_workspace_write_access
+from app.services.upload_security import validate_image_bytes
+from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
 router = APIRouter()
 
 
 @router.get("/clean")
-async def get_clean_template(workspace_id: str):
+async def get_clean_template(workspace_id: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
     path = workspace_dir(workspace_id) / "template_clean.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
@@ -22,7 +24,8 @@ async def get_clean_template(workspace_id: str):
 
 
 @router.get("/annotated")
-async def get_annotated_template(workspace_id: str):
+async def get_annotated_template(workspace_id: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
     path = workspace_dir(workspace_id) / "uploads" / "template_annotated.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
@@ -44,27 +47,19 @@ async def parse_template(
     min_area: int = Form(400),
 ) -> TemplateParseResponse:
     try:
-        if workspace_id:
-            meta = getattr(request.state, "license_meta", None) or {}
-            license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
-            ok, reason = ensure_workspace_write_access(
-                workspace_id=workspace_id,
-                license_key=str(getattr(request.state, "license_key", "") or ""),
-                license_type=license_type,
-                device_id=getattr(request.state, "license_device_id", None),
-                session_id=getattr(request.state, "client_session_id", None),
-            )
-            if not ok:
-                status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
-                raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
+        if not workspace_id:
+            raise HTTPException(status_code=400, detail="workspace_id is required")
+        enforce_workspace_write(request, workspace_id)
 
         annotated_bytes: bytes | None = None
         clean_bytes: bytes | None = None
 
         if annotated_template is not None:
             annotated_bytes = await annotated_template.read()
+            validate_image_bytes(annotated_bytes, label="Annotated template")
         if clean_template is not None:
             clean_bytes = await clean_template.read()
+            validate_image_bytes(clean_bytes, label="Clean template")
 
         if workspace_id and (annotated_bytes is None or clean_bytes is None):
             root = workspace_dir(workspace_id)
@@ -103,5 +98,7 @@ async def parse_template(
         save_upload(response.template_id, "uploads/template_clean.png", io.BytesIO(clean_bytes))
         save_upload(response.template_id, "uploads/template_annotated.png", io.BytesIO(annotated_bytes))
         return response
+    except HTTPException:
+        raise
     except Exception as exc:  # surface parsing failures with detail
         raise HTTPException(status_code=400, detail=f"Template parsing failed: {exc}")

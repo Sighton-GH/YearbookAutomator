@@ -14,13 +14,13 @@ from app.services.storage import (
 )
 from app.services.workspace_registry import (
     admin_takeover_workspace,
-    ensure_workspace_write_access,
     heartbeat_workspace,
     release_workspace,
     resolve_workspace,
     unregister_workspace,
 )
 from app.routes.licensing import admin_basic_auth_valid, get_admin_session_state
+from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
 router = APIRouter()
 
@@ -77,21 +77,6 @@ def _read_workspace_state(workspace_id: str) -> WorkspaceStateResponse:
     )
 
 
-def _enforce_workspace_write_access(request: Request, workspace_id: str) -> None:
-    meta = getattr(request.state, "license_meta", None) or {}
-    license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
-    ok, reason = ensure_workspace_write_access(
-        workspace_id=workspace_id,
-        license_key=str(getattr(request.state, "license_key", "") or ""),
-        license_type=license_type,
-        device_id=getattr(request.state, "license_device_id", None),
-        session_id=getattr(request.state, "client_session_id", None),
-    )
-    if not ok:
-        status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
-        raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
-
-
 @router.post("/touch")
 async def touch(
     request: Request,
@@ -104,6 +89,7 @@ async def touch(
 
     Frontend calls this periodically while the user has an open tab.
     """
+    enforce_workspace_read(request, workspace_id)
     meta = getattr(request.state, "license_meta", None) or {}
     device_id = getattr(request.state, "license_device_id", None)
     effective_session_id = session_id or getattr(request.state, "client_session_id", None)
@@ -117,9 +103,6 @@ async def touch(
         expires_at_ms=expires_at_ms,
     )
     if not hb_ok:
-        if hb_reason == "workspace_not_registered":
-            touch_workspace(workspace_id, session_id=effective_session_id, started_at_ms=started_at_ms, expires_at_ms=expires_at_ms)
-            return {"ok": True}
         if hb_reason == "workspace_locked":
             raise HTTPException(status_code=409, detail="workspace_locked")
         raise HTTPException(status_code=400, detail=hb_reason or "workspace_heartbeat_failed")
@@ -181,6 +164,7 @@ async def resolve(req: ResolveWorkspaceRequest, request: Request) -> ResolveWork
 
 @router.post("/release")
 async def release(req: WorkspaceActionRequest, request: Request) -> dict[str, bool]:
+    enforce_workspace_read(request, req.workspace_id)
     meta = getattr(request.state, "license_meta", None) or {}
     device_id = getattr(request.state, "license_device_id", None)
     license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
@@ -198,13 +182,14 @@ async def release(req: WorkspaceActionRequest, request: Request) -> dict[str, bo
 
 
 @router.get("/state", response_model=WorkspaceStateResponse)
-async def get_state(workspace_id: str) -> WorkspaceStateResponse:
+async def get_state(workspace_id: str, request: Request) -> WorkspaceStateResponse:
+    enforce_workspace_read(request, workspace_id)
     return _read_workspace_state(workspace_id)
 
 
 @router.post("/state", response_model=WorkspaceStateResponse)
 async def set_state(req: WorkspaceStateRequest, request: Request) -> WorkspaceStateResponse:
-    _enforce_workspace_write_access(request, req.workspace_id)
+    enforce_workspace_write(request, req.workspace_id)
 
     mugshots = [str(v).strip() for v in (req.default_mugshot_filenames or []) if str(v or "").strip()]
     next_state = {
@@ -241,19 +226,21 @@ async def takeover(req: WorkspaceActionRequest, request: Request) -> dict[str, b
 
 
 @router.post("/end-session")
-async def end_session(workspace_id: str = Form(...)) -> dict[str, bool]:
+async def end_session(request: Request, workspace_id: str = Form(...)) -> dict[str, bool]:
     """Request cleanup for a workspace.
 
     This does not necessarily delete immediately; a background janitor will
     delete after a short grace period unless the workspace is "touched" again.
     """
+    enforce_workspace_write(request, workspace_id)
     request_end_session(workspace_id)
     return {"ok": True}
 
 
 @router.delete("/{workspace_id}")
-async def delete(workspace_id: str) -> dict[str, bool]:
+async def delete(workspace_id: str, request: Request) -> dict[str, bool]:
     """Immediately delete a workspace directory (best-effort)."""
+    enforce_workspace_write(request, workspace_id)
     deleted = delete_workspace(workspace_id)
     unregister_workspace(workspace_id)
     if not deleted:

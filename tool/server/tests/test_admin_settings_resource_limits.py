@@ -20,14 +20,14 @@ def test_resource_limit_defaults(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
 
     s = admin_settings.get_face_detection_settings()
-    assert s.network_upload_limit_kbps == 0
-    assert s.network_download_limit_kbps == 0
-    assert s.cpu_max_threads == 0
-    assert s.cpu_throttle_percent == 100
-    assert s.cpu_low_priority is False
+    assert s.network_upload_limit_kbps == 25_000
+    assert s.network_download_limit_kbps == 50_000
+    assert s.cpu_max_threads == 4
+    assert s.cpu_throttle_percent == 85
+    assert s.cpu_low_priority is True
     assert s.gpu_disabled is False
-    assert s.gpu_throttle_percent == 100
-    assert s.gpu_max_concurrent_ops == 0
+    assert s.gpu_throttle_percent == 90
+    assert s.gpu_max_concurrent_ops == 1
 
 
 def test_tool_feature_toggle_defaults(monkeypatch, tmp_path):
@@ -116,7 +116,7 @@ def test_resource_limit_coercion_clamps_invalid_values(monkeypatch, tmp_path):
     assert s.cpu_throttle_percent == 100
     assert s.gpu_throttle_percent == 1
     # Unparsable values fall back to the previous/default value.
-    assert s.gpu_max_concurrent_ops == 0
+    assert s.gpu_max_concurrent_ops == 1
 
 
 def test_resource_limits_fall_back_to_configured_defaults(monkeypatch, tmp_path):

@@ -23,15 +23,7 @@ const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
     <link rel="icon" type="image/png" href="/assets/Sighton_Logo.png" />
     <link rel="apple-touch-icon" href="/assets/Sighton_Logo.png" />
     <title>{title}</title>
-    <script is:inline>
-      (function () {
-        var theme = "light";
-        try {
-          if (window.localStorage.getItem("ss-site-theme") === "dark") theme = "dark";
-        } catch (e) {}
-        document.documentElement.setAttribute("data-theme", theme);
-      })();
-    </script>
+    <script is:inline src="/theme-init.js"></script>
   </head>
   <body>
     <div class="ss-shell">

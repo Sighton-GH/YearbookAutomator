@@ -17,12 +17,17 @@ def test_generation_outputs_endpoint_lists_preview_and_spreads(tmp_path, monkeyp
     monkeypatch.setattr(storage, "BASE_DATA", tmp_path / "data")
     storage.BASE_DATA.mkdir(parents=True, exist_ok=True)
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    client = TestClient(main_mod.app)
+    client = LiveTestClient(main_mod.app)
     key = licensing.create_license(license_type="commercial", note="test")
 
-    workspace_id = "ws123"
+    from app.services.workspace_registry import resolve_workspace
+
+    workspace_id = resolve_workspace(
+        license_key=key, license_type="commercial", device_id="dev1", session_id="session1"
+    ).workspace_id
+    assert workspace_id
     root = storage.workspace_dir(workspace_id)
     (root / "preview.png").write_bytes(b"preview")
     (root / "output_01.png").write_bytes(b"spread1")
@@ -55,12 +60,17 @@ def test_generation_outputs_endpoint_falls_back_to_single_output(tmp_path, monke
     monkeypatch.setattr(storage, "BASE_DATA", tmp_path / "data")
     storage.BASE_DATA.mkdir(parents=True, exist_ok=True)
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    client = TestClient(main_mod.app)
+    client = LiveTestClient(main_mod.app)
     key = licensing.create_license(license_type="commercial", note="test")
 
-    workspace_id = "ws124"
+    from app.services.workspace_registry import resolve_workspace
+
+    workspace_id = resolve_workspace(
+        license_key=key, license_type="commercial", device_id="dev1", session_id="session2"
+    ).workspace_id
+    assert workspace_id
     root = storage.workspace_dir(workspace_id)
     (root / "output.png").write_bytes(b"spread")
 

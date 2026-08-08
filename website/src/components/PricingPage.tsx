@@ -39,7 +39,7 @@ export function PricingPage() {
                   </li>
                   <li>
                     <span className="check-icon" />
-                    <span>Local processing; your data stays on your device</span>
+                    <span>HTTPS transfer and processing on our Canadian server</span>
                   </li>
                   <li>
                     <span className="check-icon" />
@@ -84,7 +84,7 @@ export function PricingPage() {
                   </li>
                   <li>
                     <span className="check-icon" />
-                    <span>Hosted setup available if you don&rsquo;t want to run it yourself</span>
+                    <span>Canadian-hosted service with nothing to install</span>
                   </li>
                 </ul>
               </div>

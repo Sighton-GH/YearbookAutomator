@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+from re import _parser as sre_parse
 import zipfile
 import bisect
 from pathlib import Path
@@ -10,7 +11,41 @@ from typing import BinaryIO, Optional
 import pandas as pd
 
 from app.models.schemas import PersonRecord, SpreadsheetPreview
-from app.services.storage import save_upload, workspace_dir
+from app.services.storage import safe_filename, save_upload
+from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
+
+
+def _compile_safe_filename_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile a useful filename regex while rejecting ReDoS-prone constructs."""
+    if len(pattern or "") > 80:
+        raise ValueError("Naming pattern is too long")
+    try:
+        parsed = sre_parse.parse(pattern)
+    except re.error as exc:
+        raise ValueError(f"Invalid naming pattern: {exc}") from exc
+
+    repeat_ops = {sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT, sre_parse.POSSESSIVE_REPEAT}
+    rejected_ops = {sre_parse.GROUPREF, sre_parse.GROUPREF_EXISTS, sre_parse.ASSERT, sre_parse.ASSERT_NOT}
+
+    def walk(tokens, *, inside_repeat: bool = False) -> None:
+        for op, arg in tokens:
+            if op in rejected_ops:
+                raise ValueError("Naming pattern uses an unsupported advanced regex construct")
+            if op in repeat_ops:
+                if inside_repeat:
+                    raise ValueError("Naming pattern contains nested repetition")
+                _minimum, _maximum, child = arg
+                walk(child, inside_repeat=True)
+            elif op is sre_parse.SUBPATTERN:
+                walk(arg[-1], inside_repeat=inside_repeat)
+            elif op is sre_parse.BRANCH:
+                if inside_repeat:
+                    raise ValueError("Naming pattern repeats an alternation")
+                for branch in arg[1]:
+                    walk(branch, inside_repeat=inside_repeat)
+
+    walk(parsed)
+    return re.compile(f"^(?:{pattern})$")
 
 
 def _find_name_columns(df: pd.DataFrame) -> tuple[str, str]:
@@ -28,7 +63,8 @@ def _find_name_columns(df: pd.DataFrame) -> tuple[str, str]:
 
 
 def _load_dataframe(file_obj: BinaryIO, filename: str) -> pd.DataFrame:
-    data = file_obj.read()
+    data = file_obj.read(25 * 1024 * 1024 + 1)
+    validate_spreadsheet_bytes(data, filename, label="Roster spreadsheet")
     buf = io.BytesIO(data)
     if filename.lower().endswith(".csv"):
         return pd.read_csv(buf)
@@ -44,14 +80,14 @@ def ingest_spreadsheet(
     advanced_name_match: bool = False,
 ) -> SpreadsheetPreview:
     df = _load_dataframe(spreadsheet, filename)
+    max_rows = 5_000
+    if len(df) > max_rows:
+        raise ValueError(f"Spreadsheet contains more than {max_rows} student rows")
     first_col, last_col = _find_name_columns(df)
     valid_indices = set(range(1, len(df) + 1))
     warnings: list[str] = []
 
-    try:
-        compiled_pattern = re.compile(f"^{naming_pattern}$")
-    except re.error as exc:
-        raise ValueError(f"Invalid naming pattern: {exc}")
+    compiled_pattern = _compile_safe_filename_pattern(naming_pattern)
 
     def _normalize(text: str) -> str:
         lowered = (text or "").lower()
@@ -110,17 +146,15 @@ def ingest_spreadsheet(
         save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(zip_bytes))
         allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            target_dir = workspace_dir(workspace_id) / "mugshots"
-            target_dir.mkdir(parents=True, exist_ok=True)
+            archive_members = validate_zip_archive(zf, label="Portrait ZIP")
 
             used_members: set[str] = set()
 
             # Pass 1: Advanced name matching
             if advanced_name_match and name_tokens:
                 assigned_people: set[int] = set()
-                for member in zf.namelist():
-                    if member.endswith("/"):
-                        continue
+                for member_info in archive_members:
+                    member = member_info.filename
                     filename_only = Path(member).name
                     if Path(filename_only).suffix.lower() not in allowed_exts:
                         warnings.append(
@@ -144,10 +178,9 @@ def ingest_spreadsheet(
                             )
                             continue
                         # Extract and assign
-                        with zf.open(member) as src:
-                            content = src.read()
-                        out_path = target_dir / filename_only
-                        out_path.write_bytes(content)
+                        content = read_zip_member(zf, member_info)
+                        validate_image_bytes(content, label=f"Portrait '{filename_only}'")
+                        out_path = save_upload(workspace_id, f"mugshots/{safe_filename(filename_only)}", io.BytesIO(content))
                         mugshot_lookup[person_index] = out_path.name
                         used_members.add(member)
                         assigned_people.add(person_index)
@@ -159,9 +192,8 @@ def ingest_spreadsheet(
             # Prepare available indices for numeric mapping, honoring name assignments.
             available_indices = sorted(valid_indices - set(mugshot_lookup.keys()))
 
-            for member in zf.namelist():
-                if member.endswith("/"):
-                    continue
+            for member_info in archive_members:
+                member = member_info.filename
                 if member in used_members:
                     continue
                 filename_only = Path(member).name
@@ -199,10 +231,9 @@ def ingest_spreadsheet(
                     continue
                 target_index = available_indices.pop(insert_pos)
 
-                with zf.open(member) as src:
-                    content = src.read()
-                out_path = target_dir / filename_only
-                out_path.write_bytes(content)
+                content = read_zip_member(zf, member_info)
+                validate_image_bytes(content, label=f"Portrait '{filename_only}'")
+                out_path = save_upload(workspace_id, f"mugshots/{safe_filename(filename_only)}", io.BytesIO(content))
                 mugshot_lookup[target_index] = out_path.name
 
     people: list[PersonRecord] = []

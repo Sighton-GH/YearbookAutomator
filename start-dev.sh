@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export YMGA_LICENSE_ADMIN_USERNAME=sighton_admin
-export YMGA_LICENSE_ADMIN_PASSWORD=Sighton!2026
 
 # Start frontend in the background
 echo "Starting frontend..."
@@ -30,4 +29,4 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-"$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+"$PYTHON" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000

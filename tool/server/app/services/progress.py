@@ -1,15 +1,47 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Optional
 
 _progress: dict[str, dict] = {}
 _lock = threading.Lock()
+_active_workspaces: set[str] = set()
+
+
+def _max_concurrent_generations() -> int:
+    try:
+        return max(1, int(os.getenv("YMGA_MAX_CONCURRENT_GENERATIONS", "2") or "2"))
+    except ValueError:
+        return 2
+
+
+def try_reserve_generation(workspace_id: str) -> tuple[bool, str | None]:
+    with _lock:
+        if workspace_id in _active_workspaces:
+            return False, "workspace_generation_in_progress"
+        if len(_active_workspaces) >= _max_concurrent_generations():
+            return False, "server_generation_capacity_reached"
+        _active_workspaces.add(workspace_id)
+        return True, None
+
+
+def release_generation(workspace_id: str) -> None:
+    with _lock:
+        _active_workspaces.discard(workspace_id)
 
 
 def start_job(job_id: str, workspace_id: str) -> None:
     with _lock:
+        cutoff = time.time() - (24 * 60 * 60)
+        stale = [key for key, value in _progress.items() if float(value.get("updated_at") or 0) < cutoff]
+        for key in stale:
+            _progress.pop(key, None)
+        if len(_progress) >= 1_000:
+            oldest = sorted(_progress, key=lambda key: float(_progress[key].get("updated_at") or 0))
+            for key in oldest[: len(_progress) - 999]:
+                _progress.pop(key, None)
         _progress[job_id] = {
             "workspace_id": workspace_id,
             "progress": 0,
@@ -37,7 +69,8 @@ def update_job(job_id: str, *, progress: Optional[int] = None, status: Optional[
 
 def get_job(job_id: str) -> Optional[dict]:
     with _lock:
-        return _progress.get(job_id, None)
+        job = _progress.get(job_id)
+        return dict(job) if job else None
 
 
 def clear_job(job_id: str) -> None:

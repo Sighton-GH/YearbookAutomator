@@ -37,16 +37,8 @@ testing assets/
 # All per-workspace data lives under tool/server/app/data/<workspace_id>/
 # This includes uploads, spreadsheets, portraits, extracted images, masks, fonts, and outputs.
 tool/server/app/data/**
-
-# Keep licensing/assets that are intended to be versioned
-!tool/server/app/data/_licenses/
-!tool/server/app/data/_licenses/**
-
-# But don't commit secrets even if they live in _licenses
-tool/server/app/data/_licenses/secret.txt
-
-# Runtime usage log (do not commit)
-tool/server/app/data/_licenses/usage.json
+# Legacy pre-`tool/` runtime data must also remain private.
+server/app/data/**
 
 # --- Optional: logs ---
 *.log

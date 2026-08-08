@@ -3,7 +3,7 @@
 All endpoints are served by the FastAPI backend (`tool/server/app/`). Base path in local dev is `http://127.0.0.1:8000` (or same-origin `/api/...` through the Vite proxy at `:5173`). All request/response bodies are **JSON with snake_case fields** unless noted as `multipart/form-data`.
 
 **Guard legend:**
-- 🔒 **License** — requires `X-License-Key` header (+ optionally `X-Device-Id`), or `license_key`/`license`/`key` + `device_id` query params as a fallback for contexts that can't set headers (e.g. `<img src>`). See [`03-backend.md`](03-backend.md#license-guard-reason-codes).
+- 🔒 **License** — requires `X-License-Key` (+ `X-Device-Id` when bound). Successful validation also sets HTTP-only, same-site cookies for browser-managed image and download requests; credentials are never placed in URLs. See [`03-backend.md`](03-backend.md#license-guard-reason-codes).
 - 🛡️ **Admin** — requires an admin session cookie or HTTP Basic auth.
 - 🌐 **Public** — no guard.
 
@@ -104,4 +104,4 @@ These render server-side HTML pages, not an API surface meant for programmatic c
 
 ## URL-builder endpoints (frontend convenience, not separate routes)
 
-`tool/web/src/api.ts` exposes several functions that just **build a URL** rather than making a fetch call — used for `<img src>` and download links, where the license headers can't be attached, so `license_key`/`device_id` are appended as query params instead (`addLicenseParams`): `assetUrl`, `babyMaskUrl`, `templateCleanUrl`, `templateAnnotatedUrl`, `generationDownloadUrl`, `generationDownloadAllUrl`, `generationDownloadSpreadsheetUrl`. These map onto the `GET` endpoints listed above — they're not additional server-side routes.
+`tool/web/src/api.ts` exposes several functions that just **build a URL** for `<img src>` and download links: `assetUrl`, `babyMaskUrl`, `templateCleanUrl`, `templateAnnotatedUrl`, `generationDownloadUrl`, `generationDownloadAllUrl`, and `generationDownloadSpreadsheetUrl`. They rely on the HTTP-only license session cookie set by `/api/licensing/validate`, so no credential is appended to the URL. These map onto the `GET` endpoints listed above.

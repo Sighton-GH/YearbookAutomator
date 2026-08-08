@@ -98,7 +98,7 @@ function LicensingSessionsSection() {
 
       <h3>What is a Workspace?</h3>
       <p className="muted">
-        Think of a workspace like a project folder on your computer. It contains:
+        Think of a workspace as a private project folder on the Canadian server. It contains:
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
         <li>Your template images (clean and annotated)</li>
@@ -108,7 +108,7 @@ function LicensingSessionsSection() {
         <li>Generated output files (PNGs)</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
-        By default, a workspace session stays active for up to 8 hours of activity — personal (free) licenses always use this default. Commercial licenses can instead be configured with a custom session duration, or no expiry at all. If you step away and come back later, your workspace is still there with all your work preserved. If a workspace session expires from inactivity, the workspace itself is preserved and can be recovered, but you'll start a fresh workspace session on your next visit.
+        Personal workspaces expire after 8 hours by default and are then removed automatically. Commercial retention can be configured per license, including a longer duration or no automatic expiry. Finish, download, and delete sensitive work as soon as it is no longer needed.
       </p>
 
       <h3>Personal License: Device-Locked Workspace Sessions</h3>
@@ -122,7 +122,7 @@ function LicensingSessionsSection() {
         <li><strong>No waiting:</strong> You can switch devices instantly without worrying about locks or conflicts</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
-        Example: You design templates on your laptop (stored in your laptop's workspace). When you switch to your desktop, you start a fresh workspace session with a new workspace. If you want to reuse the templates, you'll need to re-upload them. Each device is completely independent.
+        Example: work started from your laptop is stored in that device's private server workspace. Switching to your desktop creates a different server workspace, so you must re-upload anything you want to reuse.
       </p>
 
       <h3>Commercial License: Shared Collaborative Workspace</h3>
@@ -145,9 +145,9 @@ function LicensingSessionsSection() {
         You have a personal (free) license and use it on your laptop, desktop, and tablet.
       </p>
       <ul className="muted" style={{ marginTop: 6 }}>
-        <li><strong>Laptop workspace:</strong> Design templates and finalize styling (stored on laptop)</li>
-        <li><strong>Desktop workspace:</strong> Completely separate—start fresh or re-upload templates (stored on desktop)</li>
-        <li><strong>Tablet workspace:</strong> Another independent workspace for mobile work (stored on tablet)</li>
+        <li><strong>Laptop workspace:</strong> A device-specific workspace stored on the Canadian server</li>
+        <li><strong>Desktop workspace:</strong> A separate server workspace—start fresh or re-upload templates</li>
+        <li><strong>Tablet workspace:</strong> Another independent workspace on the server</li>
       </ul>
       <p className="muted" style={{ marginTop: 12 }}>
         Each device maintains its own completely separate workspace. To use the same templates across devices, you'd need to save/load your config file and upload it to each device. Perfect for flexibility—no waiting or conflicts, but not shared between devices.
@@ -241,7 +241,7 @@ function GettingStartedSection() {
           <strong>Dynamic Text Fitting:</strong> Long names? Short quotes? The styling engine automatically adjusts text to look professional, respecting your font choices and alignment rules.
         </li>
         <li>
-          <strong>Privacy-First Architecture:</strong> Unlike cloud-based design tools where you upload sensitive student data to a third-party server, this tool runs entirely locally on your machine. Your student data never leaves your computer.
+          <strong>Privacy-Conscious Hosting:</strong> The browser sends project files over HTTPS to an access-controlled workspace on our Canadian server. Workspace retention and deletion are managed by the service; see the Privacy Policy for details.
         </li>
         <li>
           <strong>Flexible Layout Support:</strong> Works with any custom spread design. Whether you have 4 students per page or 16, vertical or horizontal layouts, the tool adapts.
@@ -885,7 +885,7 @@ function ConfigurationSection() {
           <li>Configs embed images as base64, which can slightly compress them during encoding</li>
           <li>This should not noticeably affect quality, but if you see degradation, you can:</li>
           <li>Re-upload your original template images instead of relying on the config</li>
-          <li>Or, export the config and manually edit it to reference local file paths (advanced)</li>
+          <li>Or, upload the required images and fonts again after loading the config</li>
         </ul>
       </div>
 
@@ -1126,7 +1126,7 @@ function BackgroundRemovalSection() {
 
       <h3>Privacy & Processing</h3>
       <p className="muted">
-        All background removal processing happens locally on your machine. Baby photo images are never uploaded to external servers. The processing uses your computer's resources, so performance depends on your system's capabilities.
+        Background removal runs inside your private workspace on our Canadian server. Images are sent over HTTPS and are not sent to a separate third-party image-processing API. Server-side limits may queue or slow heavy work so one project cannot overwhelm the service.
       </p>
     </div>
   );

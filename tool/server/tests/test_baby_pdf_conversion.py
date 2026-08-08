@@ -28,9 +28,20 @@ def test_baby_zip_pdf_conversion_assigns_png(tmp_path, monkeypatch):
     storage_mod.BASE_DATA = tmp_path / "data"
     storage_mod.BASE_DATA.mkdir(parents=True, exist_ok=True)
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    client = TestClient(main_mod.app)
+    client = LiveTestClient(main_mod.app)
+
+    from app.services.workspace_registry import resolve_workspace
+
+    resolved = resolve_workspace(
+        license_key=key,
+        license_type="commercial",
+        device_id="dev",
+        session_id="pdf-session",
+    )
+    assert resolved.workspace_id
+    workspace_id = resolved.workspace_id
 
     # Create a simple one-page PDF in-memory.
     import fitz  # type: ignore
@@ -53,7 +64,7 @@ def test_baby_zip_pdf_conversion_assigns_png(tmp_path, monkeypatch):
 
     files = {"baby_zip": ("baby.zip", zip_buf.getvalue(), "application/zip")}
     data = {
-        "workspace_id": "testws",
+        "workspace_id": workspace_id,
         "people_json": json.dumps(people),
         "advanced_name_match": "true",
         "partial_name_match": "false",
@@ -62,7 +73,7 @@ def test_baby_zip_pdf_conversion_assigns_png(tmp_path, monkeypatch):
         "background_mode": "simple",
     }
 
-    headers = {"X-License-Key": key, "X-Device-Id": "dev"}
+    headers = {"X-License-Key": key, "X-Device-Id": "dev", "X-Client-Session-Id": "pdf-session"}
 
     r = client.post("/api/mapping/upload-baby-zip", data=data, files=files, headers=headers)
     assert r.status_code == 200, r.text
@@ -73,6 +84,6 @@ def test_baby_zip_pdf_conversion_assigns_png(tmp_path, monkeypatch):
 
     # File should exist on disk in workspace baby/.
     out_name = payload["people"][0]["baby_photo_filename"]
-    out_path = storage_mod.workspace_dir("testws") / "baby" / out_name
+    out_path = storage_mod.workspace_dir(workspace_id) / "baby" / out_name
     assert out_path.exists()
     assert out_path.stat().st_size > 0

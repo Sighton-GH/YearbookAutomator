@@ -136,17 +136,19 @@ def test_middleware_blocks_protected_paths(tmp_path, monkeypatch):
 
     importlib.reload(main_mod)
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    client = TestClient(main_mod.app)
+    client = LiveTestClient(main_mod.app)
 
     key = licensing.create_license(license_type="commercial", note="test")
 
     # Unprotected endpoints
     assert client.get("/health").status_code == 200
     assert client.post("/api/licensing/validate", json={"key": key}, headers={"X-Device-Id": "dev"}).status_code == 200
+    assert client.cookies.get("ymga_license_session") == key
 
     # Protected endpoints require X-License-Key
+    client.cookies.clear()
     r = client.post("/api/workspaces/touch")
     assert r.status_code == 401
 
@@ -174,17 +176,27 @@ def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(generation_mod, "generate_composite", _fake_generate_composite)
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    client = TestClient(main_mod.app)
+    client = LiveTestClient(main_mod.app)
 
     key = licensing.create_license(license_type="commercial", max_uses=10, note="test")
+    from app.services.workspace_registry import resolve_workspace
+
+    resolved = resolve_workspace(
+        license_key=key,
+        license_type="commercial",
+        device_id="dev",
+        session_id="test-session",
+    )
+    assert resolved.workspace_id
+    workspace_id = resolved.workspace_id
 
     # Non-processing calls should NOT count usage.
     r = client.post(
         "/api/workspaces/touch",
-        data={"workspace_id": "ws1"},
-        headers={"X-License-Key": key, "X-Device-Id": "dev"},
+        data={"workspace_id": workspace_id},
+        headers={"X-License-Key": key, "X-Device-Id": "dev", "X-Client-Session-Id": "test-session"},
     )
     assert r.status_code == 200
 
@@ -194,8 +206,8 @@ def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
 
     # Starting a generation IS a processing action and should increment usage.
     payload = {
-        "workspace_id": "ws1",
-        "template_id": "ws1",
+        "workspace_id": workspace_id,
+        "template_id": workspace_id,
         "slots": [
             {
                 "mugshot": {"x": 0, "y": 0, "width": 1, "height": 1},
@@ -211,7 +223,7 @@ def test_usage_counts_only_on_processing(tmp_path, monkeypatch):
     g = client.post(
         "/api/generation/generate",
         json=payload,
-        headers={"X-License-Key": key, "X-Device-Id": "dev"},
+        headers={"X-License-Key": key, "X-Device-Id": "dev", "X-Client-Session-Id": "test-session"},
     )
     assert g.status_code == 200
     assert "job_id" in g.json()

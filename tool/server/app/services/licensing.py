@@ -11,6 +11,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
 
+from app.services.storage import BASE_DATA
+
 
 LicenseType = Literal["personal", "commercial"]
 
@@ -112,11 +114,16 @@ def _licenses_root() -> Path:
     override = os.getenv("YMGA_LICENSE_STORE_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return Path(__file__).resolve().parents[1] / "data" / "_licenses"
+    return BASE_DATA / "_licenses"
 
 
 def _ensure_dir() -> None:
-    _licenses_root().mkdir(parents=True, exist_ok=True)
+    root = _licenses_root()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        root.chmod(0o700)
+    except OSError:
+        pass
 
 
 def _store_path() -> Path:
@@ -141,6 +148,10 @@ def _read_secret() -> bytes:
 
     secret = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
     p.write_text(secret, encoding="utf-8")
+    try:
+        p.chmod(0o600)
+    except OSError:
+        pass
     return secret.encode("utf-8")
 
 
@@ -169,6 +180,10 @@ def _load_store() -> dict[str, Any]:
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
     tmp.replace(path)
 
 

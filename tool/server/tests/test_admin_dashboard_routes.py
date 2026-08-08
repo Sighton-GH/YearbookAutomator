@@ -5,7 +5,7 @@ import importlib
 import re
 
 
-def _make_client(monkeypatch, tmp_path, *, admin_password: str = ""):
+def _make_client(monkeypatch, tmp_path, *, admin_password: str = "test-admin-password", authenticate: bool = True):
     monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path / "licenses"))
     monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
     monkeypatch.setenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "false")
@@ -27,9 +27,12 @@ def _make_client(monkeypatch, tmp_path, *, admin_password: str = ""):
     monkeypatch.setattr(admin_settings_mod, "_SETTINGS_DIR", settings_dir)
     monkeypatch.setattr(admin_settings_mod, "_SETTINGS_PATH", settings_dir / "settings.json")
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    return TestClient(main_mod.app), main_mod, storage_mod
+    client = LiveTestClient(main_mod.app)
+    if authenticate and admin_password:
+        client.headers.update(_basic_auth_header("admin", admin_password))
+    return client, main_mod, storage_mod
 
 
 def _basic_auth_header(username: str, password: str) -> dict[str, str]:
@@ -249,7 +252,13 @@ def test_settings_performance_form_round_trips(monkeypatch, tmp_path):
 
 
 def test_admin_requires_auth_when_password_configured(monkeypatch, tmp_path):
-    client, _main_mod, _storage_mod = _make_client(monkeypatch, tmp_path, admin_password="secret123")
+    password = "correct-horse-battery"
+    client, _main_mod, _storage_mod = _make_client(
+        monkeypatch,
+        tmp_path,
+        admin_password=password,
+        authenticate=False,
+    )
 
     no_auth = client.get("/")
     assert no_auth.status_code == 401
@@ -258,6 +267,13 @@ def test_admin_requires_auth_when_password_configured(monkeypatch, tmp_path):
     wrong_auth = client.get("/", headers=_basic_auth_header("admin", "nope"))
     assert wrong_auth.status_code == 401
 
-    good_auth = client.get("/", headers=_basic_auth_header("admin", "secret123"))
+    good_auth = client.get("/", headers=_basic_auth_header("admin", password))
     assert good_auth.status_code == 200
     assert "Dashboard" in good_auth.text
+
+
+def test_admin_is_disabled_without_strong_password(monkeypatch, tmp_path):
+    client, _main_mod, _storage_mod = _make_client(monkeypatch, tmp_path, admin_password="", authenticate=False)
+    response = client.get("/")
+    assert response.status_code == 401
+    assert "disabled" in response.text.lower()

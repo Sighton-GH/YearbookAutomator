@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import importlib
+import base64
 
 
 def _make_client(monkeypatch, tmp_path):
     monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path / "licenses"))
     monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
     monkeypatch.setenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "false")
-    monkeypatch.setenv("YMGA_LICENSE_ADMIN_PASSWORD", "")
+    admin_password = "test-admin-password"
+    monkeypatch.setenv("YMGA_LICENSE_ADMIN_PASSWORD", admin_password)
     monkeypatch.setenv("YMGA_LICENSE_ADMIN_USERNAME", "admin")
 
     from app import main as main_mod
@@ -29,9 +31,12 @@ def _make_client(monkeypatch, tmp_path):
 
     system_stats_mod.reset_history()
 
-    from fastapi.testclient import TestClient
+    from live_test_client import LiveTestClient
 
-    return TestClient(main_mod.app), main_mod
+    client = LiveTestClient(main_mod.app)
+    token = base64.b64encode(f"admin:{admin_password}".encode()).decode()
+    client.headers.update({"Authorization": f"Basic {token}"})
+    return client, main_mod
 
 
 def test_usage_page_renders_with_no_data(monkeypatch, tmp_path):

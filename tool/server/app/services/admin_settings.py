@@ -42,25 +42,25 @@ class FaceDetectionSettings:
     # --- Performance & resource limits ---
     # Network: caps the byte throughput of incoming uploads / outgoing downloads
     # across the whole server. 0 means unlimited.
-    network_upload_limit_kbps: int = 0
-    network_download_limit_kbps: int = 0
+    network_upload_limit_kbps: int = 25_000
+    network_download_limit_kbps: int = 50_000
     # CPU: `cpu_max_threads` caps OpenCV/ONNX Runtime worker threads (0 = auto/all
     # cores). `cpu_throttle_percent` inserts idle gaps into heavy per-item loops so
     # sustained CPU load stays near the target percent (100 = no throttling).
-    cpu_max_threads: int = 0
-    cpu_throttle_percent: int = 100
+    cpu_max_threads: int = 4
+    cpu_throttle_percent: int = 85
     # Lowers the backend process's OS scheduling priority so other apps (e.g. a
     # game) get preferential CPU time under contention. Best-effort; some
     # platforms require elevated permissions to raise priority back to normal
     # once lowered within the same process lifetime (a restart always resets it).
-    cpu_low_priority: bool = False
+    cpu_low_priority: bool = True
     # GPU: `gpu_disabled` forces CPU-only inference providers everywhere.
     # `gpu_throttle_percent` paces GPU-bound calls like `cpu_throttle_percent`.
     # `gpu_max_concurrent_ops` bounds how many GPU inferences can run at once
     # (0 = auto default sizing).
     gpu_disabled: bool = False
-    gpu_throttle_percent: int = 100
-    gpu_max_concurrent_ops: int = 0
+    gpu_throttle_percent: int = 90
+    gpu_max_concurrent_ops: int = 1
 
     # --- Tool feature toggles ---
     # These gate pre-existing, currently-always-available tool features (unlike
@@ -102,14 +102,14 @@ DEFAULT_SETTINGS = FaceDetectionSettings(
     enable_admin_workspace_takeover=(os.getenv("YMGA_ENABLE_ADMIN_WORKSPACE_TAKEOVER", "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
     commercial_workspace_key_mode=(os.getenv("YMGA_COMMERCIAL_WORKSPACE_KEY_MODE", "license_only") or "license_only").strip().lower(),
     workspace_audit_retention_days=max(1, int(os.getenv("YMGA_WORKSPACE_AUDIT_RETENTION_DAYS", "30") or "30")),
-    network_upload_limit_kbps=max(0, int(os.getenv("YMGA_NETWORK_UPLOAD_LIMIT_KBPS", "0") or "0")),
-    network_download_limit_kbps=max(0, int(os.getenv("YMGA_NETWORK_DOWNLOAD_LIMIT_KBPS", "0") or "0")),
-    cpu_max_threads=max(0, int(os.getenv("YMGA_CPU_MAX_THREADS", "0") or "0")),
-    cpu_throttle_percent=min(100, max(1, int(os.getenv("YMGA_CPU_THROTTLE_PERCENT", "100") or "100"))),
-    cpu_low_priority=(os.getenv("YMGA_CPU_LOW_PRIORITY", "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
+    network_upload_limit_kbps=max(0, int(os.getenv("YMGA_NETWORK_UPLOAD_LIMIT_KBPS", "25000") or "25000")),
+    network_download_limit_kbps=max(0, int(os.getenv("YMGA_NETWORK_DOWNLOAD_LIMIT_KBPS", "50000") or "50000")),
+    cpu_max_threads=max(0, int(os.getenv("YMGA_CPU_MAX_THREADS", "4") or "4")),
+    cpu_throttle_percent=min(100, max(1, int(os.getenv("YMGA_CPU_THROTTLE_PERCENT", "85") or "85"))),
+    cpu_low_priority=(os.getenv("YMGA_CPU_LOW_PRIORITY", "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
     gpu_disabled=(os.getenv("YMGA_GPU_DISABLED", "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
-    gpu_throttle_percent=min(100, max(1, int(os.getenv("YMGA_GPU_THROTTLE_PERCENT", "100") or "100"))),
-    gpu_max_concurrent_ops=max(0, int(os.getenv("YMGA_GPU_MAX_CONCURRENT_OPS", "0") or "0")),
+    gpu_throttle_percent=min(100, max(1, int(os.getenv("YMGA_GPU_THROTTLE_PERCENT", "90") or "90"))),
+    gpu_max_concurrent_ops=max(0, int(os.getenv("YMGA_GPU_MAX_CONCURRENT_OPS", "1") or "1")),
     enable_quotes_feature=(os.getenv("YMGA_ENABLE_QUOTES_FEATURE", "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
     enable_baby_photos_feature=(os.getenv("YMGA_ENABLE_BABY_PHOTOS_FEATURE", "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
     enable_pdf_output=(os.getenv("YMGA_ENABLE_PDF_OUTPUT", "true") or "true").strip().lower() in {"1", "true", "yes", "on"},

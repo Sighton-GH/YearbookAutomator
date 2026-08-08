@@ -15,7 +15,7 @@ The **Yearbook Grad Mugshot Automator** ("Custom Flow Automator", branded site-w
 
 It detects the coloured guide boxes by computer vision, matches students to their photos (by filename number or by name), lets a human review/fix the matches, and then composites finished spread images (PNG/PDF/TIFF) — one image per "spread" of students — ready to send to a yearbook printer.
 
-It is **local-first**: a school's student roster, portraits, and baby photos never have to leave the machine running the backend. See [`../PRIVACY.md`](../PRIVACY.md) for the privacy stance this is built around.
+It is a hosted service: a school's browser sends roster and image data over HTTPS to an access-controlled workspace on the Canadian production server. See [`../PRIVACY.md`](../PRIVACY.md) for processing and retention details.
 
 ## Repo layout
 

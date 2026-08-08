@@ -6,7 +6,7 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from app.models.schemas import GenerationRequest, TemplateSlots
-from app.services.storage import workspace_dir
+from app.services.storage import InvalidWorkspacePath, safe_filename, workspace_dir, workspace_file
 
 
 def _blank_rgba_like(base_rgb: Image.Image) -> Image.Image:
@@ -182,7 +182,10 @@ def save_layered_tiff(payload: GenerationRequest, out_path: Path) -> Path:
     for idx, (person, slot) in enumerate(zip(effective_people, effective_slots)):
         mugshot_filename = person.mugshot_filename or payload.default_mugshot_filename
         if mugshot_filename:
-            mug_path = root / "mugshots" / mugshot_filename
+            try:
+                mug_path = workspace_file(payload.workspace_id, "mugshots", safe_filename(mugshot_filename))
+            except InvalidWorkspacePath:
+                mug_path = root / "mugshots" / "__invalid__"
             if mug_path.exists() and _looks_like_image(mug_path):
                 m_img = _try_open_rgb(mug_path)
                 if m_img is not None:
@@ -198,7 +201,10 @@ def save_layered_tiff(payload: GenerationRequest, out_path: Path) -> Path:
             baby_to_try.append(default_baby)
 
         for baby_filename in baby_to_try:
-            baby_path = root / "baby" / baby_filename
+            try:
+                baby_path = workspace_file(payload.workspace_id, "baby", safe_filename(baby_filename))
+            except InvalidWorkspacePath:
+                continue
             if not baby_path.exists() or not _looks_like_image(baby_path):
                 continue
 

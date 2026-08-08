@@ -5,6 +5,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from app.services.storage import BASE_DATA
+
 
 @dataclass(frozen=True)
 class UsageEvent:
@@ -27,7 +29,7 @@ def _root_dir() -> Path:
     override = os.getenv("YMGA_LICENSE_STORE_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return Path(__file__).resolve().parents[1] / "data" / "_licenses"
+    return BASE_DATA / "_licenses"
 
 
 def _usage_path() -> Path:
@@ -35,7 +37,19 @@ def _usage_path() -> Path:
 
 
 def _ensure_dir() -> None:
-    _root_dir().mkdir(parents=True, exist_ok=True)
+    root = _root_dir()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        root.chmod(0o700)
+    except OSError:
+        pass
+
+
+def _key_label(key: str) -> str:
+    normalized = (key or "").strip().upper()
+    if len(normalized) <= 18:
+        return normalized
+    return f"{normalized[:10]}…{normalized[-4:]}"
 
 
 def load_usage_events() -> list[dict[str, Any]]:
@@ -53,7 +67,12 @@ def save_usage_events(events: list[dict[str, Any]]) -> None:
     _ensure_dir()
     p = _usage_path()
     tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(events, indent=2, sort_keys=True), encoding="utf-8")
+    sanitized = [{**event, "key": _key_label(str(event.get("key") or ""))} for event in events]
+    tmp.write_text(json.dumps(sanitized, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
     tmp.replace(p)
 
 
@@ -61,7 +80,7 @@ def append_usage_event(*, key: str, license_type: str, ip: str | None, device_id
     ts = int(time.time())
     ev = {
         "ts": ts,
-        "key": key,
+        "key": _key_label(key),
         "license_type": license_type,
         "ip": ip,
         "device_id": device_id,

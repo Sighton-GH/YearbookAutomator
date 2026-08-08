@@ -1,33 +1,28 @@
 [Unit]
-Description=Yearbook Mugshot Automator - Frontend (Vite preview, production build)
-After=network.target ymga-backend.service
-Wants=ymga-backend.service
+Description=Cloudflare Tunnel for Yearbook Mugshot Automator
+After=network-online.target ymga-frontend.service
+Wants=network-online.target ymga-frontend.service
 StartLimitIntervalSec=300
 StartLimitBurst=3
 
 [Service]
-Type=simple
-User=bryan
-WorkingDirectory=/media/bryan/OptiData1/VS Code/Personal Projects/Yearbook Grad Mugshot Automator/tool/web
-Environment=NPM_CONFIG_CACHE=/tmp/npm-cache
-ExecStart=/usr/bin/npm run preview -- --host 127.0.0.1
+Type=notify
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/ymga-tunnel-token
 Restart=on-failure
 RestartSec=10
-UMask=0077
 
 CPUQuota=50%
 CPUWeight=25
-IOWeight=25
-MemoryHigh=384M
-MemoryMax=512M
+MemoryHigh=192M
+MemoryMax=256M
 TasksMax=64
-LimitNOFILE=2048
+LimitNOFILE=4096
 Nice=5
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

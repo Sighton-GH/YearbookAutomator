@@ -61,17 +61,17 @@ Every HTTP request to the FastAPI app passes through several layers before reach
 flowchart TB
     req(["Incoming request"]) --> traffic
     traffic["TrafficMiddleware (raw ASGI, outermost)<br/>throttles upload/download bytes via bandwidth.py<br/>records every request in metrics.py, even rejected ones"]
-    traffic --> cors["CORSMiddleware<br/>allow_origins=*, allow_credentials=True"]
-    cors --> accesslog["access_log<br/>logs 'METHOD path -> status (Xms)'"]
+    traffic --> host["TrustedHostMiddleware<br/>loopback origin hosts only"]
+    host --> accesslog["access_log<br/>logs 'METHOD path -> status (Xms)'"]
     accesslog --> license["license_guard<br/>protects /api/templates, /api/mapping,<br/>/api/generation, /api/fonts, /api/workspaces"]
     license --> admin["admin_session_guard<br/>protects /admin/* and /"]
     admin --> route(["Route handler"])
 ```
 
 1. **`TrafficMiddleware`** (`tool/server/app/main.py`) — a raw ASGI middleware (not the decorator-based kind), registered last via `app.add_middleware(...)`, which places it **outermost**. It wraps `receive`/`send` to throttle inbound/outbound byte chunks through `services/bandwidth.py`'s token buckets, and unconditionally calls `services/metrics.py`'s `record_request(status, duration_ms)` in a `finally` block — so request-volume/latency metrics capture *every* request, including ones later rejected by the guards below it.
-2. **CORS** — `allow_origins=["*"]`, `allow_credentials=True`, all methods/headers allowed.
+2. **Host and same-origin policy** — the backend accepts configured loopback origin hosts. No permissive CORS layer is enabled because browsers use the frontend's same-origin `/api` proxy.
 3. **`access_log`** — logs every request/response to the `ymga.access` logger (`METHOD path -> status (Xms)`); logs and re-raises on exceptions. Uvicorn's own access logger is disabled to avoid duplicate lines.
-4. **`license_guard`** — for any path under `/api/templates`, `/api/mapping`, `/api/generation`, `/api/fonts`, or `/api/workspaces`, requires a valid license key. Accepts it via header (`X-License-Key` + optionally `X-Device-Id`) or, as a fallback for contexts that can't set headers (`<img src>` tags), via query params (`license_key`/`license`/`key` + `device_id`). On success, stashes `request.state.license_key` / `license_device_id` / `license_meta` / `client_session_id` for the route to use. On failure, returns `401` JSON with a `reason` code and a human-readable `hint` (see `_license_hint()`). `/api/licensing/*`, `/admin*`, `/health`, `/docs`, `/openapi.json`, `/redoc` are always allowed through regardless.
+4. **`license_guard`** — for any path under `/api/templates`, `/api/mapping`, `/api/generation`, `/api/fonts`, or `/api/workspaces`, requires a valid license key. It accepts the normal `X-License-Key`/`X-Device-Id` headers or the HTTP-only, same-site session cookies created by successful license validation. Credentials are not accepted in query strings. On success, it stashes `request.state.license_key` / `license_device_id` / `license_meta` / `client_session_id` for the route to use. On failure, it returns `401` JSON with a `reason` code and a human-readable `hint`. `/api/licensing/*`, `/admin*`, `/health`, `/docs`, `/openapi.json`, `/redoc` remain outside this guard.
 5. **`admin_session_guard`** — for `/admin/*` and `/` (the dashboard root), verifies an HMAC-signed session cookie (`ymga_admin_session`); falls back to HTTP Basic auth (`YMGA_LICENSE_ADMIN_USERNAME`/`YMGA_LICENSE_ADMIN_PASSWORD`) and mints a fresh session cookie on success, otherwise returns a 401 HTML page.
 6. The route handler runs, delegating to `services/*.py`.
 
@@ -190,11 +190,11 @@ The live deployment (see [`08-deployment.md`](08-deployment.md) for full details
 ```mermaid
 flowchart LR
     internet(["Internet"]) -- "https://yearbooktool.sighton.ca" --> tunnel["Cloudflare Tunnel<br/>(cloudflared systemd service)"]
-    tunnel -- "http://localhost:5173" --> fe["ymga-frontend.service<br/>npm run preview, 0.0.0.0:5173"]
+    tunnel -- "http://localhost:5173" --> fe["ymga-frontend.service<br/>npm run preview, 127.0.0.1:5173"]
     fe -- "/api/* proxy" --> be["ymga-backend.service<br/>uvicorn, 127.0.0.1:8000"]
     be --> data[("tool/server/app/data/")]
 ```
 
-- The backend's `127.0.0.1`-only bind is intentional: it's unreachable directly (even over LAN/Tailscale) by design, independent of any firewall configuration. Only the frontend is bound to `0.0.0.0:5173`, and its Vite proxy config forwards `/api/*` to the loopback-bound backend server-side.
+- Both tool services are loopback-only. Remote browsers must use the Cloudflare-protected HTTPS hostname; the Vite proxy forwards same-origin `/api/*` requests to FastAPI.
 - Neither systemd service auto-updates on code changes — the backend needs a restart to pick up Python changes, the frontend needs a rebuild (`npm run build`) *and* a restart to pick up frontend changes.
 - The marketing website is a separate, unrelated deployment target (Cloudflare Workers, auto-deployed from Git) — see [`06-website.md`](06-website.md).

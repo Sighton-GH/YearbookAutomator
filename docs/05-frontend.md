@@ -136,7 +136,7 @@ flowchart LR
 `src/api.ts` is the **single typed client** for every backend domain — a full inventory of endpoints is in [`04-api-reference.md`](04-api-reference.md). Two mechanisms worth knowing:
 
 - An Axios request interceptor automatically attaches `X-License-Key` / `X-Device-Id` / `X-Client-Session-Id` headers to every call, reading from `licensing.ts`'s storage helpers — individual call sites never set these manually.
-- For plain `<img src>`/`window.open` URLs (which can't carry custom headers), a family of `*Url` builder functions (`assetUrl`, `templateCleanUrl`, `generationDownloadUrl`, etc.) instead append `license_key`/`device_id` as **query params** via `addLicenseParams()`.
+- Plain `<img src>`/download URL builders (`assetUrl`, `templateCleanUrl`, `generationDownloadUrl`, etc.) rely on the HTTP-only, same-site license cookies created during validation. License keys and device IDs are not placed in query strings.
 
 `src/types.ts` itself is only 3 lines (`Align`, `FontWeight`, `PlacementMode`) — the bulk of the backend-schema-mirroring types (`Box`, `TemplateSlots`, `PersonRecord`, `SpreadsheetPreview`, etc.) actually live inline in `api.ts`, plus `session.ts` (`PersistedSessionV1`), `licensing.ts` (`LicenseValidateResponse`), and `configFile.ts` (`ConfigFileV1`). There is no codegen from the backend's Pydantic models — when you change `schemas.py`, update these by hand.
 

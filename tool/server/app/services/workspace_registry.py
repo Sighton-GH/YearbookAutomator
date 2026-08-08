@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,10 @@ def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
 def _save_json(path: Path, data: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
     tmp.replace(path)
 
 
@@ -484,6 +489,14 @@ def ensure_workspace_write_access(
             # Backwards compatibility for legacy flows that predate /resolve.
             # Lazily register the workspace to the current owner and, for
             # commercial keys, acquire a lock owned by the caller.
+            allow_legacy_binding = (os.getenv("YMGA_ALLOW_LEGACY_WORKSPACE_BINDING", "false") or "false").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if not allow_legacy_binding:
+                return False, "workspace_not_registered"
             expected_owner = _owner_key(license_key, license_type, device_id)
             ttl, expiry_disabled = _resolve_ttl_policy(license_key, license_type)
             touch_workspace(workspace_id, session_id=session_id, ttl_seconds=ttl, expiry_disabled=expiry_disabled)
@@ -521,6 +534,29 @@ def ensure_workspace_write_access(
     )
     if not hb_ok:
         return False, hb_reason
+    return True, None
+
+
+def ensure_workspace_read_access(
+    *,
+    workspace_id: str,
+    license_key: str,
+    license_type: LicenseType,
+    device_id: str | None,
+) -> tuple[bool, str | None]:
+    """Require a workspace to belong to the authenticated license/device."""
+    now = int(time.time())
+    expected_owner = _owner_key(license_key, license_type, device_id)
+    with _STORE_LOCK:
+        store = _load_registry()
+        binding = _binding_by_workspace(store.get("bindings", []), workspace_id)
+        if binding is None:
+            return False, "workspace_not_registered"
+        if str(binding.get("owner_key") or "") != expected_owner:
+            return False, "workspace_owner_mismatch"
+        expires_at = int(binding.get("expires_at") or 0)
+        if expires_at > 0 and expires_at <= now:
+            return False, "workspace_expired"
     return True, None
 
 

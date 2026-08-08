@@ -6,10 +6,10 @@ from pydantic import BaseModel, Field
 
 
 class Box(BaseModel):
-    x: int
-    y: int
-    width: int
-    height: int
+    x: int = Field(ge=-100_000, le=100_000)
+    y: int = Field(ge=-100_000, le=100_000)
+    width: int = Field(ge=1, le=50_000)
+    height: int = Field(ge=1, le=50_000)
 
 
 class TemplateSlots(BaseModel):
@@ -40,12 +40,12 @@ class TemplateParseResponse(BaseModel):
 
 
 class PersonRecord(BaseModel):
-    index: int
-    first_name: str
-    last_name: str
-    mugshot_filename: Optional[str] = None
-    quote: Optional[str] = None
-    baby_photo_filename: Optional[str] = None
+    index: int = Field(ge=1, le=100_000)
+    first_name: str = Field(max_length=200)
+    last_name: str = Field(max_length=200)
+    mugshot_filename: Optional[str] = Field(default=None, max_length=180)
+    quote: Optional[str] = Field(default=None, max_length=2_000)
+    baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
 
 
 class SpreadsheetPreview(BaseModel):
@@ -57,20 +57,20 @@ class SpreadsheetPreview(BaseModel):
 class MappingDecision(BaseModel):
     person_index: int
     action: Literal["keep", "replace", "shift", "shift_up", "skip", "remove"]
-    replacement_mugshot: Optional[str] = None
+    replacement_mugshot: Optional[str] = Field(default=None, max_length=180)
 
 
 class MappingRequest(BaseModel):
     workspace_id: str
-    people: list[PersonRecord]
-    decisions: list[MappingDecision]
+    people: list[PersonRecord] = Field(max_length=2_000)
+    decisions: list[MappingDecision] = Field(max_length=2_000)
 
 
 class GenerationRequest(BaseModel):
     workspace_id: str
     template_id: str
-    slots: list[TemplateSlots]
-    people: list[PersonRecord]
+    slots: list[TemplateSlots] = Field(max_length=2_000)
+    people: list[PersonRecord] = Field(max_length=2_000)
     output_format: Literal["png", "pdf", "tiff"] = Field(
         default="png",
         description="Output format for rendered spreads. Default is png.",
@@ -81,37 +81,42 @@ class GenerationRequest(BaseModel):
     )
     output_filename: Optional[str] = Field(
         default=None,
+        max_length=180,
         description="Optional output filename (e.g. preview.png). Defaults to output.png",
     )
 
     output_width: Optional[int] = Field(
         default=None,
+        ge=1,
+        le=50_000,
         description="Optional output width in pixels. If provided, output is downscaled (never upscaled) and aspect ratio is locked to the template.",
     )
     output_height: Optional[int] = Field(
         default=None,
+        ge=1,
+        le=50_000,
         description="Optional output height in pixels. If provided, output is downscaled (never upscaled) and aspect ratio is locked to the template.",
     )
 
     # Styling (legacy single-style fields)
-    default_quote: Optional[str] = None
-    default_baby_photo_filename: Optional[str] = None
-    default_mugshot_filename: Optional[str] = None
-    font_family: str = Field(..., description="Font family for text rendering")
-    font_weight: str = Field("normal", description="Font weight, e.g. normal or bold")
+    default_quote: Optional[str] = Field(default=None, max_length=2_000)
+    default_baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
+    default_mugshot_filename: Optional[str] = Field(default=None, max_length=180)
+    font_family: str = Field(..., max_length=300, description="Font family for text rendering")
+    font_weight: str = Field("normal", max_length=30, description="Font weight, e.g. normal or bold")
     all_caps: bool = False
     align: Literal["left", "center"] = "left"
 
     # Styling (preferred: separate name/quote styles)
-    name_font_family: Optional[str] = None
-    name_font_weight: Optional[str] = None
-    name_font_size: int = Field(40, description="Name font size in points")
+    name_font_family: Optional[str] = Field(default=None, max_length=300)
+    name_font_weight: Optional[str] = Field(default=None, max_length=30)
+    name_font_size: int = Field(40, ge=1, le=500, description="Name font size in points")
     name_all_caps: Optional[bool] = None
     name_align: Optional[Literal["left", "center"]] = None
 
-    quote_font_family: Optional[str] = None
-    quote_font_weight: Optional[str] = None
-    quote_font_size: int = Field(40, description="Quote font size in points")
+    quote_font_family: Optional[str] = Field(default=None, max_length=300)
+    quote_font_weight: Optional[str] = Field(default=None, max_length=30)
+    quote_font_size: int = Field(40, ge=1, le=500, description="Quote font size in points")
     quote_all_caps: Optional[bool] = None
     quote_align: Optional[Literal["left", "center"]] = None
 
@@ -142,5 +147,6 @@ class GenerationRequest(BaseModel):
     )
     slot_assignments: dict[int, int] = Field(
         default_factory=dict,
+        max_length=2_000,
         description="Optional mapping of person_index -> slot_number (1-based within spread).",
     )

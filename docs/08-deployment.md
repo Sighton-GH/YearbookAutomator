@@ -11,9 +11,9 @@ Backend and frontend each run as a systemd service, unit files tracked in the re
 | Unit | Runs | Bind |
 |---|---|---|
 | `ymga-backend.service` | `uvicorn app.main:app` (no `--reload`) | `127.0.0.1:8000` |
-| `ymga-frontend.service` | `npm run preview` (serves the last production build in `tool/web/dist/`) | `0.0.0.0:5173` |
+| `ymga-frontend.service` | `npm run preview` (serves the last production build in `tool/web/dist/`) | `127.0.0.1:5173` |
 
-The backend's loopback-only bind is deliberate: it's unreachable directly (even over LAN/Tailscale, even with `:8000` open) by design, regardless of firewall configuration. Only the frontend is bound to all interfaces, and its Vite config (`tool/web/vite.config.ts`, both `server.proxy` and `preview.proxy`) proxies `/api/*` to the loopback-bound backend server-side — so **any** remote access path (LAN, Tailscale, or the Cloudflare Tunnel) has to go through the frontend's port, never the backend's port directly.
+Both services bind to loopback so student uploads cannot bypass HTTPS over a LAN/Tailscale port. The Vite frontend proxies `/api/*` to FastAPI, and the Cloudflare Tunnel is the only intended remote ingress path.
 
 ### Updating the live instance
 
@@ -29,7 +29,9 @@ npm run build
 sudo systemctl restart ymga-frontend.service
 ```
 
-Restarting the backend interrupts any in-progress generation jobs and, unless `YMGA_CLEAR_WORKSPACES_ON_STARTUP` has been explicitly set to a falsy value in this service's environment, **wipes every active workspace** on the way back up (see [`01-architecture.md`](01-architecture.md#startup--shutdown-lifespan)) — anyone with an in-progress session loses their uploaded template/roster/photos and has to start over. Time restarts accordingly, and be aware a local dev backend pointed at the same data directory has the identical effect (see the warning in [`07-development.md`](07-development.md#prerequisites)).
+Restarting the backend interrupts in-progress generation jobs. The production unit sets `YMGA_CLEAR_WORKSPACES_ON_STARTUP=false`; retain that setting so restarts do not wipe active workspaces. A separate development backend must never share the production data directory.
+
+Before installing the backend unit, copy `deploy/systemd/ymga-backend.env.example` to `/etc/ymga/ymga-backend.env`, replace every placeholder with an independent random secret, set ownership to `root:root`, and run `chmod 600` on the file. The unit also applies CPU, memory, task, file-descriptor, scheduling, and filesystem limits to protect other workloads on the host.
 
 ## The website
 

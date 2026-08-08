@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import io
+import os
+import tempfile
 import zipfile
+from pathlib import Path
 from threading import Thread
 from typing import Any
 from uuid import uuid4
@@ -24,9 +27,15 @@ from app.services.licensing import (
 from app.services.licensing_usage import append_usage_event
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
-from app.services.storage import workspace_dir
-from app.services.progress import start_job, update_job, get_job
-from app.services.workspace_registry import ensure_workspace_write_access
+from app.services.storage import restrict_file_permissions, safe_filename, workspace_dir, workspace_file
+from app.services.progress import (
+    get_job,
+    release_generation,
+    start_job,
+    try_reserve_generation,
+    update_job,
+)
+from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
 router = APIRouter()
 
@@ -72,6 +81,13 @@ def _safe_basename(name: str) -> str:
     return base
 
 
+def _safe_excel_text(value: str) -> str:
+    text = str(value or "")
+    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + text
+    return text
+
+
 def _save_generation_request(payload: GenerationRequest) -> None:
     """Persist the request used to generate an output.
 
@@ -90,49 +106,69 @@ def _save_generation_request(payload: GenerationRequest) -> None:
     tmp = req_dir / f"{stem}.json.tmp"
     path = req_dir / f"{stem}.json"
     tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    restrict_file_permissions(tmp)
     tmp.replace(path)
 
 
 @router.post("/generate")
 async def generate(payload: GenerationRequest, request: Request) -> dict[str, Any]:
-    meta_from_guard = getattr(request.state, "license_meta", None) or {}
-    license_type = "commercial" if str(meta_from_guard.get("license_type") or "") == "commercial" else "personal"
-    access_ok, access_reason = ensure_workspace_write_access(
-        workspace_id=payload.workspace_id,
-        license_key=str(getattr(request.state, "license_key", "") or ""),
-        license_type=license_type,
-        device_id=getattr(request.state, "license_device_id", None),
-        session_id=getattr(request.state, "client_session_id", None),
-    )
-    if not access_ok:
-        status = 409 if access_reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
-        raise HTTPException(status_code=status, detail=access_reason or "workspace_write_not_allowed")
+    enforce_workspace_write(request, payload.workspace_id)
+    requested_output = _safe_basename(payload.output_filename or "output.png")
+    if not (requested_output.startswith("output") or requested_output.startswith("preview")):
+        raise HTTPException(status_code=400, detail="Output filename must begin with 'output' or 'preview'")
+    reserved, reserve_reason = try_reserve_generation(payload.workspace_id)
+    if not reserved:
+        status_code = 409 if reserve_reason == "workspace_generation_in_progress" else 503
+        raise HTTPException(status_code=status_code, detail=reserve_reason, headers={"Retry-After": "10"})
 
     feature_settings = get_face_detection_settings()
+    if payload.output_format == "pdf" and not feature_settings.enable_pdf_output:
+        release_generation(payload.workspace_id)
+        raise HTTPException(status_code=403, detail="PDF output is disabled by admin settings")
+    if payload.output_format == "tiff" and not feature_settings.enable_tiff_output:
+        release_generation(payload.workspace_id)
+        raise HTTPException(status_code=403, detail="TIFF output is disabled by admin settings")
+    try:
+        max_people = max(1, int(os.getenv("YMGA_MAX_GENERATION_PEOPLE", "1000") or "1000"))
+    except ValueError:
+        max_people = 1000
+    if len(payload.people) > max_people or len(payload.slots) > max_people:
+        release_generation(payload.workspace_id)
+        raise HTTPException(status_code=400, detail=f"Generation is limited to {max_people} people/slots per job")
     if not feature_settings.enable_center_on_face_ops:
         payload.center_baby_on_face = False
 
     usage_payload: dict[str, object] | None = None
     if payload.count_usage:
-        key = get_required_license_key_from_headers(request.headers)
-        device_id = get_device_id_from_headers(request.headers)
+        key = getattr(request.state, "license_key", None) or get_required_license_key_from_headers(request.headers)
+        device_id = getattr(request.state, "license_device_id", None) or get_device_id_from_headers(request.headers)
         forwarded = request.headers.get("x-forwarded-for")
         ip = (forwarded.split(",")[0].strip() if forwarded else None) or (request.client.host if request.client else None)
 
-        ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
+        try:
+            ok, meta = validate_and_record_use(key or "", ip=ip, device_id=device_id)
+        except Exception:
+            release_generation(payload.workspace_id)
+            raise
         if not ok:
+            release_generation(payload.workspace_id)
             return JSONResponse(
                 status_code=401,
                 content={"detail": "License key required", "reason": meta.get("reason")},
             )
 
-        append_usage_event(
-            key=(key or "").strip().upper(),
-            license_type=str(meta.get("license_type") or ""),
-            ip=ip,
-            device_id=device_id,
-            route=str(request.url.path),
-        )
+        try:
+            append_usage_event(
+                key=(key or "").strip().upper(),
+                license_type=str(meta.get("license_type") or ""),
+                ip=ip,
+                device_id=device_id,
+                route=str(request.url.path),
+            )
+        except Exception:
+            # Usage was already counted in the license record; a secondary
+            # analytics-log failure must not charge the user without rendering.
+            pass
 
         usage_limit = meta.get("usage_limit")
         usage_remaining = meta.get("usage_remaining")
@@ -145,7 +181,11 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             }
 
     job_id = uuid4().hex
-    start_job(job_id, payload.workspace_id)
+    try:
+        start_job(job_id, payload.workspace_id)
+    except Exception:
+        release_generation(payload.workspace_id)
+        raise
 
     # Save the exact request used for generation so the results page can export
     # the final resolved inputs (names, filenames, quotes, spread/slot numbers).
@@ -161,8 +201,14 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             update_job(job_id, progress=100, status="done", output=out_path.name)
         except Exception as exc:  # pragma: no cover - defensive
             update_job(job_id, status="error", error=str(exc))
+        finally:
+            release_generation(payload.workspace_id)
 
-    Thread(target=run_generation, daemon=True).start()
+    try:
+        Thread(target=run_generation, daemon=True).start()
+    except Exception:
+        release_generation(payload.workspace_id)
+        raise
     resp: dict[str, Any] = {"job_id": job_id}
     if usage_payload is not None:
         resp["usage"] = usage_payload
@@ -170,15 +216,20 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
 
 
 @router.get("/download")
-async def download(workspace_id: str, filename: str = "output.png"):
-    path = workspace_dir(workspace_id) / filename
+async def download(workspace_id: str, request: Request, filename: str = "output.png"):
+    enforce_workspace_read(request, workspace_id)
+    safe_name = safe_filename(filename)
+    if not (safe_name.startswith("output") or safe_name.startswith("preview")) or Path(safe_name).suffix.lower() not in _OUTPUT_EXTS:
+        raise HTTPException(status_code=400, detail="Invalid output filename")
+    path = workspace_file(workspace_id, safe_name)
     if not path.exists():
         return {"error": "file not found"}
     return FileResponse(path)
 
 
 @router.get("/outputs")
-async def outputs(workspace_id: str) -> dict[str, Any]:
+async def outputs(workspace_id: str, request: Request) -> dict[str, Any]:
+    enforce_workspace_read(request, workspace_id)
     root = workspace_dir(workspace_id)
     spread_files = _list_output_files(root)
     return {
@@ -189,7 +240,8 @@ async def outputs(workspace_id: str) -> dict[str, Any]:
 
 
 @router.get("/download-all")
-async def download_all(workspace_id: str):
+async def download_all(workspace_id: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
     root = workspace_dir(workspace_id)
     if not root.exists():
         raise HTTPException(status_code=404, detail="workspace not found")
@@ -199,19 +251,35 @@ async def download_all(workspace_id: str):
     if not spread_files:
         raise HTTPException(status_code=404, detail="no rendered spreads found")
 
-    buf = io.BytesIO()
+    try:
+        max_archive_bytes = max(1, int(os.getenv("YMGA_MAX_DOWNLOAD_ARCHIVE_BYTES", str(2 * 1024 * 1024 * 1024))))
+    except ValueError:
+        max_archive_bytes = 2 * 1024 * 1024 * 1024
+    total_bytes = sum(p.stat().st_size for p in spread_files)
+    if total_bytes > max_archive_bytes:
+        raise HTTPException(status_code=413, detail="Rendered outputs are too large to bundle on the server")
+
+    buf = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024, mode="w+b")
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for p in spread_files:
             # Store just the filename in the zip root.
             zf.write(p, arcname=p.name)
     buf.seek(0)
 
+    def stream_archive():
+        try:
+            while chunk := buf.read(1024 * 1024):
+                yield chunk
+        finally:
+            buf.close()
+
     headers = {"Content-Disposition": "attachment; filename=spreads.zip"}
-    return StreamingResponse(buf, media_type="application/zip", headers=headers)
+    return StreamingResponse(stream_archive(), media_type="application/zip", headers=headers)
 
 
 @router.get("/download-spreadsheet")
-async def download_spreadsheet(workspace_id: str):
+async def download_spreadsheet(workspace_id: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
     """Download a spreadsheet describing the data used to generate the latest spreads.
 
     Columns: name, number, baby filename, portrait filename, quote, spread number, slot number.
@@ -269,11 +337,11 @@ async def download_spreadsheet(workspace_id: str):
 
             rows.append(
                 {
-                    "Name": name,
+                    "Name": _safe_excel_text(name),
                     "Number": int(person.index),
-                    "Baby Photo File Name": baby_filename,
-                    "Portrait Photo File Name": portrait_filename,
-                    "Quote": quote,
+                    "Baby Photo File Name": _safe_excel_text(baby_filename),
+                    "Portrait Photo File Name": _safe_excel_text(portrait_filename),
+                    "Quote": _safe_excel_text(quote),
                     "Spread Number": spread_number,
                     "Slot Number": slot_number,
                 }
@@ -308,8 +376,9 @@ async def download_spreadsheet(workspace_id: str):
 
 
 @router.get("/status")
-async def status(job_id: str):
+async def status(job_id: str, request: Request):
     job = get_job(job_id)
     if not job:
         return {"error": "not found"}
+    enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return job

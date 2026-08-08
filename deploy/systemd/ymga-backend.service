@@ -1,16 +1,49 @@
 [Unit]
 Description=Yearbook Mugshot Automator - Backend (FastAPI/uvicorn)
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
 User=bryan
 WorkingDirectory=/media/bryan/OptiData1/VS Code/Personal Projects/Yearbook Grad Mugshot Automator/tool/server
 Environment=YMGA_LICENSE_ADMIN_USERNAME=sighton_admin
-Environment=YMGA_LICENSE_ADMIN_PASSWORD=Sighton!2026
+Environment=YMGA_CLEAR_WORKSPACES_ON_STARTUP=false
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=-/etc/ymga/ymga-backend.env
 ExecStart="/media/bryan/OptiData1/VS Code/Personal Projects/Yearbook Grad Mugshot Automator/tool/server/.venv/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
-RestartSec=3
+RestartSec=10
+UMask=0077
+
+# Protect other workloads on this shared host. Tune in a systemd drop-in if needed.
+CPUQuota=300%
+CPUWeight=25
+IOWeight=25
+MemoryHigh=6G
+MemoryMax=8G
+MemorySwapMax=1G
+TasksMax=256
+LimitNOFILE=4096
+Nice=5
+
+# Service sandboxing. GPU devices remain available for configured image operations.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/media/bryan/OptiData1/VS\x20Code/Personal\x20Projects/Yearbook\x20Grad\x20Mugshot\x20Automator/tool/server/app/data
+ReadWritePaths=-/var/lib/ymga
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target

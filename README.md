@@ -2,7 +2,7 @@
 
 # Yearbook Grad Mugshot Automator
 
-**A local-first, step-by-step yearbook spread generator.**
+**A hosted, step-by-step yearbook spread generator.**
 
 This app takes:
 
@@ -13,7 +13,7 @@ This app takes:
 
 …then automatically generates finished, consistent yearbook spreads.
 
-It is built with FastAPI (Python backend) and React/Vite (frontend), and is designed to be **local-first** (student data stays on your machine in normal use).
+It is built with FastAPI (Python backend) and React/Vite (frontend). The production service processes workspace data on a Canadian server; browsers connect through the official HTTPS endpoint.
 
 ## Repo layout
 
@@ -38,12 +38,12 @@ cd tool\server
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **One-line start (after venv is set up):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 #### Linux
@@ -52,12 +52,12 @@ cd tool/server
 python3.12 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **One-line start (after venv is set up):**
 ```sh
-cd tool/server && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd tool/server && .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Or use the combined startup script (starts both frontend and backend):**
@@ -65,7 +65,7 @@ cd tool/server && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0
 bash start-dev.sh
 ```
 
-**Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv/bin/python` explicitly to ensure uvicorn subprocesses use the correct Python version.
+**Note:** Binds to loopback so uploads are not exposed over plain HTTP on LAN/Tailscale. Always use `.venv/bin/python` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
 **GPU acceleration on Linux (NVIDIA):**
 The Linux requirements automatically install `onnxruntime-gpu`. For CUDA-accelerated background removal and face detection, ensure you have the matching CUDA toolkit and cuDNN runtime installed. Verify GPU is detected at runtime:
@@ -75,7 +75,7 @@ python -c "import onnxruntime; print(onnxruntime.get_available_providers())"
 ```
 To force CUDA at runtime: `YMGA_REMBG_PROVIDER=CUDAExecutionProvider`
 
-**Note:** Binds to `0.0.0.0` for Tailscale access. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
+**Note:** Binds to loopback so uploads are not exposed over plain HTTP on LAN/Tailscale. Always use `.venv\Scripts\python.exe` explicitly to ensure uvicorn subprocesses use the correct Python version.
 
 **Optional GPU acceleration (background removal):**
 Ultra-complex background removal uses an ONNX model. On Windows, the recommended GPU path is **DirectML** via `onnxruntime-directml` (listed in requirements). This works on most GPUs that support DirectX 12 (feature level 11_0+). If you prefer CUDA on a supported NVIDIA GPU, swap `onnxruntime-directml` for `onnxruntime-gpu` and install the matching CUDA/cuDNN runtime. If no GPU provider is available, the server falls back to CPU automatically.
@@ -101,7 +101,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrd
 cd tool/web && npm run dev
 ```
 
-The frontend runs at http://localhost:5173 (also accessible via Tailscale at `http://<your-tailscale-ip>:5173`) and proxies `/api` to the backend.
+The development frontend runs at http://localhost:5173 and proxies `/api` to the backend. Hosted access must use the official HTTPS hostname through the tunnel.
 
 This is the tool's interactive app (the stepper UI), mounted at its own root rather than embedded in the marketing site. License key entry and validation happen here, not on the website — every "Tool" link/CTA on the marketing website (see [website/](website/)) is a plain link to wherever this is deployed (`PUBLIC_TOOL_URL` in [website/.env.example](website/.env.example)); the "back to main site" link here points the other way (`VITE_WEBSITE_URL` in [tool/web/.env.example](tool/web/.env.example)).
 
@@ -128,7 +128,7 @@ The tool app (`tool/web`) is locked behind a license key — the website carries
 - Set admin password: `YMGA_LICENSE_ADMIN_PASSWORD`
 	- Admin pages trigger the browser login prompt immediately on first open in a browser/session.
 	- Username can be changed in the admin settings panel and is persisted server-side.
-	- `start-dev.cmd` sets local dev defaults: username `sighton_admin`, password `Sighton!2026`.
+	- Set `YMGA_LICENSE_ADMIN_PASSWORD` to a unique value of at least 14 characters before using the admin panel; without it, admin access is disabled.
 - Admin session timeout controls:
 	- `YMGA_ADMIN_IDLE_TIMEOUT_SECONDS` (default: `900`)
 	- `YMGA_ADMIN_MAX_SESSION_SECONDS` (default: `28800`)
@@ -149,16 +149,16 @@ The tool app (`tool/web`) is locked behind a license key — the website carries
 Configurable from the "Performance & Resource Limits" card in `/admin/settings` (persisted server-side); env vars below only set the initial default before anything is saved:
 
 - **Network** — throttles incoming uploads and outgoing downloads across the whole server so large batches don't saturate your internet connection:
-	- `YMGA_NETWORK_UPLOAD_LIMIT_KBPS` (default: `0` = unlimited)
-	- `YMGA_NETWORK_DOWNLOAD_LIMIT_KBPS` (default: `0` = unlimited)
+	- `YMGA_NETWORK_UPLOAD_LIMIT_KBPS` (default: `25000`)
+	- `YMGA_NETWORK_DOWNLOAD_LIMIT_KBPS` (default: `50000`)
 - **CPU** — caps OpenCV/ONNX Runtime worker threads and paces rendering so the app doesn't hog CPU from other running programs:
-	- `YMGA_CPU_MAX_THREADS` (default: `0` = auto/all cores)
-	- `YMGA_CPU_THROTTLE_PERCENT` (default: `100` = full speed; lower values insert idle gaps between rendered photos)
-	- `YMGA_CPU_LOW_PRIORITY` (default: `false`; lowers the process's OS scheduling priority — on Linux/macOS, raising it back to normal after enabling may need a backend restart, since that typically requires elevated permissions)
+	- `YMGA_CPU_MAX_THREADS` (default: `4`)
+	- `YMGA_CPU_THROTTLE_PERCENT` (default: `85`; lower values insert idle gaps between rendered photos)
+	- `YMGA_CPU_LOW_PRIORITY` (default: `true`; lowers the process's OS scheduling priority — on Linux/macOS, raising it back to normal after enabling may need a backend restart, since that typically requires elevated permissions)
 - **GPU** — forces CPU-only inference, paces GPU-bound calls, and/or bounds concurrent GPU inference so background removal/face detection don't saturate a GPU you need for other things:
 	- `YMGA_GPU_DISABLED` (default: `false`)
-	- `YMGA_GPU_THROTTLE_PERCENT` (default: `100` = full speed)
-	- `YMGA_GPU_MAX_CONCURRENT_OPS` (default: `0` = auto)
+	- `YMGA_GPU_THROTTLE_PERCENT` (default: `90`)
+	- `YMGA_GPU_MAX_CONCURRENT_OPS` (default: `1`)
 
 
 ### License persistence & secrets
@@ -171,9 +171,9 @@ Configurable from the "Performance & Resource Limits" card in `/admin/settings` 
 
 ### Usage tracking / limits
 
-- The backend middleware records usage each time a protected tool API endpoint is called with a valid key.
+- The backend records a counted usage event when a final generation starts with usage counting enabled.
 - Personal keys are limited to **5 uses per month** by default (configurable via `YMGA_PERSONAL_MONTHLY_LIMIT`).
-- The admin panel shows the **last 500 usage events**; the backend retains the **last 2000** in `tool/server/app/data/_licenses/usage.json`.
+- The admin panel shows the **last 500 usage events**; the backend retains the **last 2000** with masked license-key labels in `tool/server/app/data/_licenses/usage.json`.
 - You can optionally set per-key max uses from the admin panel when creating a key.
 
 ---
@@ -318,12 +318,12 @@ py -3.12 -m venv .venv
 
 **Start server (one-line):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server"; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **External PowerShell window:**
 ```powershell
-Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
+Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\server''; .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000'
 ```
 
 ### Frontend
@@ -343,7 +343,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd "C:\Users\bryanrd
 Start-Process PowerShell -ArgumentList '-NoExit','-Command','Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; cd ''C:\Users\bryanrdp\Documents\VS Code\Personal Projects\Yearbook Grad Mugshot Automator\tool\web''; npm run dev'
 ```
 
-Vite binds to `0.0.0.0` (accessible via Tailscale) and proxies `/api` to backend.
+Vite binds to `127.0.0.1` and proxies `/api` to the backend. Use the configured HTTPS tunnel for remote access.
 
 **Build for production:**
 ```powershell
@@ -374,7 +374,7 @@ See [website/README.md](website/README.md) for the full Cloudflare Workers deplo
 - **Generation Fails**: You must parse a template first (so `template_clean.png` exists) and have at least one slot/person mapped.
 - **Fonts**: If a font is missing, the backend falls back to system or default fonts. Upload TTF/OTF files if you need a specific font.
 - **Long-Running Tasks**: Generation runs in a background thread; check `/api/generation/status` for progress.
-- **Backend unreachable via Tailscale/LAN IP on `:8000`**: The dev commands above (`--host 0.0.0.0`) bind the backend to all interfaces, so it's reachable directly on `:8000` from another device. But if this backend is instead running as a persistent systemd service (e.g. a staging/production instance), it may deliberately be bound to `127.0.0.1` only — a direct request to `:8000` from another machine gets refused by design in that case. Reach it through the frontend's port instead (`:5173`, which proxies `/api` to the loopback-bound backend) rather than hitting the backend port directly.
+- **Backend unreachable via Tailscale/LAN IP on `:8000`**: This is intentional. Both services bind to loopback, and remote access must use the official HTTPS hostname through the Cloudflare Tunnel rather than unencrypted LAN ports.
 
 ---
 

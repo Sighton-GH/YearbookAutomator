@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Optional
@@ -7,11 +8,42 @@ from typing import Optional
 
 _jobs: dict[str, dict] = {}
 _lock = threading.Lock()
+_active_workspaces: set[str] = set()
+
+
+def _max_concurrent_jobs() -> int:
+    try:
+        return max(1, int(os.getenv("YMGA_MAX_CONCURRENT_BACKGROUND_JOBS", "2") or "2"))
+    except ValueError:
+        return 2
+
+
+def try_reserve_job(workspace_id: str) -> tuple[bool, str | None]:
+    with _lock:
+        if workspace_id in _active_workspaces:
+            return False, "workspace_image_job_in_progress"
+        if len(_active_workspaces) >= _max_concurrent_jobs():
+            return False, "server_image_job_capacity_reached"
+        _active_workspaces.add(workspace_id)
+        return True, None
+
+
+def release_job(workspace_id: str) -> None:
+    with _lock:
+        _active_workspaces.discard(workspace_id)
 
 
 def start_job(job_id: str, workspace_id: str, *, kind: str, source_filename: str, mode: str, output_filename: str) -> None:
     now = time.time()
     with _lock:
+        cutoff = now - (24 * 60 * 60)
+        stale = [key for key, value in _jobs.items() if float(value.get("updated_at") or 0) < cutoff]
+        for key in stale:
+            _jobs.pop(key, None)
+        if len(_jobs) >= 1_000:
+            oldest = sorted(_jobs, key=lambda key: float(_jobs[key].get("updated_at") or 0))
+            for key in oldest[: len(_jobs) - 999]:
+                _jobs.pop(key, None)
         _jobs[job_id] = {
             "job_id": job_id,
             "workspace_id": workspace_id,

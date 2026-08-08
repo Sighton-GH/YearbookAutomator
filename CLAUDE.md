@@ -18,7 +18,7 @@ These deploy independently and talk to each other only over absolute URLs (see "
 cd tool/server
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ### Tool frontend
@@ -133,8 +133,8 @@ See `CODEBASE_ORGANIZATION_REPORT.md` for a fuller breakdown (paths there predat
 - The tool is exposed publicly at `https://yearbooktool.sighton.ca` via a Cloudflare Tunnel (`cloudflared` systemd service, remotely-managed ingress — origin service must be `http://localhost:5173`, not `https://`, since the frontend serves plain HTTP).
 - Backend and frontend run as systemd services, unit files tracked at `deploy/systemd/ymga-backend.service` and `deploy/systemd/ymga-frontend.service` (installed to `/etc/systemd/system/`):
   - `ymga-backend.service` — runs `uvicorn app.main:app` (no `--reload`) on `127.0.0.1:8000`.
-  - `ymga-frontend.service` — runs `npm run preview` (serves the last `tool/web` production build, i.e. whatever's in `tool/web/dist/`) on `0.0.0.0:5173`.
-- The backend's `127.0.0.1`-only bind is intentional — it's reachable only from processes on the same machine, so a direct request to the backend's port (e.g. over LAN or Tailscale, `http://<host-ip>:8000/...`) is refused by design, independent of any tunnel/firewall/Tailscale config. The frontend is what's bound to `0.0.0.0:5173` and its Vite config (`tool/web/vite.config.ts`, both `server.proxy` and `preview.proxy`) proxies `/api/*` to `http://127.0.0.1:8000` server-side — so remote access (LAN, Tailscale, or the Cloudflare Tunnel) must go through the frontend's port/hostname, never the backend's port directly.
+  - `ymga-frontend.service` — runs `npm run preview` (serves the last `tool/web` production build, i.e. whatever's in `tool/web/dist/`) on `127.0.0.1:5173`.
+- Both frontend and backend bind to loopback. Remote access must use the official HTTPS hostname through the Cloudflare Tunnel; do not expose either plain-HTTP port over LAN or Tailscale.
 - **Neither service auto-updates on code changes.** The backend needs `sudo systemctl restart ymga-backend.service` to pick up Python changes; the frontend needs `cd tool/web && npm run build` followed by `sudo systemctl restart ymga-frontend.service` to pick up frontend changes.
 - The marketing website (`yearbook.sighton.ca`) auto-builds/deploys to Cloudflare Workers on new commits (dashboard-side Git integration) — no local action needed for it.
 - **After making any change to `tool/server` or `tool/web` that would affect the running app, ask the user whether they want the corresponding systemd service rebuilt/restarted** — don't restart it automatically without asking.

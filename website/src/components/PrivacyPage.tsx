@@ -1,5 +1,3 @@
-import { withBase } from "../lib/baseUrl";
-
 export function PrivacyPage() {
   return (
     <main className="ss-page document-page">
@@ -13,91 +11,67 @@ export function PrivacyPage() {
         <div className="ss-content-inner document-content">
           <article className="document-article">
             <h2>Privacy Policy</h2>
+            <p><em>Effective Date: August 6, 2026</em></p>
+            <p>This Privacy Policy explains how Custom Flow Automator (the &ldquo;Service&rdquo;) handles information.</p>
+
+            <h3>1. Hosted Service and Data Location</h3>
             <p>
-              <em>Effective Date: December 25, 2025</em>
+              Custom Flow Automator is a browser-based hosted service, not a program that runs on your device. The
+              application server that processes and stores workspace files is located in Canada. Information travels
+              between your browser and the Service over HTTPS (TLS encryption). Cloudflare provides the public network
+              edge, security filtering, and an encrypted tunnel to the Canadian origin server; network routing through
+              Cloudflare may occur outside Canada.
             </p>
+
+            <h3>2. Information We Process</h3>
+            <ul>
+              <li><strong>Workspace content:</strong> templates, rosters, student names, portraits, baby photos, quotes, fonts, settings, and generated outputs.</li>
+              <li><strong>Service data:</strong> license key, device identifier, IP address, session/workspace events, feature usage, and basic request performance/status records.</li>
+              <li>The application does not include advertising trackers and does not sell student data.</li>
+            </ul>
+
+            <h3>3. How Information Is Used</h3>
             <p>
-              This Privacy Policy explains how your information is handled by the Custom Flow Automator software
-              ("the Software").
+              Information is used only to operate the Service, generate requested yearbook files, enforce licensing and
+              workspace access, prevent abuse, monitor reliability, and provide support when requested. Authorized server
+              administration may require limited access for security, maintenance, recovery, or support.
             </p>
 
-            <h3>1. Local and Hosted Use</h3>
-            <ul>
-              <li>
-                When run on your own computer, the Software is local-first: all data you upload, process, or generate
-                (including images, spreadsheets, and templates) remains on your device unless you choose to share or upload
-                it elsewhere.
-              </li>
-              <li>
-                In local use, your browser may communicate with the local backend service over HTTP (typically
-                <code>http://127.0.0.1:8000</code>) in order to process files, but those requests do not leave your machine.
-              </li>
-              <li>
-                In the future, the Software may be offered as a hosted service. When using a hosted version, your data will
-                be transmitted to and processed on the server. Data you upload or generate will be accessible to the server
-                operator for the duration of your workspace session.
-              </li>
-            </ul>
+            <h3>4. Storage, Retention, and Deletion</h3>
+            <p>
+              Workspace content is stored in an access-controlled workspace on the Canadian server. Personal workspaces
+              expire after eight hours by default. Commercial retention is configured per license and may be longer or
+              have expiry disabled. Ending, resetting, or deleting a workspace schedules or performs deletion; expired
+              workspaces are removed automatically. Licensing and security records are retained separately for
+              administration, fraud prevention, and audit purposes.
+            </p>
 
-            <h3>2. Data Collection and Retention</h3>
-            <ul>
-              <li>
-                The Software does <strong>not</strong> collect, transmit, or store any personal data to the developer or any
-                third party by default when run locally.
-              </li>
-              <li>No analytics, telemetry, or background network communication is performed in local mode.</li>
-              <li>
-                When using a hosted version, your data (including images, spreadsheets, and generated outputs) will be
-                stored on the server only as long as your workspace session is active. Data will be deleted from the
-                server after your workspace session ends or expires.
-              </li>
-            </ul>
+            <h3>5. Security</h3>
+            <p>
+              The Service uses HTTPS, authenticated licenses, device/session controls, isolated workspace identifiers,
+              upload validation, request and processing limits, security headers, and restricted server services. No
+              internet service can guarantee absolute security. Users should access the Service only through its official
+              HTTPS address and report suspected exposure promptly.
+            </p>
 
-            <h4>Local files and cleanup</h4>
-            <ul>
-              <li>
-                In local mode, the Software stores working files on disk under a per-workspace folder (for example:
-                extracted images, uploaded ZIPs/spreadsheets, generated outputs).
-              </li>
-              <li>
-                The Software may automatically clean up old workspaces (depending on configuration). If you want to remove
-                data manually, delete the workspace folder on disk.
-              </li>
-            </ul>
+            <h3>6. Service Providers and Disclosure</h3>
+            <p>
+              Cloudflare processes network traffic to deliver and protect the Service. Information may also be disclosed
+              when required by law or necessary to investigate abuse, protect users, or defend the Service. Student data
+              is not sold or shared for advertising.
+            </p>
 
-            <h3>3. User Responsibility</h3>
-            <ul>
-              <li>You are responsible for safeguarding the data you use with the Software.</li>
-              <li>
-                If you deploy or modify the Software to run on a server or in a shared environment, you are responsible for
-                informing users and complying with applicable privacy laws.
-              </li>
-            </ul>
+            <h3>7. School and User Responsibilities</h3>
+            <p>
+              Schools and other users must have authority to upload student information, follow applicable privacy and
+              records-management requirements, limit access to license keys, and download or delete outputs when work is complete.
+            </p>
 
-            <h3>4. Commercial Use</h3>
-            <ul>
-              <li>
-                Commercial licensees may receive support, which may involve sharing diagnostic information or files at your
-                discretion. Any such data shared for support purposes will be used only to resolve your issue and will not
-                be retained longer than necessary.
-              </li>
-            </ul>
-
-            <h3>5. Changes to This Policy</h3>
-            <ul>
-              <li>
-                This Privacy Policy may be updated from time to time. Updates will be provided with new releases of the
-                Software or posted on the hosted service.
-              </li>
-            </ul>
-
-            <h3>6. Contact</h3>
-            <ul>
-              <li>
-                For questions about this Privacy Policy or commercial licensing, contact:{" "}
-                <a href="mailto:sightonmedia@gmail.com">sightonmedia@gmail.com</a>
-              </li>
-            </ul>
+            <h3>8. Changes and Contact</h3>
+            <p>
+              Material changes will be posted with a revised effective date. Questions, deletion requests, and security
+              reports may be sent to <a href="mailto:sightonmedia@gmail.com">sightonmedia@gmail.com</a>.
+            </p>
           </article>
         </div>
       </section>

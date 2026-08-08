@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 from pathlib import Path
+import io
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from fontTools.ttLib import TTFont
 
 from app.services.fonts import list_system_fonts, list_workspace_fonts, font_mime
-from app.services.storage import save_upload, workspace_dir
-from app.services.workspace_registry import ensure_workspace_write_access
+from app.services.admin_settings import get_face_detection_settings
+from app.services.storage import safe_filename, save_upload, workspace_file
+from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
 router = APIRouter()
 
 
 @router.get("/list")
-async def list_fonts(workspace_id: str | None = None) -> dict[str, list[dict]]:
+async def list_fonts(request: Request, workspace_id: str | None = None) -> dict[str, list[dict]]:
+    if workspace_id:
+        enforce_workspace_read(request, workspace_id)
     system_fonts = list_system_fonts()
     uploaded = list_workspace_fonts(workspace_id) if workspace_id else []
     return {"system": system_fonts, "uploaded": uploaded}
@@ -21,27 +26,29 @@ async def list_fonts(workspace_id: str | None = None) -> dict[str, list[dict]]:
 
 @router.post("/upload")
 async def upload_font(request: Request, workspace_id: str = Form(...), file: UploadFile = File(...)) -> dict[str, str]:
-    meta = getattr(request.state, "license_meta", None) or {}
-    license_type = "commercial" if str(meta.get("license_type") or "") == "commercial" else "personal"
-    ok, reason = ensure_workspace_write_access(
-        workspace_id=workspace_id,
-        license_key=str(getattr(request.state, "license_key", "") or ""),
-        license_type=license_type,
-        device_id=getattr(request.state, "license_device_id", None),
-        session_id=getattr(request.state, "client_session_id", None),
-    )
-    if not ok:
-        status = 409 if reason in {"workspace_locked", "workspace_lock_expired", "workspace_not_checked_out"} else 403
-        raise HTTPException(status_code=status, detail=reason or "workspace_write_not_allowed")
+    enforce_workspace_write(request, workspace_id)
+    if not get_face_detection_settings().enable_custom_font_upload:
+        raise HTTPException(status_code=403, detail="Custom font uploads are disabled")
 
-    filename = Path(file.filename).name
-    save_upload(workspace_id, f"fonts/{filename}", file.file)
+    filename = safe_filename(Path(file.filename or "").name)
+    if Path(filename).suffix.lower() not in {".ttf", ".otf"}:
+        raise HTTPException(status_code=400, detail="Only TTF and OTF font files are supported")
+    data = await file.read()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Font file is empty or exceeds the 20 MiB limit")
+    try:
+        font = TTFont(io.BytesIO(data), lazy=False)
+        font.close()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid font file") from None
+    save_upload(workspace_id, f"fonts/{filename}", io.BytesIO(data))
     return {"filename": filename}
 
 
 @router.get("/get")
-async def get_font(workspace_id: str, filename: str):
-    path = workspace_dir(workspace_id) / "fonts" / filename
+async def get_font(workspace_id: str, filename: str, request: Request):
+    enforce_workspace_read(request, workspace_id)
+    path = workspace_file(workspace_id, "fonts", safe_filename(filename))
     if not path.exists():
         return {"error": "not found"}
     return FileResponse(path, media_type=font_mime(path))

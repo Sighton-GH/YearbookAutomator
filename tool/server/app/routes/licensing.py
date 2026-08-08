@@ -11,7 +11,7 @@ from secrets import compare_digest, token_hex
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -34,6 +34,8 @@ router = APIRouter()
 
 
 _ADMIN_COOKIE_NAME = "ymga_admin_session"
+_LICENSE_COOKIE_NAME = "ymga_license_session"
+_LICENSE_DEVICE_COOKIE_NAME = "ymga_license_device"
 _RUNTIME_ADMIN_SESSION_SECRET = token_hex(32)
 
 
@@ -49,11 +51,40 @@ def _admin_expected_username() -> str:
 
 
 def _admin_expected_password() -> str:
-  return os.getenv("YMGA_LICENSE_ADMIN_PASSWORD", "Sighton!2026").strip()
+  return os.getenv("YMGA_LICENSE_ADMIN_PASSWORD", "").strip()
 
 
 def _admin_password_is_configured() -> bool:
-    return bool(_admin_expected_password())
+    password = _admin_expected_password()
+    return len(password) >= 14 and password != "Sighton!2026"
+
+
+def request_is_secure(request: Request) -> bool:
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
+    return request.url.scheme == "https" or forwarded_proto == "https"
+
+
+def get_license_session_credentials(request: Request) -> tuple[str | None, str | None]:
+    key = (request.cookies.get(_LICENSE_COOKIE_NAME) or "").strip().upper()
+    device_id = (request.cookies.get(_LICENSE_DEVICE_COOKIE_NAME) or "").strip()
+    return (key or None, device_id or None)
+
+
+def set_license_session_cookies(response: Response, *, key: str, device_id: str, secure: bool) -> None:
+    cookie_options = {
+        "max_age": 8 * 60 * 60,
+        "httponly": True,
+        "samesite": "strict",
+        "secure": secure,
+        "path": "/api",
+    }
+    response.set_cookie(_LICENSE_COOKIE_NAME, key.strip().upper(), **cookie_options)
+    response.set_cookie(_LICENSE_DEVICE_COOKIE_NAME, device_id.strip(), **cookie_options)
+
+
+def clear_license_session_cookies(response: Response) -> None:
+    response.delete_cookie(_LICENSE_COOKIE_NAME, path="/api")
+    response.delete_cookie(_LICENSE_DEVICE_COOKIE_NAME, path="/api")
 
 
 def _admin_session_secret_bytes() -> bytes:
@@ -119,7 +150,7 @@ def _decode_admin_session(token: str) -> dict | None:
 
 def get_admin_session_state(request: Request) -> tuple[bool, str | None, str | None]:
     if not _admin_password_is_configured():
-        return (True, None, None)
+        return (False, "not_configured", None)
 
     token = (request.cookies.get(_ADMIN_COOKIE_NAME) or "").strip()
     if not token:
@@ -152,7 +183,7 @@ def set_admin_session_cookie(response: HTMLResponse | RedirectResponse, token: s
         value=token,
         max_age=max_timeout,
         httponly=True,
-        samesite="lax",
+        samesite="strict",
         secure=secure,
         path="/",
     )
@@ -162,8 +193,15 @@ def clear_admin_session_cookie(response: HTMLResponse | RedirectResponse) -> Non
   response.delete_cookie(_ADMIN_COOKIE_NAME, path="/")
 
 
+def _safe_admin_next(next_path: str) -> str:
+  candidate = str(next_path or "").strip()
+  if candidate == "/" or candidate.startswith("/admin/"):
+    return candidate
+  return "/admin/licenses"
+
+
 def _login_redirect_url(next_path: str = "/admin/licenses", reason: str | None = None) -> str:
-  safe_next = next_path if next_path.startswith("/") else "/admin/licenses"
+  safe_next = _safe_admin_next(next_path)
   qp = f"next={quote(safe_next, safe='')}"
   if reason:
     qp += f"&reason={quote(reason, safe='')}"
@@ -171,6 +209,8 @@ def _login_redirect_url(next_path: str = "/admin/licenses", reason: str | None =
 
 
 def admin_basic_auth_valid(request: Request) -> bool:
+    if not _admin_password_is_configured():
+      return False
     auth = (request.headers.get("authorization") or "").strip()
     if not auth.lower().startswith("basic "):
       return False
@@ -187,7 +227,7 @@ def admin_basic_auth_valid(request: Request) -> bool:
     expected_user = _admin_expected_username()
     expected_password = _admin_expected_password()
     user_ok = compare_digest((username or "").strip(), expected_user)
-    password_ok = True if not expected_password else compare_digest((password or "").strip(), expected_password)
+    password_ok = compare_digest((password or "").strip(), expected_password)
     return bool(user_ok and password_ok)
 
 
@@ -381,23 +421,25 @@ def admin_root():
 
 @router.get("/admin/login", response_class=HTMLResponse)
 def admin_login_page(request: Request, next: str = "/admin/licenses", reason: str = ""):
-  safe_next = next if next.startswith("/") else "/admin/licenses"
+  safe_next = _safe_admin_next(next)
   return RedirectResponse(url=safe_next, status_code=303)
 
 
 @router.post("/admin/login")
 def admin_login(request: Request, username: str = Form(""), password: str = Form(""), next: str = Form("/admin/licenses")):
-  safe_next = next if next.startswith("/") else "/admin/licenses"
+  safe_next = _safe_admin_next(next)
+  if not _admin_password_is_configured():
+    return RedirectResponse(url=_login_redirect_url(safe_next, reason="not_configured"), status_code=303)
   expected_user = _admin_expected_username()
   expected = _admin_expected_password()
   user_ok = compare_digest((username or "").strip(), expected_user)
-  password_ok = True if not expected else compare_digest((password or "").strip(), expected)
+  password_ok = compare_digest((password or "").strip(), expected)
   if not (user_ok and password_ok):
     return RedirectResponse(url=_login_redirect_url(safe_next, reason="invalid"), status_code=303)
 
   token = _encode_admin_session(iat=int(time.time()), lat=int(time.time()))
   resp = RedirectResponse(url=safe_next, status_code=303)
-  set_admin_session_cookie(resp, token, secure=(request.url.scheme == "https"))
+  set_admin_session_cookie(resp, token, secure=request_is_secure(request))
   return resp
 
 
@@ -487,17 +529,24 @@ class LicenseValidateResponse(BaseModel):
 
 
 @router.post("/api/licensing/validate", response_model=LicenseValidateResponse)
-def validate_license(req: LicenseValidateRequest, request: Request):
+def validate_license(req: LicenseValidateRequest, request: Request, response: Response):
     ip = _client_ip(request)
     device_id = licensing.get_device_id_from_headers(request.headers)
     ok, meta = licensing.validate_license(req.key, ip=ip, device_id=device_id)
     if ok:
+        set_license_session_cookies(
+            response,
+            key=req.key,
+            device_id=device_id or "",
+            secure=request_is_secure(request),
+        )
         return LicenseValidateResponse(
             valid=True,
             license_type=meta.get("license_type"),
             expires_at=meta.get("expires_at"),
         unlock_all_steps=bool(meta.get("unlock_all_steps", False)),
         )
+    clear_license_session_cookies(response)
     return LicenseValidateResponse(valid=False, reason=str(meta.get("reason")))
 
 
@@ -510,7 +559,7 @@ class FreeKeyResponse(BaseModel):
 
 
 @router.post("/api/licensing/free-key", response_model=FreeKeyResponse)
-def free_key(req: FreeKeyRequest, request: Request):
+def free_key(req: FreeKeyRequest, request: Request, response: Response):
     if not req.accepted_non_commercial_terms:
         raise HTTPException(status_code=400, detail="Must accept non-commercial terms")
 
@@ -520,6 +569,12 @@ def free_key(req: FreeKeyRequest, request: Request):
         raise HTTPException(status_code=400, detail="Missing device id")
 
     key = licensing.get_or_create_personal_license(ip=ip, device_id=device_id, note="free personal")
+    set_license_session_cookies(
+        response,
+        key=key,
+        device_id=device_id,
+        secure=request_is_secure(request),
+    )
     return FreeKeyResponse(key=key)
 
 
@@ -776,9 +831,9 @@ def admin_panel(
 
     warning = "" if admin_pw_set else (
         "<div class='card warn'>"
-        "<strong>Warning:</strong> Admin password is NOT set. This panel is currently unprotected."
+        "<strong>Warning:</strong> Admin access is disabled because no strong password is configured."
         "<div style='margin-top:8px'>To enable protection, set the environment variable "
-        "<code>YMGA_LICENSE_ADMIN_PASSWORD</code> and restart the backend.</div>"
+        "<code>YMGA_LICENSE_ADMIN_PASSWORD</code> to at least 14 characters and restart the backend.</div>"
         "</div>"
     )
 
