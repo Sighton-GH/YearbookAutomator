@@ -40,6 +40,7 @@ This repository contains **two independently-deployable applications** that shar
 7. [**Development setup**](07-development.md) — running everything locally, environment variables, GPU acceleration, and the test suites.
 8. [**Deployment**](08-deployment.md) — how the live production instance is actually hosted and how to update it.
 9. [**Conventions & known issues**](09-conventions-and-known-issues.md) — coding conventions, structural debt, and specific gotchas worth knowing before you touch certain files.
+10. [**Production security runbook**](10-production-security-runbook.md) — the August 2026 hardening baseline, deployment and verification commands, credential rotation, troubleshooting, and recurring maintenance.
 
 ## Orientation in 60 seconds
 

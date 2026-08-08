@@ -15,6 +15,8 @@ This app takes:
 
 It is built with FastAPI (Python backend) and React/Vite (frontend). The production service processes workspace data on a Canadian server; browsers connect through the official HTTPS endpoint.
 
+Production operators should use the [Production Security Runbook](docs/10-production-security-runbook.md) for deployment, verification, secret rotation, troubleshooting, and routine maintenance.
+
 ## Repo layout
 
 This repo has two independently-deployable halves:

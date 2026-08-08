@@ -1,5 +1,7 @@
 # Security and Production Checklist
 
+For copy-paste deployment, verification, credential-rotation, and troubleshooting steps, use the [Production Security Runbook](docs/10-production-security-runbook.md).
+
 ## Reporting
 
 Report suspected vulnerabilities or student-data exposure privately to `sightonmedia@gmail.com`. Do not include student files in the first message.
@@ -12,8 +14,11 @@ Report suspected vulnerabilities or student-data exposure privately to `sightonm
 - Copy `deploy/systemd/ymga-backend.env.example` to `/etc/ymga/ymga-backend.env`, replace every placeholder with an independent cryptographically random value, set `root:root` ownership, and apply mode `0600`.
 - Install the tracked systemd units and review their CPU, memory, task, file-descriptor, scheduling, and filesystem limits against the host's capacity.
 - Apply the reviewed units and generate root-only secrets with `sudo bash deploy/install-hardened-services.sh`; the installer preserves an existing `/etc/ymga/ymga-backend.env`.
-- Store `YMGA_WORKSPACE_DATA_DIR` on an encrypted Linux filesystem with permissions enforced by the operating system. The current NTFS mount reports mode `0777` and does not provide an adequate at-rest boundary. Migrate and verify data before changing this variable.
 - Keep production workspace startup clearing disabled. Confirm expired-workspace cleanup remains enabled and set commercial retention deliberately; disabled expiry retains student data until manual deletion.
+
+## Deferred At-Rest Protection
+
+The current accepted risk is to keep workspace data on the existing unencrypted NTFS volume. HTTPS and the application controls still protect data in transit and through the service, but they cannot protect a stolen drive or fully compromised host. When this becomes a priority, migrate to an encrypted Linux filesystem and set `YMGA_WORKSPACE_DATA_DIR` only after verifying the copied data and permissions. See the [runbook](docs/10-production-security-runbook.md#accepted-deferred-risk).
 
 ## Operational Practice
 
