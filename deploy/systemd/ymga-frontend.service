@@ -1,5 +1,5 @@
 [Unit]
-Description=Yearbook Mugshot Automator - Frontend (Vite preview, production build)
+Description=Yearbook Mugshot Automator - Frontend (production static/proxy server)
 After=network.target ymga-backend.service
 Wants=ymga-backend.service
 StartLimitIntervalSec=300
@@ -9,8 +9,12 @@ StartLimitBurst=3
 Type=simple
 User=bryan
 WorkingDirectory=/media/bryan/OptiData1/VS Code/Personal Projects/Yearbook Grad Mugshot Automator/tool/web
-Environment=NPM_CONFIG_CACHE=/tmp/npm-cache
-ExecStart=/usr/bin/npm run preview -- --host 127.0.0.1
+Environment=YMGA_FRONTEND_HOST=127.0.0.1
+Environment=YMGA_FRONTEND_PORT=5173
+Environment=YMGA_BACKEND_HOST=127.0.0.1
+Environment=YMGA_BACKEND_PORT=8000
+Environment=YMGA_FRONTEND_ALLOWED_HOSTS=127.0.0.1,localhost,yearbooktool.sighton.ca
+ExecStart=/usr/bin/node production-server.js
 Restart=on-failure
 RestartSec=10
 UMask=0077

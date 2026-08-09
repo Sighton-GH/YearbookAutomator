@@ -13,9 +13,11 @@ Backend and frontend each run as a systemd service, unit files tracked in the re
 | Unit | Runs | Bind |
 |---|---|---|
 | `ymga-backend.service` | `uvicorn app.main:app` (no `--reload`) | `127.0.0.1:8000` |
-| `ymga-frontend.service` | `npm run preview` (serves the last production build in `tool/web/dist/`) | `127.0.0.1:5173` |
+| `ymga-frontend.service` | `node production-server.js` (static `dist/` server and `/api` proxy) | `127.0.0.1:5173` |
 
-Both services bind to loopback so student uploads cannot bypass HTTPS over a LAN/Tailscale port. The Vite frontend proxies `/api/*` to FastAPI, and the Cloudflare Tunnel is the only intended remote ingress path.
+Both services bind to loopback so student uploads cannot bypass HTTPS over a LAN/Tailscale port. The frontend server proxies `/api/*` to FastAPI, and the Cloudflare Tunnel is the only intended remote ingress path.
+
+Vite builds the frontend and provides the local development/preview commands, but it is not the production HTTP server. Production uses the dependency-free `tool/web/production-server.js`, which enforces the public hostname, adds response security headers, serves only resolved files inside `dist/`, and streams `/api/*` to the loopback backend.
 
 ### Updating the live instance
 
@@ -41,7 +43,7 @@ For the initial hardened deployment, or after either tracked unit changes, run t
 sudo bash deploy/install-hardened-services.sh
 ```
 
-The installer generates the root-only environment file only when it is absent, installs both tracked units, and restarts both services. It preserves existing secrets and does not rotate the Cloudflare Tunnel token or migrate workspace data.
+The installer generates the root-only environment file only when it is absent, installs both tracked units, and restarts both services. It waits for backend/frontend health, verifies the `/api` proxy and rejected-host behavior, and confirms both ports are loopback-only before reporting success. It preserves existing secrets and does not rotate the Cloudflare Tunnel token or migrate workspace data.
 
 ## The website
 

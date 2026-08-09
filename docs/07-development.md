@@ -29,6 +29,7 @@ npm install
 npm run dev       # :5173, proxies /api -> 127.0.0.1:8000
 npm run build     # tsc && vite build
 npm run lint       # eslint .
+npm run test:server # production static/proxy server integration tests
 ```
 
 ## Both together
@@ -54,7 +55,7 @@ npm run deploy    # build, then `wrangler deploy` (needs `npx wrangler login` on
 
 ## Testing
 
-**Backend** — the only automated suite in the repo:
+**Backend** — the main application suite:
 
 ```sh
 cd tool/server
@@ -65,7 +66,9 @@ cd tool/server
 
 See [`03-backend.md`](03-backend.md#testing) for what each test file actually pins down. Backend tests monkeypatch `storage.BASE_DATA` to a tmp directory rather than touching real workspace data — follow that pattern in any new test rather than writing into the real `app/data/`. Template-parser tests build synthetic BGR images with OpenCV and feed them through `cv2.imencode` rather than using fixture image files — follow that pattern too if you add parser tests.
 
-**Frontend / website** — no automated test suite for either. Verify `tool/web` changes by running its dev server and exercising the actual 5-step flow (golden path + edge cases) in a browser; verify `website` changes by running its dev server and checking the affected page. `npm run build`/`npm run lint` catch type/lint errors but not runtime behavior.
+**Frontend production server** — `cd tool/web && npm run test:server` uses Node's test runner to cover SPA/static serving, security headers, host rejection, path containment, caching, and `/api` proxy streaming.
+
+**Frontend UI / website** — there is no automated browser suite. Verify `tool/web` changes by running its dev server and exercising the actual 5-step flow (golden path + edge cases) in a browser; verify `website` changes by running its dev server and checking the affected page. `npm run build`/`npm run lint` catch type/lint errors but not runtime behavior.
 
 ## Environment variables
 

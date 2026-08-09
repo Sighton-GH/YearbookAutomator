@@ -14,7 +14,7 @@ Use Python 3.12 and Node 22.12 or newer. From the repository root:
 ```sh
 bash start-dev.sh
 cd tool/server && .venv/bin/python -m pytest
-cd tool/web && npm ci && npm run lint && npm run build
+cd tool/web && npm ci && npm run test:server && npm run lint && npm run build
 cd website && npm ci && npm run build
 ```
 
@@ -26,7 +26,7 @@ Follow existing files: four-space indentation and `snake_case` for Python; two-s
 
 ## Testing Guidelines
 
-Pytest is the only automated suite. Add focused tests beside related backend coverage and use `tmp_path`/monkeypatching instead of real `app/data/`. Parser tests should construct synthetic OpenCV images where practical. There is no enforced coverage percentage. For frontend changes, run lint and build, then exercise the affected flow in a browser; include screenshots for visible changes.
+Use Pytest for the backend and Node's test runner for the production frontend server. Add backend coverage beside related tests and use `tmp_path`/monkeypatching instead of real `app/data/`; parser tests should construct synthetic OpenCV images where practical. Run `npm run test:server` for static-serving, proxy, host, and path controls. For UI changes, also run lint/build and exercise the affected browser flow; include screenshots for visible changes.
 
 ## Commit & Pull Request Guidelines
 

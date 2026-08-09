@@ -19,13 +19,14 @@ cd tool/server
 .venv/bin/python -m pytest
 cd ../web
 npm ci
+npm run test:server
 npm run lint
 npm run build
 cd ../..
 sudo bash deploy/install-hardened-services.sh
 ```
 
-The installer creates `/etc/ymga/ymga-backend.env` as `root:root` mode `0600` with independent random admin, license-signing, and session secrets if the file does not exist. On later runs it preserves that file. It then installs the backend and frontend units, reloads systemd, and restarts both services. A backend restart interrupts active generation jobs.
+The installer creates `/etc/ymga/ymga-backend.env` as `root:root` mode `0600` with independent random admin, license-signing, and session secrets if the file does not exist. On later runs it preserves that file. It then installs the backend and frontend units, reloads systemd, and restarts both services. Before reporting success, it waits for health, checks the frontend-to-backend proxy, confirms an unknown hostname is rejected, and verifies both listeners are loopback-only. A backend restart interrupts active generation jobs.
 
 The installer does **not** build the frontend, deploy the marketing website, rotate the Cloudflare token, rewrite Git history, or migrate workspace data.
 
@@ -45,10 +46,11 @@ sudo systemctl --no-pager --full status ymga-backend.service ymga-frontend.servi
 sudo ss -ltnp | rg '127\.0\.0\.1:(5173|8000)'
 curl -fsS http://127.0.0.1:8000/health
 curl -I http://127.0.0.1:5173
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'Host: attacker.example' http://127.0.0.1:5173
 curl -I https://yearbooktool.sighton.ca
 ```
 
-Both application services should be `active`, and the backend health request should return `{"status":"ok"}`. Ports `5173` and `8000` must appear only on `127.0.0.1`, never `0.0.0.0` or a LAN address. The public request should use HTTPS and may redirect to Cloudflare Access.
+Both application services should be `active`, and the backend health request should return `{"status":"ok"}`. Ports `5173` and `8000` must appear only on `127.0.0.1`, never `0.0.0.0` or a LAN address. The unapproved-host request must return `421`. The public request should use HTTPS and may redirect to Cloudflare Access.
 
 If a service fails, inspect the newest entries first:
 
@@ -57,6 +59,11 @@ sudo journalctl -u ymga-backend.service -n 100 --no-pager
 sudo journalctl -u ymga-frontend.service -n 100 --no-pager
 sudo journalctl -u cloudflared.service -n 100 --no-pager
 ```
+
+Two startup failures fixed during the August 2026 rollout are worth recognizing:
+
+- `226/NAMESPACE` with a path containing literal `x20` means an old backend unit encoded spaces incorrectly. Reinstall the current tracked units with the installer.
+- `EROFS ... vite.config.ts.timestamp-....mjs` means an old frontend unit tried to run Vite preview inside the read-only repository. The current unit runs `tool/web/production-server.js`; reinstall it with the installer. Vite preview is reserved for local build checks, not production hosting.
 
 ## Rotate the Cloudflare Tunnel Token
 

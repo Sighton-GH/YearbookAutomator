@@ -190,7 +190,7 @@ The live deployment (see [`08-deployment.md`](08-deployment.md) for full details
 ```mermaid
 flowchart LR
     internet(["Internet"]) -- "https://yearbooktool.sighton.ca" --> tunnel["Cloudflare Tunnel<br/>(cloudflared systemd service)"]
-    tunnel -- "http://localhost:5173" --> fe["ymga-frontend.service<br/>npm run preview, 127.0.0.1:5173"]
+    tunnel -- "http://localhost:5173" --> fe["ymga-frontend.service<br/>node production-server.js, 127.0.0.1:5173"]
     fe -- "/api/* proxy" --> be["ymga-backend.service<br/>uvicorn, 127.0.0.1:8000"]
     be --> data[("tool/server/app/data/")]
 ```

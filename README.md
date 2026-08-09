@@ -366,6 +366,7 @@ See [website/README.md](website/README.md) for the full Cloudflare Workers deplo
 
 ### Testing
 - `cd tool/server && pytest` — Tests cover template parsing, progress tracking, and edge cases. See `tool/server/tests/` for examples.
+- `cd tool/web && npm run test:server` — Tests the production static server, host filtering, path containment, security headers, and API proxy.
 
 ---
 
@@ -387,6 +388,7 @@ See [website/README.md](website/README.md) for the full Cloudflare Workers deplo
 - **Core Services**: `tool/server/app/services/`
 - **Models/Schemas**: `tool/server/app/models/schemas.py`
 - **Frontend Entrypoint**: `tool/web/src/App.tsx`
+- **Production Frontend Server**: `tool/web/production-server.js`
 - **API Types/Helpers**: `tool/web/src/api.ts`
 
 ---
