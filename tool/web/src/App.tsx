@@ -2585,14 +2585,17 @@ export default function App({
       try {
         setLoading(true);
         setProgress(0);
+        if (!workspaceId) {
+          setStatus("Could not load the sample project: your session is still starting. Wait a moment and try again.");
+          return;
+        }
         setStatus("Loading sample project — preparing template…");
         const annotated = await fetchAsPng(withBase("assets/Annotated Sample.webp"), "sample-annotated.png");
         const clean = await fetchAsPng(withBase("assets/Clean Sample.webp"), "sample-clean.png");
         updateAnnotatedFile(annotated);
         updateCleanFile(clean);
         setStatus("Loading sample project — detecting layout…");
-        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea });
-        setWorkspaceId(parsed.template_id);
+        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, workspaceId: workspaceId || undefined });
         setTemplateId(parsed.template_id);
         setSlots(parsed.slots);
         setParsedSlots(parsed.slots.map((s) => ({ ...s })));
@@ -2612,7 +2615,7 @@ export default function App({
         setActiveStep("people");
         setStatus("Sample project loaded — explore the People step, then Style and Generate.");
       } catch (err) {
-        setStatus(`Could not load the sample project. ${err instanceof Error ? err.message : ""}`.trim());
+        setStatus(`Could not load the sample project. ${formatServerMessage(err)}`);
       } finally {
         setLoading(false);
         if (typeof window !== "undefined") window.dispatchEvent(new Event("ymga:load-sample-done"));
