@@ -21,7 +21,7 @@ export function SlotInspectorFields({
 }) {
   const update = (part: keyof TemplateSlots, field: keyof Box, value: number) => {
     const raw = { ...slot[part], [field]: value };
-    const next = templateSize ? clampBox(raw, templateSize) : { ...raw, x: Math.round(raw.x), y: Math.round(raw.y), width: Math.max(1, Math.round(raw.width)), height: Math.max(1, Math.round(raw.height)) };
+    const next = templateSize ? clampBox(raw, templateSize) : { ...raw, x: Math.max(0, Math.round(raw.x)), y: Math.max(0, Math.round(raw.y)), width: Math.max(1, Math.round(raw.width)), height: Math.max(1, Math.round(raw.height)) };
     onChange({ ...slot, [part]: next });
   };
 
