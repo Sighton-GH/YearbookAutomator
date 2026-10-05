@@ -20,6 +20,31 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url;
+    if (
+      status === 401 &&
+      typeof url === "string" &&
+      url.startsWith("/api/") &&
+      !url.startsWith("/api/licensing/")
+    ) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ymga:license-invalid", {
+            detail: { reason: error?.response?.data?.reason ?? null },
+          })
+        );
+      } catch {
+        // ignore dispatch failures (e.g. no window); error is still re-thrown below
+      }
+    }
+    throw error;
+  }
+);
+
 export type Box = { x: number; y: number; width: number; height: number };
 export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box };
 export type RawParseDebug = {
