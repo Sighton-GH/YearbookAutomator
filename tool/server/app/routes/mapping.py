@@ -889,7 +889,10 @@ async def upload_quotes_spreadsheet(
     def row_name_tokens(row) -> tuple[str, set[str], str]:
         raw_name = ""
         if first_col is not None and last_col is not None:
-            raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
+            if first_col == last_col:
+                raw_name = str(row.get(first_col, ""))
+            else:
+                raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
         elif name_col is not None:
             raw_name = str(row.get(name_col, ""))
         else:

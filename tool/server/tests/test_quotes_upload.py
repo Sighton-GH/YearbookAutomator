@@ -201,3 +201,24 @@ def test_advanced_name_match_false_is_honoured(tmp_path, monkeypatch):
         assert any("no student matched the name" in w for w in warnings)
     finally:
         client.close()
+
+
+def test_single_first_and_last_name_column_does_not_double_name(tmp_path, monkeypatch):
+    client, workspace_id, headers = _setup(tmp_path, monkeypatch, "quotes-single-name-col")
+    try:
+        people = [{"index": 1, "first_name": "Anna", "last_name": "Lee"}]
+        csv_bytes = (
+            '"Please write down your first and last name",Quote\n'
+            '"Anna Lee",Dream big and shine on.\n'
+            '"Zed Unknown",Hello world and shine on.\n'
+        ).encode("utf-8")
+        resp = _post_quotes(client, workspace_id, headers, csv_bytes, people)
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        by_index = {p["index"]: p for p in payload["people"]}
+        assert by_index[1]["quote"] == "Dream big and shine on."
+        warnings = payload.get("warnings", [])
+        assert any('"Zed Unknown"' in w for w in warnings), warnings
+        assert not any("Zed Unknown Zed Unknown" in w for w in warnings), warnings
+    finally:
+        client.close()
