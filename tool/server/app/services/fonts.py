@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -67,8 +68,48 @@ def font_mime(path: Path) -> str:
     return mime or "font/ttf"
 
 
-_BOLD_WORDS = ("bold", "black", "heavy", "semibold", "demibold", "extrabold")
-_REGULAR_STYLES = ("regular", "book", "roman", "normal", "medium", "")
+@dataclass(frozen=True)
+class FontFace:
+    path: Path
+    style: str
+    weight: int
+    width: int
+    italic: bool
+    variable: bool
+
+
+def _face_metrics(path: Path) -> tuple[int, int, bool, bool]:
+    """Read (weight, width, table_italic, variable) from the font tables."""
+    weight, width = 400, 5
+    table_italic = False
+    variable = False
+    try:
+        font = TTFont(str(path), lazy=True)
+        if "OS/2" in font:
+            os2 = font["OS/2"]
+            try:
+                weight = int(os2.usWeightClass)
+            except Exception:
+                pass
+            try:
+                width = int(os2.usWidthClass)
+            except Exception:
+                pass
+            try:
+                if int(os2.fsSelection) & 1:
+                    table_italic = True
+            except Exception:
+                pass
+        if "head" in font:
+            try:
+                if int(font["head"].macStyle) & 2:
+                    table_italic = True
+            except Exception:
+                pass
+        variable = "fvar" in font
+    except Exception:
+        pass
+    return weight, width, table_italic, variable
 
 
 def _family_style_keys(path: Path) -> list[tuple[str, str]]:
@@ -98,16 +139,21 @@ def _family_style_keys(path: Path) -> list[tuple[str, str]]:
         return [(path.stem, "")]
 
 
-def _index(paths: list[Path]) -> dict[str, list[tuple[str, Path]]]:
-    out: dict[str, list[tuple[str, Path]]] = {}
+def _index(paths: list[Path]) -> dict[str, list[FontFace]]:
+    out: dict[str, list[FontFace]] = {}
     for p in paths:
+        weight, width, table_italic, variable = _face_metrics(p)
         for family, style in _family_style_keys(p):
-            out.setdefault(family.strip().lower(), []).append((style.strip().lower(), p))
+            normal_style = style.strip().lower()
+            italic = table_italic or "italic" in normal_style or "oblique" in normal_style
+            out.setdefault(family.strip().lower(), []).append(
+                FontFace(path=p, style=normal_style, weight=weight, width=width, italic=italic, variable=variable)
+            )
     return out
 
 
 @lru_cache(maxsize=1)
-def _system_index() -> dict[str, list[tuple[str, Path]]]:
+def _system_index() -> dict[str, list[FontFace]]:
     paths: list[Path] = []
     for folder in SYSTEM_FONTS_DIRS:
         if folder.exists():
@@ -116,22 +162,34 @@ def _system_index() -> dict[str, list[tuple[str, Path]]]:
     return _index(paths)
 
 
-def _pick_style(entries: list[tuple[str, Path]], bold: bool) -> Path | None:
-    def is_bold(style: str) -> bool:
-        return any(w in style for w in _BOLD_WORDS)
+_REGULAR_NAME_HINTS = frozenset({"regular", "book", "roman", "normal", "medium", "plain", "text", "r"})
+_BOLD_NAME_HINTS = frozenset({"bold", "black", "heavy", "semibold", "demibold", "extrabold", "ultrabold", "b"})
 
-    upright = [(s, p) for s, p in entries if "italic" not in s and "oblique" not in s]
-    pool = upright or entries
-    if bold:
-        for s, p in pool:
-            if is_bold(s):
-                return p
-    for wanted in _REGULAR_STYLES:
-        for s, p in pool:
-            if s == wanted:
-                return p
-    non_bold = [p for s, p in pool if not is_bold(s)]
-    return (non_bold or [p for _, p in pool] or [None])[0]
+
+def _pick_style(entries: list[FontFace], bold: bool) -> Path | None:
+    if not entries:
+        return None
+    target = 700 if bold else 400
+
+    def base_score(face: FontFace) -> int:
+        return (
+            abs(face.weight - target) + 200 * abs(face.width - 5) + 1000 * int(face.italic) + 50 * int(face.variable)
+        )
+
+    def name_mismatch(face: FontFace) -> int:
+        # Tie-break when metrics cannot tell faces apart (e.g. this machine's
+        # Ubuntu files are byte-identical variable fonts all reporting weight
+        # 400 / width 5): prefer the conventionally named Regular/Bold file.
+        # 0 when the filename suggests the requested class, else 1.
+        tokens = [t for t in "".join(ch if ch.isalnum() else " " for ch in face.path.stem.lower()).split() if t]
+        if bold:
+            return 0 if tokens and tokens[-1] in _BOLD_NAME_HINTS else 1
+        return 0 if tokens and tokens[-1] in _REGULAR_NAME_HINTS else 1
+
+    def score(face: FontFace) -> tuple[int, int, int, str]:
+        return (base_score(face), name_mismatch(face), len(face.path.name), str(face.path))
+
+    return min(entries, key=score).path
 
 
 def resolve_font_file(workspace_id: str, family: str, bold: bool) -> Path | None:
