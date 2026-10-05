@@ -319,7 +319,7 @@ export function ImportStep({
   const [showMissingPortraits, setShowMissingPortraits] = useState(false);
   const [showAdvancedNaming, setShowAdvancedNaming] = useState(false);
   const portraitsEstimateRef = useRef(10);
-  const defaultNamingPattern = "\\d{3,4}";
+  const defaultNamingPattern = "\\d{1,4}";
 
   // --- Quotes card state ---
   const [quotesSheet, setQuotesSheet] = useState<File | null>(null);
@@ -1261,7 +1261,7 @@ export function ImportStep({
           <StageIcon status={portraitsLocked ? "pending" : portraitsStage} />
           <h3>Roster &amp; Portraits</h3>
           <InfoPopover
-            content="Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this matches portraits by digits first (example: 001.jpg → row 1), with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings."
+            content="Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. Portrait files named with the row number (1.jpg, 01.jpg or 001.jpg → row 1) are matched first, with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings."
             ariaLabel="Roster and portraits description"
             position="below"
           />
@@ -1328,7 +1328,7 @@ export function ImportStep({
             <label className="field">
               <span className="inline" style={{ alignItems: "center", gap: 6 }}>
                 <span>Filename pattern (regex)</span>
-                <InfoPopover content="Default matches 3–4 digit stems (e.g., 001.jpg). Non-matching files are skipped." ariaLabel="Filename pattern description" />
+                <InfoPopover content="Default matches 1–4 digit stems (e.g., 1.jpg, 01.jpg or 001.jpg). Non-matching files are skipped." ariaLabel="Filename pattern description" />
               </span>
               <input type="text" value={namingPattern} onChange={(e) => setNamingPattern(e.target.value)} placeholder={defaultNamingPattern} />
             </label>

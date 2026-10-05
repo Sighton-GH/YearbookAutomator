@@ -381,7 +381,7 @@ export default function App({
   }, [templateSize, outputSize]);
 
   // Persisted options for spreadsheet+portrait ingest.
-  const defaultNamingPattern = "\\d{3,4}";
+  const defaultNamingPattern = "\\d{1,4}";
   const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);

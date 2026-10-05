@@ -11,8 +11,15 @@ from typing import BinaryIO, Optional
 import pandas as pd
 
 from app.models.schemas import PersonRecord, SpreadsheetPreview
+from app.services.name_matching import is_archive_junk, match_people, name_tokens, unique_stored_name
 from app.services.storage import safe_filename, save_upload
-from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
+from app.services.upload_security import (
+    UnsafeUpload,
+    read_zip_member,
+    validate_image_bytes,
+    validate_spreadsheet_bytes,
+    validate_zip_archive,
+)
 
 
 class RosterFormatError(ValueError):
@@ -160,7 +167,7 @@ def ingest_spreadsheet(
     spreadsheet: BinaryIO,
     filename: str,
     mugshots_zip: Optional[BinaryIO],
-    naming_pattern: str = r"\d{3,4}",
+    naming_pattern: str = r"\d{1,4}",
     advanced_name_match: bool = False,
 ) -> SpreadsheetPreview:
     df = _load_dataframe(spreadsheet, filename)
@@ -194,52 +201,18 @@ def ingest_spreadsheet(
     except ValueError as exc:
         raise RosterFormatError(f"The portrait filename pattern is not valid: {exc}") from None
 
-    def _normalize(text: str) -> str:
-        lowered = (text or "").lower()
-        lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
-        lowered = re.sub(r"\s+", " ", lowered).strip()
-        return lowered
-
-    def _tokens(text: str) -> list[str]:
-        norm = _normalize(text)
-        return norm.split() if norm else []
-
-    def _compact(text: str) -> str:
-        return re.sub(r"\s+", "", _normalize(text))
-
-    def _matches_name(stem_norm: str, stem_tokens: set[str], stem_compact: str, first: list[str], last: list[str]) -> bool:
-        # Require at least one token from first and last (or compact match) to reduce false positives.
-        if not first or not last:
-            return False
-
-        # Match regardless of order in filename (FIRST LAST or LAST FIRST) since we only check presence.
-        first_present = any(t in stem_tokens for t in first)
-        last_present = any(t in stem_tokens for t in last)
-        if first_present and last_present:
-            return True
-
-        # Compact fallback for filenames with no delimiters between name parts.
-        first_compact = "".join(first)
-        last_compact = "".join(last)
-        return (first_compact in stem_compact and last_compact in stem_compact) or (
-            last_compact in stem_compact and first_compact in stem_compact
-        )
-
-    name_tokens: dict[int, tuple[list[str], list[str]]] = {}
+    people_tokens: dict[int, tuple[list[str], list[str]]] = {}
     if advanced_name_match:
         for person_index, (first_name, last_name) in enumerate(kept, start=1):
-            first_parts = _tokens(first_name)
-            last_parts = _tokens(last_name)
-
             # Avoid extremely short tokens that could cause false positives.
-            first_parts = [t for t in first_parts if len(t) >= 2]
-            last_parts = [t for t in last_parts if len(t) >= 2]
+            first_parts = [t for t in name_tokens(first_name) if len(t) >= 2]
+            last_parts = [t for t in name_tokens(last_name) if len(t) >= 2]
 
             # Only keep a small set of first-name candidates to tolerate middle names.
             if first_parts and last_parts:
                 first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
                 # For last name, require all parts if multi-word (e.g., "Van Dyke")
-                name_tokens[person_index] = (first_candidates, last_parts)
+                people_tokens[person_index] = (first_candidates, last_parts)
 
     mugshot_lookup: dict[int, str] = {}
     if mugshots_zip:
@@ -251,26 +224,22 @@ def ingest_spreadsheet(
             archive_members = validate_zip_archive(zf, label="Portrait ZIP")
 
             used_members: set[str] = set()
+            used_names: set[str] = set()
 
             # Pass 1: Advanced name matching
-            if advanced_name_match and name_tokens:
+            if advanced_name_match and people_tokens:
                 assigned_people: set[int] = set()
                 for member_info in archive_members:
                     member = member_info.filename
+                    if is_archive_junk(member):
+                        continue
                     filename_only = Path(member).name
                     if Path(filename_only).suffix.lower() not in allowed_exts:
                         warnings.append(
                             f"Skipped mugshot '{filename_only}' (unsupported type; images only)."
                         )
                         continue
-                    stem_raw = Path(filename_only).stem
-                    stem_norm = _normalize(stem_raw)
-                    stem_tokens = set(stem_norm.split()) if stem_norm else set()
-                    stem_compact = _compact(stem_raw)
-                    matches: list[int] = []
-                    for person_index, (first_parts, last_parts) in name_tokens.items():
-                        if _matches_name(stem_norm, stem_tokens, stem_compact, first_parts, last_parts):
-                            matches.append(person_index)
+                    matches = match_people(Path(filename_only).stem, people_tokens)
 
                     if len(matches) == 1:
                         person_index = matches[0]
@@ -281,8 +250,13 @@ def ingest_spreadsheet(
                             continue
                         # Extract and assign
                         content = read_zip_member(zf, member_info)
-                        validate_image_bytes(content, label=f"Portrait '{filename_only}'")
-                        out_path = save_upload(workspace_id, f"mugshots/{safe_filename(filename_only)}", io.BytesIO(content))
+                        try:
+                            validate_image_bytes(content, label=f"Portrait '{filename_only}'")
+                        except UnsafeUpload as exc:
+                            warnings.append(f"Skipped '{filename_only}': {exc}")
+                            continue
+                        stored = unique_stored_name(used_names, safe_filename(filename_only))
+                        out_path = save_upload(workspace_id, f"mugshots/{stored}", io.BytesIO(content))
                         mugshot_lookup[person_index] = out_path.name
                         used_members.add(member)
                         assigned_people.add(person_index)
@@ -297,6 +271,8 @@ def ingest_spreadsheet(
             for member_info in archive_members:
                 member = member_info.filename
                 if member in used_members:
+                    continue
+                if is_archive_junk(member):
                     continue
                 filename_only = Path(member).name
                 if Path(filename_only).suffix.lower() not in allowed_exts:
@@ -334,8 +310,13 @@ def ingest_spreadsheet(
                 target_index = available_indices.pop(insert_pos)
 
                 content = read_zip_member(zf, member_info)
-                validate_image_bytes(content, label=f"Portrait '{filename_only}'")
-                out_path = save_upload(workspace_id, f"mugshots/{safe_filename(filename_only)}", io.BytesIO(content))
+                try:
+                    validate_image_bytes(content, label=f"Portrait '{filename_only}'")
+                except UnsafeUpload as exc:
+                    warnings.append(f"Skipped '{filename_only}': {exc}")
+                    continue
+                stored = unique_stored_name(used_names, safe_filename(filename_only))
+                out_path = save_upload(workspace_id, f"mugshots/{stored}", io.BytesIO(content))
                 mugshot_lookup[target_index] = out_path.name
 
     people: list[PersonRecord] = []

@@ -17,8 +17,22 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.mapping_review import apply_mapping_decisions
 from app.services.spreadsheet import RosterFormatError, ingest_spreadsheet
+from app.services.name_matching import (
+    compact_name,
+    is_archive_junk,
+    match_people,
+    name_tokens,
+    normalize_name,
+    unique_stored_name,
+)
 from app.services.storage import safe_filename, save_upload, workspace_dir, workspace_file
-from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
+from app.services.upload_security import (
+    UnsafeUpload,
+    read_zip_member,
+    validate_image_bytes,
+    validate_spreadsheet_bytes,
+    validate_zip_archive,
+)
 from app.services.background_removal import (
     BackgroundMode,
     background_removed_filename,
@@ -174,22 +188,6 @@ async def detect_face_center_api(image: UploadFile = File(...)):
     )
 
 
-def _normalize_name(text: str) -> str:
-    lowered = (text or "").lower()
-    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
-    lowered = re.sub(r"\s+", " ", lowered).strip()
-    return lowered
-
-
-def _tokens(text: str) -> list[str]:
-    norm = _normalize_name(text)
-    return norm.split() if norm else []
-
-
-def _compact(text: str) -> str:
-    return re.sub(r"\s+", "", _normalize_name(text))
-
-
 _FILENAME_STOPWORDS = {
     "blob",
     "img",
@@ -213,7 +211,7 @@ def _compact_filename_name(stem_raw: str) -> str:
     partial matching compares the actual name portion.
     """
 
-    norm = _normalize_name(stem_raw)
+    norm = normalize_name(stem_raw)
     if not norm:
         return ""
     tokens = norm.split()
@@ -244,20 +242,6 @@ def _compact_filename_name(stem_raw: str) -> str:
     return "".join(kept)
 
 
-def _matches_name(stem_tokens: set[str], stem_compact: str, first_parts: list[str], last_parts: list[str]) -> bool:
-    if not first_parts or not last_parts:
-        return False
-    first_present = any(t in stem_tokens for t in first_parts)
-    last_present = any(t in stem_tokens for t in last_parts)
-    if first_present and last_present:
-        return True
-    first_compact = "".join(first_parts)
-    last_compact = "".join(last_parts)
-    return (first_compact in stem_compact and last_compact in stem_compact) or (
-        last_compact in stem_compact and first_compact in stem_compact
-    )
-
-
 def _char_similarity(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
@@ -276,8 +260,8 @@ def _best_partial_name_match(stem_compact: str, people: list[PersonRecord]) -> t
 
     scored: list[tuple[int, float]] = []
     for p in people:
-        full_a = _compact(f"{p.first_name} {p.last_name}")
-        full_b = _compact(f"{p.last_name} {p.first_name}")
+        full_a = compact_name(f"{p.first_name} {p.last_name}")
+        full_b = compact_name(f"{p.last_name} {p.first_name}")
         score = max(_char_similarity(stem_compact, full_a), _char_similarity(stem_compact, full_b))
         scored.append((p.index, score))
 
@@ -327,7 +311,7 @@ async def ingest(
     spreadsheet: UploadFile | None = File(None),
     workspace_id: str = Form(...),
     mugshots_zip: UploadFile | None = File(None),
-    naming_pattern: str = Form(r"\d{3,4}"),
+    naming_pattern: str = Form(r"\d{1,4}"),
     advanced_name_match: bool = Form(False),
 ) -> SpreadsheetPreview:
     enforce_workspace_write(request, workspace_id)
@@ -662,17 +646,18 @@ async def upload_baby_zip(
     warnings: list[str] = []
 
     # Precompute name tokens.
-    name_tokens: dict[int, tuple[list[str], list[str]]] = {}
+    people_tokens: dict[int, tuple[list[str], list[str]]] = {}
     if advanced_name_match:
         for p in people:
-            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
-            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            first_parts = [t for t in name_tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in name_tokens(p.last_name) if len(t) >= 2]
             if not first_parts or not last_parts:
                 continue
             first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
-            name_tokens[p.index] = (first_candidates, last_parts)
+            people_tokens[p.index] = (first_candidates, last_parts)
 
     assigned: set[int] = set()
+    used_names: set[str] = set()
 
     async def _abort_if_disconnected() -> None:
         # When the UI's Stop button is pressed, the browser aborts the request.
@@ -694,6 +679,8 @@ async def upload_baby_zip(
         for member_info in archive_members:
             await _abort_if_disconnected()
             member = member_info.filename
+            if is_archive_junk(member):
+                continue
             filename_only = safe_filename(Path(member).name)
             suffix = Path(filename_only).suffix.lower()
             is_pdf = suffix == ".pdf"
@@ -701,16 +688,11 @@ async def upload_baby_zip(
                 warnings.append(f"Skipped baby file '{filename_only}' (unsupported type; images only).")
                 continue
             stem_raw = Path(filename_only).stem
-            stem_norm = _normalize_name(stem_raw)
-            stem_tokens = set(stem_norm.split()) if stem_norm else set()
-            stem_compact = _compact(stem_raw)
             stem_compact_name = _compact_filename_name(stem_raw)
 
             match_indices: list[int] = []
-            if advanced_name_match and name_tokens:
-                for person_index, (first_parts, last_parts) in name_tokens.items():
-                    if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
-                        match_indices.append(person_index)
+            if advanced_name_match and people_tokens:
+                match_indices = match_people(stem_raw, people_tokens)
 
             # Last resort: partial character similarity only when there was no name match.
             # This is intentionally conservative to avoid wrong assignments.
@@ -753,7 +735,11 @@ async def upload_baby_zip(
                         warnings.append(f"Skipped baby file '{filename_only}' (PDF conversion failed: {exc}).")
                         continue
                 else:
-                    validate_image_bytes(content, label=f"Baby photo '{filename_only}'")
+                    try:
+                        validate_image_bytes(content, label=f"Baby photo '{filename_only}'")
+                    except UnsafeUpload as exc:
+                        warnings.append(f"Skipped '{filename_only}': {exc}")
+                        continue
 
                 if remove_background:
                     await _abort_if_disconnected()
@@ -767,9 +753,14 @@ async def upload_baby_zip(
                         continue
                     await _abort_if_disconnected()
 
-                validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                try:
+                    validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                except UnsafeUpload as exc:
+                    warnings.append(f"Skipped '{filename_only}': {exc}")
+                    continue
 
-                out_path = save_upload(workspace_id, f"baby/{safe_filename(out_name)}", io.BytesIO(content))
+                stored = unique_stored_name(used_names, safe_filename(out_name))
+                out_path = save_upload(workspace_id, f"baby/{stored}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:
                         people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
@@ -848,8 +839,8 @@ async def upload_quotes_spreadsheet(
     person_tokens: dict[int, tuple[list[str], list[str]]] = {}
     if advanced_name_match:
         for p in people:
-            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
-            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            first_parts = [t for t in name_tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in name_tokens(p.last_name) if len(t) >= 2]
             if not first_parts or not last_parts:
                 continue
             first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
@@ -871,7 +862,7 @@ async def upload_quotes_spreadsheet(
         if quote_col is None and "quote" in low:
             quote_col = orig
 
-    def row_name_tokens(row) -> tuple[set[str], str]:
+    def row_name_tokens(row) -> tuple[str, set[str], str]:
         raw_name = ""
         if first_col is not None and last_col is not None:
             raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
@@ -883,21 +874,19 @@ async def upload_quotes_spreadsheet(
                 if "name" in str(col).lower():
                     raw_name = str(row.get(col, ""))
                     break
-        stem_norm = _normalize_name(raw_name)
-        return (set(stem_norm.split()) if stem_norm else set(), _compact(raw_name))
+        stem_norm = normalize_name(raw_name)
+        return (raw_name, set(stem_norm.split()) if stem_norm else set(), compact_name(raw_name))
 
     updated = {p.index: p for p in people}
 
     for row_idx, row in df.iterrows():
-        stem_tokens, stem_compact = row_name_tokens(row)
+        raw_name, stem_tokens, stem_compact = row_name_tokens(row)
         if not stem_tokens and not stem_compact:
             continue
 
         matches: list[int] = []
         if advanced_name_match and person_tokens:
-            for person_index, (first_parts, last_parts) in person_tokens.items():
-                if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
-                    matches.append(person_index)
+            matches = match_people(raw_name, person_tokens)
         if len(matches) != 1:
             if len(matches) > 1:
                 warnings.append(f"Row {row_idx + 2}: matches multiple people by name")
