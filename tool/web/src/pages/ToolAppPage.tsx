@@ -250,6 +250,32 @@ export function ToolAppPage() {
     return () => window.removeEventListener("ymga:load-sample-done", onDone);
   }, []);
 
+  // A 401 from any /api/ route (except licensing) means the stored key stopped
+  // working (expiry, revocation, usage limit). Return to the licence-entry
+  // screen but keep the typed key so the user can correct and retry; browser
+  // work is preserved in local storage.
+  useEffect(() => {
+    const onLicenseInvalid = (event: Event) => {
+      if (!getStoredLicenseKey()) return;
+      const reason = (event as CustomEvent<{ reason?: unknown }>).detail?.reason;
+      const reasonText =
+        reason != null && String(reason).trim() !== "" ? ` (reason: ${String(reason)})` : "";
+      setValid(false);
+      setChecking(false);
+      setLockConflict(null);
+      setResolvedWorkspaceId(null);
+      setResolvedLicenseType(null);
+      setLicenseKeyInput((prev) => prev || getStoredLicenseKey() || "");
+      setLicenseError(
+        `Your licence key is no longer valid (it may have expired, been revoked, or reached its limit). Enter a valid key to continue — your work in this browser is kept.${reasonText}`
+      );
+    };
+    window.addEventListener("ymga:license-invalid", onLicenseInvalid as EventListener);
+    return () => {
+      window.removeEventListener("ymga:license-invalid", onLicenseInvalid as EventListener);
+    };
+  }, []);
+
   const handleLoadSample = () => {
     setSampleBusy(true);
     setHelpOpen(false);
