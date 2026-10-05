@@ -73,12 +73,23 @@ def test_uploaded_font_by_filename_still_works(ws):
 
 
 def test_every_picker_font_resolves_to_its_own_family(ws):
+    from PIL import ImageFont
+
     from app.services import fonts
     entries = fonts.list_system_fonts()
     if not entries:
         pytest.skip("no system fonts")
     mismatches = []
+    skipped_unloadable = []
     for entry in entries:
+        # Bitmap-only fonts (e.g. Noto Color Emoji, single embedded strike) cannot be
+        # loaded by Pillow at arbitrary sizes; falling back for those is correct, so
+        # only assert the roundtrip for fonts Pillow can actually render at this size.
+        try:
+            ImageFont.truetype(entry["filename"], size=20)
+        except Exception:
+            skipped_unloadable.append(entry["name"])
+            continue
         font = _load_font(ws, f'"{entry["name"]}"', "normal", size=20)
         got = fonts._font_name_from_file(Path(font.path)).lower()
         if got != entry["name"].lower():

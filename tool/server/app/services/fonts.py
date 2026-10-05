@@ -71,29 +71,38 @@ _BOLD_WORDS = ("bold", "black", "heavy", "semibold", "demibold", "extrabold")
 _REGULAR_STYLES = ("regular", "book", "roman", "normal", "medium", "")
 
 
-def _family_and_style(path: Path) -> tuple[str, str]:
+def _family_style_keys(path: Path) -> list[tuple[str, str]]:
     try:
         font = TTFont(str(path), lazy=True)
-        family = style = ""
+        family = subfamily = typo_family = typo_style = ""
         for rec in font["name"].names:
             if rec.nameID == 1 and not family:
                 family = str(rec.toStr())
-            elif rec.nameID == 2 and not style:
-                style = str(rec.toStr())
+            elif rec.nameID == 2 and not subfamily:
+                subfamily = str(rec.toStr())
             elif rec.nameID == 16:  # typographic family wins when present
-                family = str(rec.toStr())
+                typo_family = str(rec.toStr())
             elif rec.nameID == 17:
-                style = str(rec.toStr())
-        return (family or path.stem), style
+                typo_style = str(rec.toStr())
+        keys: list[tuple[str, str]] = []
+        if family or subfamily:
+            keys.append((family or path.stem, subfamily))
+        elif not typo_family:
+            return [(path.stem, "")]
+        if typo_family and typo_family.strip().lower() != (family or "").strip().lower():
+            keys.append((typo_family, typo_style))
+        elif typo_family and (typo_style or "").strip().lower() != (subfamily or "").strip().lower():
+            keys.append((typo_family, typo_style))
+        return keys or [(path.stem, "")]
     except Exception:
-        return path.stem, ""
+        return [(path.stem, "")]
 
 
 def _index(paths: list[Path]) -> dict[str, list[tuple[str, Path]]]:
     out: dict[str, list[tuple[str, Path]]] = {}
     for p in paths:
-        family, style = _family_and_style(p)
-        out.setdefault(family.strip().lower(), []).append((style.strip().lower(), p))
+        for family, style in _family_style_keys(p):
+            out.setdefault(family.strip().lower(), []).append((style.strip().lower(), p))
     return out
 
 
