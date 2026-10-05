@@ -1514,6 +1514,23 @@ export default function App({
 
       const shouldUseSavedWorkspace = !initialWorkspaceId || initialWorkspaceId === saved?.workspaceId;
 
+      // The server handed us a different workspace than the saved session
+      // (restart or expiry): stash the saved settings as a backup before the
+      // autosave persist effect overwrites them, and explain what happened.
+      if (saved?.workspaceId && initialWorkspaceId && initialWorkspaceId !== saved.workspaceId) {
+        try {
+          window.localStorage.setItem(
+            "ymga-session-backup-v1",
+            JSON.stringify({ ...saved, saved_at: new Date().toISOString() })
+          );
+        } catch {
+          // ignore quota / privacy mode; the notice below still applies
+        }
+        setStatus(
+          "Your previous project's files are no longer on the server (the session expired or the server was restarted). Your settings were saved as a backup — use File → Upload config after re-uploading files, or start again."
+        );
+      }
+
       // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
       if (saved && shouldUseSavedWorkspace && !(workspaceId || templateId || people.length || slots.length)) {
         // Allow deep-linking: if /app?step=N is present, prefer that over the saved step.
