@@ -46,20 +46,34 @@ _SAFE_BASENAME_RE = re.compile(r"[^0-9A-Za-z._-]+")
 _OUTPUT_EXTS = {".png", ".pdf", ".tif", ".tiff"}
 
 
+_SPREAD_NUM_RE = re.compile(r"^output_(\d+)$")
+
+
 def _list_output_files(root) -> list:
-    # Prefer multi-spread outputs if present; otherwise fall back to a single output.<ext>.
-    spread_files: list = []
-    for ext in sorted(_OUTPUT_EXTS):
-        spread_files.extend(sorted(root.glob(f"output_*.{ext.lstrip('.')}")))
+    """Return the most recent render's spread files, ordered by spread number.
 
-    if not spread_files:
-        for ext in sorted(_OUTPUT_EXTS):
-            single = root / f"output{ext}"
-            if single.exists():
-                spread_files = [single]
-                break
+    A workspace can hold leftovers from earlier renders in other formats; only the
+    extension group with the newest file is returned.
+    """
+    candidates = [p for p in root.glob("output*") if p.is_file() and p.suffix.lower() in _OUTPUT_EXTS]
+    if not candidates:
+        return []
+    newest_ext = max(candidates, key=lambda p: p.stat().st_mtime).suffix.lower()
+    group = [p for p in candidates if p.suffix.lower() == newest_ext]
+    spreads = [p for p in group if _SPREAD_NUM_RE.match(p.stem)]
+    if spreads:
+        return sorted(spreads, key=lambda p: int(_SPREAD_NUM_RE.match(p.stem).group(1)))
+    return [p for p in group if p.stem == "output"][:1]
 
-    return spread_files
+
+def _clear_previous_outputs(root, keep: str) -> None:
+    """Delete output.* / output_*.* files (any format) except `keep`. Never touches preview.*."""
+    for p in root.glob("output*"):
+        if p.is_file() and p.name != keep and p.suffix.lower() in _OUTPUT_EXTS and (p.stem == "output" or _SPREAD_NUM_RE.match(p.stem)):
+            try:
+                p.unlink()
+            except OSError:
+                pass
 
 
 def _find_preview_file(root) -> str | None:
@@ -181,6 +195,10 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             }
 
     job_id = uuid4().hex
+    # A new full render starts at spread 1 (or the single-file output): drop leftovers
+    # from earlier renders so downloads never mix old and new spreads.
+    if re.match(r"^output(_0*1)?\.[a-z]+$", requested_output):
+        _clear_previous_outputs(workspace_dir(payload.workspace_id), keep=requested_output)
     try:
         start_job(job_id, payload.workspace_id)
     except Exception:
