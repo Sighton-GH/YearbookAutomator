@@ -1012,14 +1012,19 @@ export default function App({
     const annotated = annotatedOverride ?? importAnnotated;
     const clean = cleanOverride ?? importClean;
     if (!annotated || !clean) return;
+    if (!workspaceId) {
+      setConfigImportError("Your session is still starting. Wait a moment and try again.");
+      return;
+    }
     setConfigImportError("");
     setConfigImportBusy(true);
     try {
       const s = configToImport.session;
-      const newWs = await importTemplateRemote({
+      const resp = await importTemplateRemote({
         session: s,
         annotated,
         clean,
+        workspaceId,
         parseTemplate,
         setStatus: setConfigImportStatus,
         promptHandlers: {
@@ -1040,11 +1045,20 @@ export default function App({
       });
 
       // Bind everything to the new workspace.
-      setImportWorkspaceId(newWs);
+      setImportWorkspaceId(resp.template_id);
       setImportTemplateDone(true);
 
       // Apply config session immediately (so the user lands back on their stage).
-      applyImportedSession(s, newWs);
+      applyImportedSession(s, resp.template_id);
+      if (!s.templateSize || s.templateSize.width !== resp.width || s.templateSize.height !== resp.height) {
+        setSlots(resp.slots);
+        setParsedSlots(resp.slots.map((x) => ({ ...x })));
+        setTemplateSize({ width: resp.width, height: resp.height });
+        setConfigImportStatus(
+          (prev) =>
+            `${prev} The template you uploaded is a different size from the one in this config, so the freshly detected layout was used instead of the saved slot positions.`.trim()
+        );
+      }
     } catch (err) {
       setConfigImportError(`Template parsing failed.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
