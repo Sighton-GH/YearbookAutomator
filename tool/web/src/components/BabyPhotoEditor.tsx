@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Cropper, { getInitialCropFromCroppedAreaPixels, type Area, type MediaSize } from "react-easy-crop";
 import {
   assetUrl,
@@ -152,7 +152,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
   };
 
-  const openEditor = (idx: number) => {
+  const openEditor = useCallback((idx: number) => {
     if (!workspaceId) return;
     const p = people[idx];
     const babyFilename = p?.baby_photo_filename ?? defaultBabyFilename;
@@ -194,9 +194,9 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
-  };
+  }, [workspaceId, people, defaultBabyFilename, babyBackgroundMode, setStatus]);
 
-  const closeEditor = () => {
+  const closeEditor = useCallback(() => {
     if (editingBusy) return;
     if (dirtyEdits) {
       setShowDiscardWarning(true);
@@ -234,7 +234,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
-  };
+  }, [editingBusy, dirtyEdits]);
 
   const discardAndCloseEditor = () => {
     if (editingBusy) return;
@@ -694,6 +694,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setEditingSrc(base);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+    setRotation(0);
     setCroppedAreaPixels(null);
     setRemoveBgPopoverOpen(false);
     setCenterFacePopoverOpen(false);
@@ -714,7 +715,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setStatus("Reset to original");
   };
 
-  useImperativeHandle(ref, () => ({ openEditor, closeEditor }), [openEditor]);
+  useImperativeHandle(ref, () => ({ openEditor, closeEditor }), [openEditor, closeEditor]);
 
   return (
     <>
@@ -921,7 +922,10 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                     aspect={cropAspect}
                     cropSize={editorCropSize ?? undefined}
                     onMediaLoaded={(ms) => setEditorMediaSize(ms)}
-                    onCropChange={setCrop}
+                    onCropChange={(c) => {
+                      setCrop(c);
+                      setDirtyEdits(true);
+                    }}
                     onZoomChange={(z) => {
                       setZoom(Math.max(0.5, Math.min(3, z)));
                       setDirtyEdits(true);
