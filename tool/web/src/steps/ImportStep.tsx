@@ -544,12 +544,9 @@ export function ImportStep({
       setStatus("Parse the template first");
       return null;
     }
-    if (!sheet || !zip) {
+    if (!sheet) {
       setShowMissingPortraits(true);
-      const missing: string[] = [];
-      if (!sheet) missing.push("Spreadsheet (.xlsx or .csv)");
-      if (!zip) missing.push("Portraits ZIP (.zip)");
-      setStatus(`Missing required file(s): ${missing.join(", ")}`);
+      setStatus("Missing required file(s): Spreadsheet (.xlsx or .csv)");
       scrollTo(portraitsRef.current);
       return null;
     }
@@ -602,7 +599,11 @@ export function ImportStep({
       const nextWarnings = resp.warnings ?? [];
       onPortraitWarnings(nextWarnings);
       onPortraitCompletedErrorCount(nextWarnings.length);
-      setStatus("Portrait mapping processing completed");
+      if (!zip) {
+        setStatus("Roster loaded without portraits. Students will use the default portrait until you upload a portraits ZIP.");
+      } else {
+        setStatus("Portrait mapping processing completed");
+      }
       setProgress(100);
       setPortraitsStage("done");
       return resp.people;
@@ -1261,7 +1262,7 @@ export function ImportStep({
           <StageIcon status={portraitsLocked ? "pending" : portraitsStage} />
           <h3>Roster &amp; Portraits</h3>
           <InfoPopover
-            content="Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. Portrait files named with the row number (1.jpg, 01.jpg or 001.jpg → row 1) are matched first, with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings."
+            content="Upload a spreadsheet (.xlsx or .csv); a portraits ZIP is optional. Portrait files named with the row number (1.jpg, 01.jpg or 001.jpg → row 1) are matched first, with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings. Without a portraits ZIP, students use the default portrait until you upload one."
             ariaLabel="Roster and portraits description"
             position="below"
           />
@@ -1294,12 +1295,10 @@ export function ImportStep({
               </UploadDropLabel>
             </div>
             <div>
-              <div className="upload-title">Portraits ZIP</div>
-              {showMissingPortraits && !zip && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
+              <div className="upload-title">Portraits ZIP (optional)</div>
               <UploadDropLabel
                 accept=".zip"
                 disabled={loading || portraitsLocked}
-                className={showMissingPortraits && !zip ? "invalid" : undefined}
                 onFile={(file) => {
                   setShowMissingPortraits(false);
                   setZip(file);
