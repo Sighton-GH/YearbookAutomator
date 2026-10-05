@@ -93,7 +93,6 @@ def test_unpadded_numbers_match_with_default_pattern():
         io.BytesIO(b"First Name,Last Name\nAnn,Lee\nBob,Ray\n"),
         "r.csv",
         _zip({"1.jpg": _jpeg("red"), "2.jpg": _jpeg("blue")}),
-        naming_pattern=r"\d{1,4}",
     )
     assert r.people[0].mugshot_filename is not None
     assert r.people[1].mugshot_filename is not None
