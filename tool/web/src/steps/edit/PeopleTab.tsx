@@ -354,11 +354,18 @@ export function PeopleTab({
       setStatus("No original mapping to reset to");
       return;
     }
-    setPeople(originalPeople.map((p) => ({ ...p })));
+    const originalMugshotByIndex = new Map(originalPeople.map((p) => [p.index, p.mugshot_filename ?? null]));
+    setPeople(
+      people.map((p) =>
+        originalMugshotByIndex.has(p.index)
+          ? { ...p, mugshot_filename: originalMugshotByIndex.get(p.index) ?? null }
+          : p
+      )
+    );
     setAdjustments({});
     setSwapMode("off");
     setSwapsPerformed(false);
-    setStatus("Reset to original mapping");
+    setStatus("Portraits reset to their original matches (quotes and baby photos kept).");
   };
 
   // ---- Default portraits management ----
@@ -499,7 +506,7 @@ export function PeopleTab({
                 ? "Remove portrait?"
                 : confirmAction?.kind === "apply-mapping"
                   ? "Apply mapping changes?"
-                  : "Reset mapping?"
+                  : "Reset portraits to how they were first matched"
           }
           message={
             confirmAction?.kind === "remove-person"
@@ -508,7 +515,7 @@ export function PeopleTab({
                 ? "This will clear the portrait for this person."
                 : confirmAction?.kind === "apply-mapping"
                   ? "Apply the current shift/replace/remove adjustments to the mapping?"
-                  : "This will revert mapping changes back to the original ingest result."
+                  : "This will reset portraits to how they were first matched. Quotes and baby photos will be kept."
           }
           confirmLabel={confirmAction?.kind === "apply-mapping" ? "Apply" : confirmAction?.kind === "reset-mapping" ? "Reset" : "Remove"}
           cancelLabel="Cancel"
@@ -536,7 +543,7 @@ export function PeopleTab({
               onClick={() => setConfirmAction({ kind: "reset-mapping" })}
               disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
             >
-              Reset to original mapping
+              Reset portraits to how they were first matched
             </button>
             <div className="inline" style={{ gap: 8, marginLeft: "auto" }}>
               <button type="button" className={clsx({ primary: swapMode === "card" })} onClick={() => setSwapMode((v) => (v === "card" ? "off" : "card"))}>
