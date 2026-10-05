@@ -44,6 +44,19 @@ def start_job(job_id: str, workspace_id: str, *, kind: str, source_filename: str
             oldest = sorted(_jobs, key=lambda key: float(_jobs[key].get("updated_at") or 0))
             for key in oldest[: len(_jobs) - 999]:
                 _jobs.pop(key, None)
+        for existing in _jobs.values():
+            if existing.get("workspace_id") == workspace_id:
+                existing["result_bytes"] = None
+                existing["result_bytes_at"] = None
+            stored_at = existing.get("result_bytes_at")
+            if existing.get("result_bytes") is not None and stored_at is not None:
+                try:
+                    age = now - float(stored_at)
+                except (TypeError, ValueError):
+                    age = 0.0
+                if age > 30 * 60:
+                    existing["result_bytes"] = None
+                    existing["result_bytes_at"] = None
         _jobs[job_id] = {
             "job_id": job_id,
             "workspace_id": workspace_id,
@@ -61,6 +74,7 @@ def start_job(job_id: str, workspace_id: str, *, kind: str, source_filename: str
             "already_removed": False,
             # Optional in-memory preview payload (used for non-destructive previews).
             "result_bytes": None,
+            "result_bytes_at": None,
         }
 
 
@@ -93,6 +107,7 @@ def update_job(
             job["completed_at"] = now
         if result_bytes is not None:
             job["result_bytes"] = result_bytes
+            job["result_bytes_at"] = now
         if already_removed is not None:
             job["already_removed"] = bool(already_removed)
         job["updated_at"] = now
@@ -103,16 +118,6 @@ def get_job(job_id: str) -> Optional[dict]:
         job = _jobs.get(job_id)
         return dict(job) if job else None
 
-
-def pop_result_bytes(job_id: str) -> Optional[bytes]:
-    """Return and clear the stored preview bytes for a completed job."""
-    with _lock:
-        job = _jobs.get(job_id)
-        if not job:
-            return None
-        b = job.get("result_bytes")
-        job["result_bytes"] = None
-        return b
 
 
 def _eta_seconds_from_progress(started_at: float, progress: int) -> Optional[int]:
