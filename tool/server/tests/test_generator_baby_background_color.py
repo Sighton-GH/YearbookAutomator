@@ -123,8 +123,8 @@ def test_generate_composite_rejects_more_people_than_slots_before_writing():
     assert list(root.glob("output*")) == []
 
 
-@pytest.mark.parametrize("color", ["#FFF", "#ffffff", "ffffff", "", None])
-def test_baby_background_color_accepts_valid_values(color: str | None):
+@pytest.mark.parametrize("color", ["#FFF", "#ffffff", "ffffff"])
+def test_baby_background_color_accepts_valid_values(color: str):
     ws = "ws-baby-bg-valid"
     payload = GenerationRequest(
         slots=[_mk_slot(10, 10)],
@@ -132,7 +132,19 @@ def test_baby_background_color_accepts_valid_values(color: str | None):
         baby_background_color=color,
         **_base_payload_kwargs(ws),
     )
-    assert payload.baby_background_color in (color, None)
+    assert payload.baby_background_color == color
+
+
+@pytest.mark.parametrize("color", ["", "   ", None])
+def test_baby_background_color_empty_normalises_to_none(color: str | None):
+    ws = "ws-baby-bg-empty"
+    payload = GenerationRequest(
+        slots=[_mk_slot(10, 10)],
+        people=[PersonRecord(index=1, first_name="A", last_name="B")],
+        baby_background_color=color,
+        **_base_payload_kwargs(ws),
+    )
+    assert payload.baby_background_color is None
 
 
 def test_baby_background_color_rejects_invalid_hex():
