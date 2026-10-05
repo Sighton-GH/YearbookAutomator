@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { clsx } from "clsx";
 import { LayoutGrid } from "lucide-react";
 import type { Box, RawParseDebug, TemplateSlots } from "../../api";
 import { TemplatePreview } from "../../components/TemplatePreview";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Inspector } from "../../components/Inspector";
 import { SlotInspectorFields } from "../../components/SlotInspectorFields";
 import { groupSlotsByProximity } from "../../utils/slots";
@@ -36,6 +38,19 @@ export function LayoutTab({
   rawDebug: RawParseDebug | null;
 }) {
   const selected = selectedSlot != null ? slots[selectedSlot] : null;
+  const [regroupConfirm, setRegroupConfirm] = useState<TemplateSlots[] | null>(null);
+
+  const requestRegroup = () => {
+    const regrouped = groupSlotsByProximity(slots, peoplePerSpread);
+    if (regrouped.length < slots.length) {
+      setRegroupConfirm(regrouped);
+      return;
+    }
+    onSlots(regrouped);
+  };
+  const regroupMessage = regroupConfirm
+    ? `Regrouping keeps ${regroupConfirm.length} slots and removes ${slots.length - regroupConfirm.length}. Continue?`
+    : undefined;
 
   return (
     <div className="layout-with-inspector">
@@ -60,12 +75,25 @@ export function LayoutTab({
           <button
             type="button"
             className="chip"
-            onClick={() => onSlots(groupSlotsByProximity(slots, peoplePerSpread))}
+            onClick={requestRegroup}
             disabled={!slots.length}
           >
             Regroup nearby slots
           </button>
         </div>
+
+        <ConfirmDialog
+          open={Boolean(regroupConfirm)}
+          title="Regroup nearby slots?"
+          message={regroupMessage}
+          confirmLabel="Continue"
+          cancelLabel="Cancel"
+          onCancel={() => setRegroupConfirm(null)}
+          onConfirm={() => {
+            if (regroupConfirm) onSlots(regroupConfirm);
+            setRegroupConfirm(null);
+          }}
+        />
 
         <TemplatePreview
           slots={slots}
@@ -139,6 +167,7 @@ export function LayoutTab({
           <>
             <SlotInspectorFields
               slot={selected}
+              templateSize={templateSize}
               onChange={(next) => {
                 const copy = slots.map((s, i) => (i === selectedSlot ? next : s));
                 onSlots(copy);

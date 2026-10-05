@@ -10,6 +10,7 @@ type SpreadUploadOptions = {
 export type SpreadUploadPromptHandlers = {
   onLowResolution?: (message: string) => Promise<"continue" | "cancel">;
   onPortraitNeedsReview?: (message: string) => Promise<"continue" | "cancel">;
+  onSizeMismatch?: (message: string) => Promise<"continue" | "cancel">;
 };
 
 export type SpreadUploadHandlingResult = {
@@ -38,6 +39,22 @@ export async function handleSpreadUploads(
 ): Promise<SpreadUploadHandlingResult> {
   const annotatedSize = await getImageDimensions(opts.annotated);
   const cleanSize = await getImageDimensions(opts.clean);
+
+  if (annotatedSize.width !== cleanSize.width || annotatedSize.height !== cleanSize.height) {
+    const message = `The annotated template is ${annotatedSize.width}×${annotatedSize.height} but the clean template is ${cleanSize.width}×${cleanSize.height}. They should be the same size, or boxes will land in the wrong place. Continue anyway?`;
+    if (opts.promptHandlers?.onSizeMismatch) {
+      const decision = await opts.promptHandlers.onSizeMismatch(message);
+      if (decision === "cancel") {
+        return {
+          annotated: opts.annotated,
+          clean: opts.clean,
+          canceled: true,
+          didDuplicate: false,
+          didRotate: false,
+        };
+      }
+    }
+  }
 
   const width = cleanSize.width || annotatedSize.width;
   const height = cleanSize.height || annotatedSize.height;

@@ -304,6 +304,7 @@ export function ImportStep({
   const [lowResWarning, setLowResWarning] = useState<string | null>(null);
   const [portraitReviewOpen, setPortraitReviewOpen] = useState(false);
   const [portraitReviewMessage, setPortraitReviewMessage] = useState<string | null>(null);
+  const [sizeMismatchMessage, setSizeMismatchMessage] = useState<string | null>(null);
   const [autoDuplicatePortrait, setAutoDuplicatePortrait] = useState(false);
   const [annotatedPreviewOpen, setAnnotatedPreviewOpen] = useState(false);
   const [cleanPreviewOpen, setCleanPreviewOpen] = useState(false);
@@ -311,6 +312,7 @@ export function ImportStep({
   const lastHandledKeyRef = useRef<string | null>(null);
   const lowResResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
   const portraitReviewResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
+  const sizeMismatchResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
   const templateEstimateRef = useRef(4);
 
   // --- Roster + Portraits card state ---
@@ -446,6 +448,11 @@ export function ImportStep({
                   portraitReviewResolverRef.current = resolve;
                   setPortraitReviewMessage(message);
                   setPortraitReviewOpen(true);
+                }),
+              onSizeMismatch: (message) =>
+                new Promise<"continue" | "cancel">((resolve) => {
+                  sizeMismatchResolverRef.current = resolve;
+                  setSizeMismatchMessage(message);
                 }),
             },
           });
@@ -981,6 +988,23 @@ export function ImportStep({
         cancelLabel="Close"
         onCancel={() => setCleanPreviewOpen(false)}
         busy={templateRotating}
+      />
+      <ConfirmDialog
+        open={Boolean(sizeMismatchMessage)}
+        title="Template sizes differ"
+        message={sizeMismatchMessage ?? undefined}
+        confirmLabel="Continue"
+        cancelLabel="Go back"
+        onCancel={() => {
+          sizeMismatchResolverRef.current?.("cancel");
+          sizeMismatchResolverRef.current = null;
+          setSizeMismatchMessage(null);
+        }}
+        onConfirm={() => {
+          sizeMismatchResolverRef.current?.("continue");
+          sizeMismatchResolverRef.current = null;
+          setSizeMismatchMessage(null);
+        }}
       />
       <ConfirmDialog
         open={Boolean(importConfirm)}
