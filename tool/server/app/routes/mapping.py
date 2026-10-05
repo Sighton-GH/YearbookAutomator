@@ -281,6 +281,31 @@ def _looks_like_url(text: str) -> bool:
     return bool(re.search(r"\bhttps?://\S+\b", text, flags=re.IGNORECASE))
 
 
+def _is_placeholder_quote(text: str) -> bool:
+    s = (text or "").strip().strip(".!?-\u2014\u2013:;'\"").strip().casefold()
+    if not s:
+        return True
+    return s in {
+        "rejected",
+        "reject",
+        "denied",
+        "not approved",
+        "n/a",
+        "na",
+        "none",
+        "nil",
+        "null",
+        "tbd",
+        "tba",
+        "pending",
+        "no quote",
+        "noquote",
+        "x",
+        "-",
+        "\u2014",
+    }
+
+
 def _looks_like_quote(text: str) -> bool:
     s = (text or "").strip()
     if not s:
@@ -823,9 +848,9 @@ async def upload_quotes_spreadsheet(
     buf = io.BytesIO(data)
     try:
         if filename.lower().endswith(".csv"):
-            df = pd.read_csv(buf)
+            df = pd.read_csv(buf, dtype=str, keep_default_na=False)
         else:
-            df = pd.read_excel(buf)
+            df = pd.read_excel(buf, dtype=str, keep_default_na=False)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not read quotes spreadsheet: {exc}")
 
@@ -936,6 +961,11 @@ async def upload_quotes_spreadsheet(
                     f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell looks like a link or email, so it was not used."
                 )
                 continue
+            if _is_placeholder_quote(s):
+                warnings.append(
+                    f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell says \"{_truncate(s)}\", which looks like a placeholder, so no quote was used."
+                )
+                continue
             updated[person_index] = updated[person_index].model_copy(update={"quote": s})
             applied += 1
             continue
@@ -953,7 +983,7 @@ async def upload_quotes_spreadsheet(
                 continue
             candidates.append(s)
 
-        quote_candidates = [c for c in candidates if _looks_like_quote(c)]
+        quote_candidates = [c for c in candidates if _looks_like_quote(c) and not _is_placeholder_quote(c)]
         if not quote_candidates:
             warnings.append(
                 f"Row {row_idx + 2}: {_display_name(person_index)} — no quote-like text found, so no quote was used."
