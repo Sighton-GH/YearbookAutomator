@@ -1281,6 +1281,7 @@ export function ImportStep({
                 onFile={(file) => {
                   setShowMissingPortraits(false);
                   setSheet(file);
+                  setPortraitsStage("pending");
                 }}
               >
                 <input
@@ -1289,6 +1290,7 @@ export function ImportStep({
                   onChange={(e) => {
                     setShowMissingPortraits(false);
                     setSheet(e.target.files?.[0] ?? null);
+                    setPortraitsStage("pending");
                   }}
                 />
                 {sheet && <span className="muted small">{sheet.name}</span>}
@@ -1302,6 +1304,7 @@ export function ImportStep({
                 onFile={(file) => {
                   setShowMissingPortraits(false);
                   setZip(file);
+                  setPortraitsStage("pending");
                 }}
               >
                 <input
@@ -1310,6 +1313,7 @@ export function ImportStep({
                   onChange={(e) => {
                     setShowMissingPortraits(false);
                     setZip(e.target.files?.[0] ?? null);
+                    setPortraitsStage("pending");
                   }}
                 />
                 {zip && <span className="muted small">{zip.name}</span>}
@@ -1401,8 +1405,22 @@ export function ImportStep({
         )}
         <fieldset className="import-card-fieldset">
           <div className="upload-title">Quotes spreadsheet (optional)</div>
-          <UploadDropLabel accept=".xlsx,.csv" disabled={loading} onFile={setQuotesSheet}>
-            <input type="file" accept=".xlsx,.csv" onChange={(e) => setQuotesSheet(e.target.files?.[0] ?? null)} />
+          <UploadDropLabel
+            accept=".xlsx,.csv"
+            disabled={loading}
+            onFile={(file) => {
+              setQuotesSheet(file);
+              setQuotesStage("pending");
+            }}
+          >
+            <input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(e) => {
+                setQuotesSheet(e.target.files?.[0] ?? null);
+                setQuotesStage("pending");
+              }}
+            />
             {quotesSheet && <span className="muted small">{quotesSheet.name}</span>}
           </UploadDropLabel>
           {advancedNameMatchingEnabled && (
@@ -1470,8 +1488,22 @@ export function ImportStep({
         )}
         <fieldset className="import-card-fieldset">
           <div className="upload-title">Baby photo ZIP (optional)</div>
-            <UploadDropLabel accept=".zip" disabled={loading} onFile={setBabyZip}>
-              <input type="file" accept=".zip" onChange={(e) => setBabyZip(e.target.files?.[0] ?? null)} />
+            <UploadDropLabel
+              accept=".zip"
+              disabled={loading}
+              onFile={(file) => {
+                setBabyZip(file);
+                setBabyStage("pending");
+              }}
+            >
+              <input
+                type="file"
+                accept=".zip"
+                onChange={(e) => {
+                  setBabyZip(e.target.files?.[0] ?? null);
+                  setBabyStage("pending");
+                }}
+              />
               {babyZip && <span className="muted small">{babyZip.name}</span>}
             </UploadDropLabel>
 
