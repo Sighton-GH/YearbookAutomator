@@ -1,6 +1,7 @@
 import type React from "react";
 import { useRef, useState } from "react";
 import type { Box, TemplateSlots } from "../api";
+import { clampBox } from "../utils/slots";
 
 export function TemplatePreview({
   slots,
@@ -48,7 +49,7 @@ export function TemplatePreview({
     if (!onUpdate) return;
     const next = slots.map((slot, i) => {
       if (i !== slotIdx) return slot;
-      return { ...slot, [part]: updater(slot[part]) } as TemplateSlots;
+      return { ...slot, [part]: clampBox(updater(slot[part]), size) } as TemplateSlots;
     });
     onUpdate(next);
   };

@@ -1,4 +1,14 @@
-import type { TemplateSlots } from "../api";
+import type { Box, TemplateSlots } from "../api";
+
+export function clampBox(box: Box, templateSize: { width: number; height: number }): Box {
+  const W = Math.max(1, Math.round(templateSize.width));
+  const H = Math.max(1, Math.round(templateSize.height));
+  const x = Math.max(0, Math.min(W - 1, Math.round(box.x)));
+  const y = Math.max(0, Math.min(H - 1, Math.round(box.y)));
+  const width = Math.max(1, Math.min(Math.max(1, Math.round(box.width)), W - x));
+  const height = Math.max(1, Math.min(Math.max(1, Math.round(box.height)), H - y));
+  return { x, y, width, height };
+}
 
 export function groupSlotsByProximity(slots: TemplateSlots[], maxKeep?: number): TemplateSlots[] {
   if (slots.length <= 1) return [...slots].slice(0, maxKeep ?? slots.length);

@@ -1,4 +1,5 @@
 import type { Box, TemplateSlots } from "../api";
+import { clampBox } from "../utils/slots";
 
 const PARTS: (keyof TemplateSlots)[] = ["mugshot", "baby_photo", "name", "quote"];
 
@@ -12,12 +13,23 @@ const PART_LABELS: Record<keyof TemplateSlots, string> = {
 export function SlotInspectorFields({
   slot,
   onChange,
+  templateSize,
 }: {
   slot: TemplateSlots;
   onChange: (next: TemplateSlots) => void;
+  templateSize?: { width: number; height: number } | null;
 }) {
   const update = (part: keyof TemplateSlots, field: keyof Box, value: number) => {
-    onChange({ ...slot, [part]: { ...slot[part], [field]: value } });
+    const raw = { ...slot[part], [field]: value };
+    const next = templateSize ? clampBox(raw, templateSize) : { ...raw, x: Math.round(raw.x), y: Math.round(raw.y), width: Math.max(1, Math.round(raw.width)), height: Math.max(1, Math.round(raw.height)) };
+    onChange({ ...slot, [part]: next });
+  };
+
+  const handleRaw = (part: keyof TemplateSlots, field: keyof Box, rawValue: string) => {
+    if (rawValue.trim() === "") return;
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    update(part, field, value);
   };
 
   return (
@@ -30,32 +42,40 @@ export function SlotInspectorFields({
               <span>X</span>
               <input
                 type="number"
+                min={0}
+                step={1}
                 value={slot[part].x}
-                onChange={(e) => update(part, "x", Number(e.target.value))}
+                onChange={(e) => handleRaw(part, "x", e.target.value)}
               />
             </label>
             <label>
               <span>Y</span>
               <input
                 type="number"
+                min={0}
+                step={1}
                 value={slot[part].y}
-                onChange={(e) => update(part, "y", Number(e.target.value))}
+                onChange={(e) => handleRaw(part, "y", e.target.value)}
               />
             </label>
             <label>
               <span>W</span>
               <input
                 type="number"
+                min={0}
+                step={1}
                 value={slot[part].width}
-                onChange={(e) => update(part, "width", Number(e.target.value))}
+                onChange={(e) => handleRaw(part, "width", e.target.value)}
               />
             </label>
             <label>
               <span>H</span>
               <input
                 type="number"
+                min={0}
+                step={1}
                 value={slot[part].height}
-                onChange={(e) => update(part, "height", Number(e.target.value))}
+                onChange={(e) => handleRaw(part, "height", e.target.value)}
               />
             </label>
           </div>
