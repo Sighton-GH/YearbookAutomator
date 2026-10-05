@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.models.schemas import GenerationRequest
 from app.services.licensing import (
@@ -29,8 +30,11 @@ from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
 from app.services.storage import restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services.progress import (
+    GenerationCancelled,
     get_job,
+    raise_if_cancelled,
     release_generation,
+    request_cancel,
     start_job,
     try_reserve_generation,
     update_job,
@@ -214,9 +218,15 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
         pass
 
     def run_generation():
+        def progress_cb(pct, msg):
+            raise_if_cancelled(job_id)
+            update_job(job_id, progress=pct, status=msg)
+
         try:
-            out_path = generate_composite(payload, progress_cb=lambda pct, msg: update_job(job_id, progress=pct, status=msg))
+            out_path = generate_composite(payload, progress_cb=progress_cb)
             update_job(job_id, progress=100, status="done", output=out_path.name)
+        except GenerationCancelled:
+            update_job(job_id, status="cancelled", error="generation_cancelled")
         except Exception as exc:  # pragma: no cover - defensive
             update_job(job_id, status="error", error=str(exc))
         finally:
@@ -231,6 +241,20 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if usage_payload is not None:
         resp["usage"] = usage_payload
     return resp
+
+
+class CancelGenerationRequest(BaseModel):
+    job_id: str
+    workspace_id: str
+
+
+@router.post("/cancel")
+async def cancel(payload: CancelGenerationRequest, request: Request) -> dict[str, Any]:
+    enforce_workspace_write(request, payload.workspace_id)
+    job = get_job(payload.job_id)
+    if not job or job.get("workspace_id") != payload.workspace_id:
+        return {"ok": False}
+    return {"ok": request_cancel(payload.job_id)}
 
 
 @router.get("/download")

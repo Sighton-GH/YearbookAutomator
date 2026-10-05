@@ -112,3 +112,55 @@ def test_clear_previous_outputs_removes_stale_spreads_but_not_preview(tmp_path):
         (tmp_path / name).write_bytes(b"x")
     _clear_previous_outputs(tmp_path, keep="output_01.png")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["output_01.png", "preview.png"]
+
+
+def test_cancel_generation_marks_job_and_rejects_other_workspace(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path / "licenses"))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+    monkeypatch.setenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "false")
+
+    from app import main as main_mod
+
+    importlib.reload(main_mod)
+
+    from app.services import storage
+
+    monkeypatch.setattr(storage, "BASE_DATA", tmp_path / "data")
+    storage.BASE_DATA.mkdir(parents=True, exist_ok=True)
+
+    from live_test_client import LiveTestClient
+
+    client = LiveTestClient(main_mod.app)
+    key = licensing.create_license(license_type="commercial", note="test")
+
+    from app.services.workspace_registry import resolve_workspace
+
+    workspace_id = resolve_workspace(
+        license_key=key, license_type="commercial", device_id="dev1", session_id="session-cancel"
+    ).workspace_id
+    assert workspace_id
+
+    from app.services import progress
+
+    job_id = "job-cancel-1"
+    progress.start_job(job_id, workspace_id)
+
+    resp = client.post(
+        "/api/generation/cancel",
+        json={"job_id": job_id, "workspace_id": workspace_id},
+        headers={"X-License-Key": key, "X-Device-Id": "dev1"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert progress.is_cancel_requested(job_id) is True
+
+    progress.start_job("job-cancel-other", "ws-other")
+    resp = client.post(
+        "/api/generation/cancel",
+        json={"job_id": "job-cancel-other", "workspace_id": workspace_id},
+        headers={"X-License-Key": key, "X-Device-Id": "dev1"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": False}
