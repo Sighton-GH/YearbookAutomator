@@ -2066,6 +2066,7 @@ export default function App({
     countUsage?: boolean;
     suppressStatus?: boolean;
     manageLoading?: boolean;
+    onError?: (message: string) => void;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
     const manageLoading = opts.manageLoading ?? true;
@@ -2202,8 +2203,10 @@ export default function App({
           }
 
           if (statusResp.error) {
+            const msg = `Generation failed.\nserver message:\n${statusResp.error}`;
+            opts.onError?.(msg);
             if (!suppressStatus) {
-              setStatus(`Generation failed.\nserver message:\n${statusResp.error}`);
+              setStatus(msg);
             }
             if (manageLoading) {
               setLoading(false);
@@ -2224,8 +2227,10 @@ export default function App({
           await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           console.error(err);
+          const msg = `Generation polling failed.\n${formatServerMessage(err)}`;
+          opts.onError?.(msg);
           if (!suppressStatus) {
-            setStatus(`Generation polling failed.\n${formatServerMessage(err)}`);
+            setStatus(msg);
           }
           if (manageLoading) {
             setLoading(false);
@@ -2239,8 +2244,10 @@ export default function App({
     } catch (err) {
       console.error(err);
       const base = opts.outputFilename ? "Preview generation failed" : "Generation failed";
+      const msg = `${base}.\n${formatServerMessage(err)}`;
+      opts.onError?.(msg);
       if (!suppressStatus) {
-        setStatus(`${base}.\n${formatServerMessage(err)}`);
+        setStatus(msg);
       }
       if (manageLoading) {
         setLoading(false);
@@ -2283,16 +2290,17 @@ export default function App({
     setOutputPath(null);
 
     const overallStartMs = performance.now();
-    const maxParallel = 3;
+    const maxParallel = 1;
     const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
     const results: (string | null)[] = Array.from({ length: totalSpreads }, () => null);
     let completed = 0;
     let nextIndex = 0;
     let failed = false;
+    let lastError: string | null = null;
 
     setLoading(true);
     setProgress(0);
-    setStatus(`Rendering ${totalSpreads} spreads (max ${maxParallel} at a time)...`);
+    setStatus(`Rendering ${totalSpreads} spreads…`);
 
     const worker = async () => {
       while (true) {
@@ -2304,7 +2312,7 @@ export default function App({
         const start = spreadIdx * perSpread;
         const end = Math.min(peopleForAll.length, start + perSpread);
         const spreadPeople = peopleForAll.slice(start, end);
-        const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.${ext}`;
+        const filename = `output_${String(spreadIdx + 1).padStart(totalSpreads >= 100 ? 3 : 2, "0")}.${ext}`;
         const out = await runGeneration({
           outputFilename: filename,
           peopleOverride: spreadPeople,
@@ -2314,6 +2322,9 @@ export default function App({
           countUsage: spreadIdx === 0,
           suppressStatus: true,
           manageLoading: false,
+          onError: (message) => {
+            lastError = message;
+          },
         });
 
         if (!out) {
@@ -2334,7 +2345,7 @@ export default function App({
     await Promise.all(workers);
 
     if (failed) {
-      setStatus("Generation failed.\nOne or more spreads did not render successfully.");
+      setStatus(`Generation stopped at spread ${completed + 1} of ${totalSpreads}. The spreads already finished are still available below; fix the problem shown above and press Render all again.${lastError ? `\n${lastError}` : ""}`);
       setLoading(false);
       return;
     }
