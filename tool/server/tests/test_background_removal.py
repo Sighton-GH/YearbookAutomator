@@ -42,6 +42,79 @@ def test_remove_background_complex_grabcut_outputs_alpha():
     assert out_img.getpixel((128, 140))[3] > 120
 
 
+import importlib
+
+
+def _setup(tmp_path, monkeypatch, session_id):
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path / "licenses"))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+    monkeypatch.setenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "false")
+
+    from app import main as main_mod
+
+    importlib.reload(main_mod)
+
+    from app.services import storage
+
+    monkeypatch.setattr(storage, "BASE_DATA", tmp_path / "data")
+    storage.BASE_DATA.mkdir(parents=True, exist_ok=True)
+
+    from live_test_client import LiveTestClient
+
+    client = LiveTestClient(main_mod.app)
+    try:
+        from app.services import licensing
+        from app.services.workspace_registry import resolve_workspace
+
+        key = licensing.create_license(license_type="commercial", note="test")
+        workspace_id = resolve_workspace(
+            license_key=key,
+            license_type="commercial",
+            device_id="dev1",
+            session_id=session_id,
+        ).workspace_id
+        assert workspace_id
+        headers = {"X-License-Key": key, "X-Device-Id": "dev1"}
+        return client, workspace_id, headers
+    except Exception:
+        client.close()
+        raise
+
+
+def test_preview_result_can_be_fetched_twice(tmp_path, monkeypatch):
+    client, workspace_id, headers = _setup(tmp_path, monkeypatch, "preview-twice")
+    try:
+        from app.services import background_jobs
+
+        job_id = "preview-twice-job"
+        background_jobs.start_job(
+            job_id,
+            workspace_id,
+            kind="baby",
+            source_filename="baby.png",
+            mode="simple",
+            output_filename="baby_nobg.png",
+        )
+        background_jobs.update_job(job_id, result_bytes=b"fake-preview-png")
+        background_jobs.update_job(job_id, progress=100, status="done", message="Done")
+
+        first = client.get(
+            "/api/mapping/remove-background-preview-result",
+            params={"job_id": job_id},
+            headers=headers,
+        )
+        assert first.status_code == 200, first.text
+        second = client.get(
+            "/api/mapping/remove-background-preview-result",
+            params={"job_id": job_id},
+            headers=headers,
+        )
+        assert second.status_code == 200, second.text
+        assert second.content == first.content == b"fake-preview-png"
+    finally:
+        client.close()
+
+
 def test_remove_background_runs_when_alpha_is_tiny_noise():
     # Some PNGs contain a small number of semi/transparent pixels even when the
     # background is not actually removed. We should still perform background

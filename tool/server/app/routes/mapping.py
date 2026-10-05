@@ -45,7 +45,6 @@ from app.services.background_jobs import (
     try_reserve_job as try_reserve_bg_job,
     update_job as update_bg_job,
     get_job as get_bg_job,
-    pop_result_bytes as pop_bg_result_bytes,
     to_status_payload,
 )
 from app.services.admin_settings import get_face_detection_settings
@@ -595,9 +594,9 @@ async def remove_background_preview_result(job_id: str, request: Request):
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     if job.get("status") != "done":
         raise HTTPException(status_code=409, detail="Job not completed")
-    b = pop_bg_result_bytes(job_id)
+    b = bytes(job.get("result_bytes") or b"")
     if not b:
-        raise HTTPException(status_code=410, detail="Preview already fetched")
+        raise HTTPException(status_code=404, detail="Preview not available")
     return Response(content=b, media_type="image/png")
 
 
