@@ -424,6 +424,14 @@ export async function generationStatus(jobId: string) {
   return data;
 }
 
+export async function cancelGeneration(jobId: string, workspaceId: string): Promise<boolean> {
+  const { data } = await axios.post<{ ok: boolean }>("/api/generation/cancel", {
+    job_id: jobId,
+    workspace_id: workspaceId,
+  });
+  return Boolean(data.ok);
+}
+
 export async function generationListOutputs(workspaceId: string): Promise<GenerationOutputsResponse> {
   const { data } = await axios.get<GenerationOutputsResponse>("/api/generation/outputs", {
     params: { workspace_id: workspaceId },

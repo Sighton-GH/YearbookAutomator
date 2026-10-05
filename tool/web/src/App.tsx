@@ -25,6 +25,7 @@ import {
   generationDownloadSpreadsheetUrl,
   generationStatus,
   generationListOutputs,
+  cancelGeneration,
   touchWorkspace,
   deleteWorkspace,
   getWorkspaceState,
@@ -420,6 +421,8 @@ export default function App({
 
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const cancelRequestedRef = useRef(false);
 
   const isServerProvidedDefaultBaby = (filename: string | null | undefined): boolean => {
     const name = String(filename || "").toLowerCase();
@@ -2146,15 +2149,29 @@ export default function App({
       });
 
       const jobId = gen.jobId;
+      activeJobIdRef.current = jobId;
       if (opts.countUsage && gen.usage) setUsageInfo(gen.usage);
 
       const jobStartMs = performance.now();
+      let lastProgress = -1;
+      let lastStatusText = "";
+      let lastChangeMs = Date.now();
+      let pollIntervalMs = 400;
 
       while (true) {
         try {
           const statusResp = await generationStatus(jobId);
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
+          const statusText = statusResp.status || "";
+          if (spreadPct !== lastProgress || statusText !== lastStatusText) {
+            lastProgress = spreadPct;
+            lastStatusText = statusText;
+            lastChangeMs = Date.now();
+          } else if (Date.now() - lastChangeMs >= 10 * 60 * 1000) {
+            pollIntervalMs = 2000;
+            setStatus("Rendering seems stuck (no progress for 10 minutes). Press Cancel, then try again.");
+          }
           const hasMulti = Boolean(opts.spreadIndex && opts.totalSpreads && typeof opts.overallStartMs === "number");
 
           // Progress bar: overall for multi-spread renders, per-spread otherwise.
@@ -2203,7 +2220,9 @@ export default function App({
           }
 
           if (statusResp.error) {
-            const msg = `Generation failed.\nserver message:\n${statusResp.error}`;
+            const cancelled = cancelRequestedRef.current && statusResp.error === "generation_cancelled";
+            const msg = cancelled ? "Rendering cancelled." : `Generation failed.\nserver message:\n${statusResp.error}`;
+            activeJobIdRef.current = null;
             opts.onError?.(msg);
             if (!suppressStatus) {
               setStatus(msg);
@@ -2215,6 +2234,7 @@ export default function App({
           }
           if (statusResp.output) {
             opts.onDone?.(statusResp.output);
+            activeJobIdRef.current = null;
             if (!suppressStatus) {
               setStatus(opts.outputFilename ? "Preview ready" : "Generation complete");
               setProgress(100);
@@ -2224,9 +2244,10 @@ export default function App({
             }
             return statusResp.output;
           }
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
         } catch (err) {
           console.error(err);
+          activeJobIdRef.current = null;
           const msg = `Generation polling failed.\n${formatServerMessage(err)}`;
           opts.onError?.(msg);
           if (!suppressStatus) {
@@ -2243,6 +2264,7 @@ export default function App({
       return null;
     } catch (err) {
       console.error(err);
+      activeJobIdRef.current = null;
       const base = opts.outputFilename ? "Preview generation failed" : "Generation failed";
       const msg = `${base}.\n${formatServerMessage(err)}`;
       opts.onError?.(msg);
@@ -2256,8 +2278,21 @@ export default function App({
     }
   };
 
+  const handleCancelRender = async () => {
+    cancelRequestedRef.current = true;
+    const id = activeJobIdRef.current;
+    if (id && workspaceId) {
+      try {
+        await cancelGeneration(id, workspaceId);
+      } catch {
+        /* status poll will surface it */
+      }
+    }
+  };
+
   const handleRenderPreview = async () => {
     if (!workspaceId || !templateId) return;
+    cancelRequestedRef.current = false;
     const count = Math.min(slots.length || people.length, people.length);
     const previewPeople = getPeopleForGeneration(people).slice(0, count);
 
@@ -2276,6 +2311,7 @@ export default function App({
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
 
+    cancelRequestedRef.current = false;
     setUsageInfo(null);
 
     const peopleForAll = getPeopleForGeneration(people);
@@ -2304,6 +2340,10 @@ export default function App({
 
     const worker = async () => {
       while (true) {
+        if (cancelRequestedRef.current) {
+          failed = true;
+          return;
+        }
         if (failed) return;
         const spreadIdx = nextIndex;
         if (spreadIdx >= totalSpreads) return;
@@ -2345,7 +2385,11 @@ export default function App({
     await Promise.all(workers);
 
     if (failed) {
-      setStatus(`Generation stopped at spread ${completed + 1} of ${totalSpreads}. The spreads already finished are still available below; fix the problem shown above and press Render all again.${lastError ? `\n${lastError}` : ""}`);
+      if (cancelRequestedRef.current) {
+        setStatus(`Rendering cancelled after ${completed} of ${totalSpreads} spreads.`);
+      } else {
+        setStatus(`Generation stopped at spread ${completed + 1} of ${totalSpreads}. The spreads already finished are still available below; fix the problem shown above and press Render all again.${lastError ? `\n${lastError}` : ""}`);
+      }
       setLoading(false);
       return;
     }
@@ -3117,6 +3161,7 @@ export default function App({
                 canContinue={canContinue}
                 handleRenderPreview={handleRenderPreview}
                 handleRenderAll={handleRenderAll}
+                onCancelRender={handleCancelRender}
                 workspaceId={workspaceId}
                 previewPath={previewPath}
                 previewNonce={previewNonce}
