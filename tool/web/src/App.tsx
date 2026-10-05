@@ -945,6 +945,18 @@ export default function App({
     setQuoteAllCaps(Boolean(session.quoteAllCaps));
     setQuoteAlign((session.quoteAlign as Align) ?? "left");
     setPeoplePerSpread(typeof session.peoplePerSpread === "number" ? session.peoplePerSpread : 16);
+    if (session.outputFormat === "png" || session.outputFormat === "pdf" || session.outputFormat === "tiff") {
+      setOutputFormat(session.outputFormat);
+    }
+    if (
+      session.outputSize &&
+      typeof session.outputSize.width === "number" &&
+      typeof session.outputSize.height === "number" &&
+      session.outputSize.width > 0 &&
+      session.outputSize.height > 0
+    ) {
+      setOutputSize({ width: session.outputSize.width, height: session.outputSize.height });
+    }
 
     setTemplatePreviewUrl(`${templateCleanUrl(newWorkspaceId)}&t=${Date.now()}`);
     setAnnotatedPreviewUrl(`${templateAnnotatedUrl(newWorkspaceId)}&t=${Date.now()}`);
