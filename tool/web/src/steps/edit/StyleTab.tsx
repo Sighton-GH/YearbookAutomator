@@ -157,7 +157,6 @@ function StylePreview({
     fontWeight: quoteFontWeight === "bold" ? 700 : 400,
     textAlign: quoteAlign,
     textTransform: quoteAllCaps ? "uppercase" : "none",
-    fontStyle: "italic",
   };
 
   return (
