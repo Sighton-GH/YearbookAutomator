@@ -118,8 +118,6 @@ def auto_place_slots_for_people(
     slot_assignments = slot_assignments or {}
 
     slot_number_to_index = compute_slot_number_to_index(slots, placement_mode)
-
-    slot_number_to_index = compute_slot_number_to_index(slots, placement_mode)
     n_slots = len(slot_number_to_index)
 
     def _requested_slot_number(person: PersonRecord) -> int | None:
