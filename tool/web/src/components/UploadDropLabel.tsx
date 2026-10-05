@@ -22,7 +22,29 @@ export function UploadDropLabel({
   const [dragOver, setDragOver] = useState(false);
   const [hasFile, setHasFile] = useState(false);
   const [fileName, setFileName] = useState<string>("");
+  const [rejectMessage, setRejectMessage] = useState<string | null>(null);
   const labelRef = useRef<HTMLLabelElement | null>(null);
+
+  const describeAccept = (raw?: string): string => {
+    if (!raw) return "supported files";
+    const tokens = raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (!tokens.length) return "supported files";
+    const words = tokens.map((tokenRaw) => {
+      const token = tokenRaw.toLowerCase();
+      if (token === "image/png") return "PNG";
+      if (token === "image/jpeg" || token === "image/jpg") return "JPG";
+      if (token === "image/webp") return "WEBP";
+      if (token === "image/*") return "images";
+      if (token.startsWith(".")) return token.slice(1).toUpperCase();
+      return tokenRaw;
+    });
+    const unique = [...new Set(words)];
+    if (unique.length === 1) return unique[0] ?? "supported files";
+    return `${unique.slice(0, -1).join(", ")} or ${unique[unique.length - 1]}`;
+  };
 
   const setInputFileAndDispatch = (file: File): boolean => {
     const input = labelRef.current?.querySelector('input[type="file"]') as HTMLInputElement | null;
@@ -67,7 +89,11 @@ export function UploadDropLabel({
 
     const files = filesFromDataTransfer(e.dataTransfer);
     const accepted = files.filter((f) => matchesAccept(f, accept));
-    if (!accepted.length) return;
+    if (!accepted.length) {
+      setRejectMessage(`That file type isn't accepted here. Use: ${describeAccept(accept)}.`);
+      return;
+    }
+    setRejectMessage(null);
 
     if (multiple && onFiles) {
       const dispatched = accepted[0] ? setInputFileAndDispatch(accepted[0]) : false;
@@ -103,15 +129,18 @@ export function UploadDropLabel({
           injected = true;
 
           const existingOnChange = props?.onChange as ((e: any) => void) | undefined;
-            const wrappedOnChange = (e: any) => {
+          const wrappedOnChange = (e: any) => {
             const files = e?.target?.files as FileList | undefined;
             const nextHasFile = Boolean(files && files.length > 0);
             setHasFile(nextHasFile);
-              setFileName(
-                nextHasFile
-                  ? (multiple && files && files.length > 1 ? `${files.length} files selected` : files?.[0]?.name ?? "")
-                  : ""
-              );
+            setFileName(
+              nextHasFile
+                ? multiple && files && files.length > 1
+                  ? `${files.length} files selected`
+                  : (files?.[0]?.name ?? "")
+                : ""
+            );
+            if (nextHasFile) setRejectMessage(null);
             existingOnChange?.(e);
               if (!existingOnChange && files && files.length > 0) {
                 const nextFiles = Array.from(files).filter((f) => matchesAccept(f, accept));
@@ -182,8 +211,16 @@ export function UploadDropLabel({
       out.push(child);
     }
 
+    if (rejectMessage) {
+      out.push(
+        <span key="__upload_reject_message" className="upload-error" role="alert">
+          {rejectMessage}
+        </span>
+      );
+    }
+
     return out;
-  }, [children, disabled, fileName, hasFile]);
+  }, [children, disabled, fileName, hasFile, accept, multiple, onFile, onFiles, rejectMessage]);
 
   return (
     <label

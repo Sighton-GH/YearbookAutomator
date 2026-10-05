@@ -418,8 +418,8 @@ export function ImportStep({
     if (missingAnnotated || missingClean) {
       setShowMissingTemplate(true);
       const missing: string[] = [];
-      if (missingAnnotated) missing.push("Annotated template (.png)");
-      if (missingClean) missing.push("Clean template (.png)");
+      if (missingAnnotated) missing.push("Annotated template (.png or .jpg)");
+      if (missingClean) missing.push("Clean template (.png or .jpg)");
       setStatus(`Missing required file(s): ${missing.join(", ")}`);
       scrollTo(templateRef.current);
       return false;
@@ -1052,10 +1052,10 @@ export function ImportStep({
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           <div>
-            <div className="upload-title">Annotated template (.png)</div>
+            <div className="upload-title">Annotated template (.png or .jpg)</div>
             {missingAnnotatedUi && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
             <UploadDropLabel
-              accept="image/png"
+              accept="image/png,image/jpeg,image/webp"
               disabled={loading}
               className={missingAnnotatedUi ? "invalid" : undefined}
               onFile={(file) => {
@@ -1065,7 +1065,7 @@ export function ImportStep({
             >
               <input
                 type="file"
-                accept="image/png"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
                   setShowMissingTemplate(false);
                   onAnnotatedChange(e.target.files?.[0] ?? null);
@@ -1088,10 +1088,10 @@ export function ImportStep({
           </div>
 
           <div>
-            <div className="upload-title">Clean template (.png)</div>
+            <div className="upload-title">Clean template (.png or .jpg)</div>
             {missingCleanUi && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
             <UploadDropLabel
-              accept="image/png"
+              accept="image/png,image/jpeg,image/webp"
               disabled={loading}
               className={missingCleanUi ? "invalid" : undefined}
               onFile={(file) => {
@@ -1101,7 +1101,7 @@ export function ImportStep({
             >
               <input
                 type="file"
-                accept="image/png"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
                   setShowMissingTemplate(false);
                   onCleanChange(e.target.files?.[0] ?? null);
