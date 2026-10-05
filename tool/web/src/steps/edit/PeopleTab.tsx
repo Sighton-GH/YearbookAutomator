@@ -725,7 +725,7 @@ export function PeopleTab({
                   onDrop={(evt) => {
                     if (isLocked) {
                       evt.preventDefault();
-                      setStatus("That student is locked. Unlock them in the Inspector to move them.");
+                      setStatus(LOCKED_SWAP_MESSAGE);
                       setDropTarget(null);
                       setDragIdx(null);
                       return;
