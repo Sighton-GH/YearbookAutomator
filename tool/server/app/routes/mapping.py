@@ -877,7 +877,34 @@ async def upload_quotes_spreadsheet(
         stem_norm = normalize_name(raw_name)
         return (raw_name, set(stem_norm.split()) if stem_norm else set(), compact_name(raw_name))
 
+    def _truncate(value: object, limit: int = 60) -> str:
+        s = "" if value is None else str(value)
+        return s if len(s) <= limit else s[:limit]
+
+    def _display_name(person_index: int) -> str:
+        person = next((p for p in people if p.index == person_index), None)
+        if person is None:
+            return f"person {person_index}"
+        full = f"{person.first_name} {person.last_name}".strip()
+        return full or f"person {person_index}"
+
+    has_name_column = (
+        (first_col is not None and last_col is not None)
+        or name_col is not None
+        or any("name" in str(c).lower() for c in df.columns)
+    )
+    if not has_name_column:
+        return SpreadsheetPreview(
+            workspace_id=workspace_id,
+            people=list(people),
+            warnings=[
+                "The quotes spreadsheet has no student name column, so quotes could not be matched. "
+                "Add 'First Name' and 'Last Name' columns (or one 'Name' column)."
+            ],
+        )
+
     updated = {p.index: p for p in people}
+    applied = 0
 
     for row_idx, row in df.iterrows():
         raw_name, stem_tokens, stem_compact = row_name_tokens(row)
@@ -891,53 +918,59 @@ async def upload_quotes_spreadsheet(
             if len(matches) > 1:
                 warnings.append(f"Row {row_idx + 2}: matches multiple people by name")
             else:
-                warnings.append(f"Row {row_idx + 2}: no name match")
+                warnings.append(f"Row {row_idx + 2}: no student matched the name \"{_truncate(raw_name)}\".")
             continue
 
         person_index = matches[0]
 
-        # 1) Prefer an explicit "quote" column if present.
-        preferred = None
+        # 1) Prefer an explicit "quote" column if present: accept any non-empty
+        # cell that is not a link or email. Heuristic quote detection
+        # (_looks_like_quote) applies only to the fallback scan below.
         if quote_col is not None:
             val = row.get(quote_col)
-            if val is not None and not (isinstance(val, float) and pd.isna(val)):
-                s = str(val).strip()
-                if s and _looks_like_quote(s):
-                    preferred = s
-
-        # 2) Fall back to scanning the row for the best quote-like cell.
-        if preferred is None:
-            candidates: list[str] = []
-            for col in df.columns:
-                if col in {first_col, last_col, name_col, quote_col}:
-                    continue
-                val = row.get(col)
-                if val is None or (isinstance(val, float) and pd.isna(val)):
-                    continue
-                s = str(val).strip()
-                if not s:
-                    continue
-                candidates.append(s)
-
-            quote_candidates = [c for c in candidates if _looks_like_quote(c)]
-            if not quote_candidates:
-                # If quote column exists but didn't pass heuristics, include that detail.
-                if quote_col is not None:
-                    raw = row.get(quote_col)
-                    raw_s = "" if raw is None or (isinstance(raw, float) and pd.isna(raw)) else str(raw).strip()
-                    if raw_s:
-                        warnings.append(
-                            f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' did not look like a quote"
-                        )
-                    else:
-                        warnings.append(f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' was empty")
-                else:
-                    warnings.append(f"Row {row_idx + 2}: matched person {person_index} but no quote-like text found")
+            s = "" if val is None or (isinstance(val, float) and pd.isna(val)) else str(val).strip()
+            if not s:
+                warnings.append(f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell is empty.")
                 continue
-            preferred = max(quote_candidates, key=lambda s: len(s))
+            if _looks_like_url(s) or _looks_like_email(s):
+                warnings.append(
+                    f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell looks like a link or email, so it was not used."
+                )
+                continue
+            updated[person_index] = updated[person_index].model_copy(update={"quote": s})
+            applied += 1
+            continue
+
+        # 2) No explicit quote column: scan the row for the best quote-like cell.
+        candidates: list[str] = []
+        for col in df.columns:
+            if col in {first_col, last_col, name_col}:
+                continue
+            val = row.get(col)
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                continue
+            s = str(val).strip()
+            if not s:
+                continue
+            candidates.append(s)
+
+        quote_candidates = [c for c in candidates if _looks_like_quote(c)]
+        if not quote_candidates:
+            warnings.append(
+                f"Row {row_idx + 2}: {_display_name(person_index)} — no quote-like text found, so no quote was used."
+            )
+            continue
+        preferred = max(quote_candidates, key=lambda s: len(s))
 
         quote = preferred
         updated[person_index] = updated[person_index].model_copy(update={"quote": quote})
+        applied += 1
+
+    if applied == 0:
+        warnings.insert(
+            0,
+            "No rows matched a student on the roster. Check that the names in the quotes sheet match the roster spelling.",
+        )
 
     # preserve original order
     out_people = [updated[p.index] for p in people]
