@@ -119,35 +119,54 @@ def auto_place_slots_for_people(
 
     slot_number_to_index = compute_slot_number_to_index(slots, placement_mode)
 
+    slot_number_to_index = compute_slot_number_to_index(slots, placement_mode)
+    n_slots = len(slot_number_to_index)
+
+    def _requested_slot_number(person: PersonRecord) -> int | None:
+        raw = slot_assignments.get(int(person.index))
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    claimed: dict[int, int] = {}  # logical slot idx -> position in people
+    assigned_logical: list[int | None] = [None] * len(people)
+
+    # Pass 1: honor valid, uncontested assignments in list order. The first
+    # person to claim a logical slot keeps it; later collisions fall through
+    # to pass 2 instead of raising (nothing in the UI sets slot numbers, so
+    # these can only come from older saved sessions and must never dead-end).
+    for pos, person in enumerate(people):
+        requested = _requested_slot_number(person)
+        if requested is None:
+            continue
+        logical_idx = requested - 1
+        if 0 <= logical_idx < n_slots and logical_idx not in claimed:
+            claimed[logical_idx] = pos
+            assigned_logical[pos] = logical_idx
+
+    # Pass 2: everyone without a slot (no assignment, out-of-range
+    # assignment, or lost collision) takes their default position if free,
+    # else the lowest unclaimed logical slot.
+    for i in range(len(people)):
+        if assigned_logical[i] is not None:
+            continue
+        if 0 <= i < n_slots and i not in claimed:
+            logical_idx = i
+        elif len(claimed) < n_slots:
+            logical_idx = next(l for l in range(n_slots) if l not in claimed)
+        else:
+            # More people than slots: the generator rejects this case before
+            # calling us; keep the default position rather than crashing.
+            logical_idx = min(i, n_slots - 1)
+        claimed[logical_idx] = i
+        assigned_logical[i] = logical_idx
+
     out_slots: list[TemplateSlots] = []
-    chosen_slot_indices: list[int] = []
-    for i, person in enumerate(people):
-        default_slot_number = i + 1
-        assigned_slot_number = int(slot_assignments.get(int(person.index), default_slot_number))
-        logical_idx = assigned_slot_number - 1
-        if logical_idx < 0 or logical_idx >= len(slot_number_to_index):
-            # Ignore the out-of-range override: keep this person's default slot
-            # instead of piling them onto slot 1 on top of whoever is there.
-            logical_idx = min(i, len(slot_number_to_index) - 1)
-        actual_idx = slot_number_to_index[logical_idx]
-        out_slots.append(slots[actual_idx])
-        chosen_slot_indices.append(actual_idx)
-
-    def _display_name(p: PersonRecord) -> str:
-        full = f"{_normalize_name(p.first_name)} {_normalize_name(p.last_name)}".strip()
-        return full or f"student {int(p.index)}"
-
-    seen: dict[int, int] = {}
-    for pos, actual_idx in enumerate(chosen_slot_indices):
-        if actual_idx in seen:
-            other = people[seen[actual_idx]]
-            person = people[pos]
-            slot_number = slot_number_to_index.index(actual_idx) + 1
-            raise ValueError(
-                f"Two students are assigned to slot {slot_number}: "
-                f"{_display_name(other)} and {_display_name(person)}. "
-                "Change one of their slot numbers on the People step."
-            )
-        seen[actual_idx] = pos
+    for logical in assigned_logical:
+        assert logical is not None
+        out_slots.append(slots[slot_number_to_index[logical]])
 
     return people, out_slots
