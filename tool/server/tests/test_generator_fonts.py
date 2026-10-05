@@ -70,3 +70,28 @@ def test_uploaded_font_by_filename_still_works(ws):
     shutil.copy(src, fonts_dir / "Custom.ttf")
     font = _load_font(ws, "Custom.ttf", "normal", size=30)
     assert Path(font.path).name == "Custom.ttf"
+
+
+def test_every_picker_font_resolves_to_its_own_family(ws):
+    from app.services import fonts
+    entries = fonts.list_system_fonts()
+    if not entries:
+        pytest.skip("no system fonts")
+    mismatches = []
+    for entry in entries:
+        font = _load_font(ws, f'"{entry["name"]}"', "normal", size=20)
+        got = fonts._font_name_from_file(Path(font.path)).lower()
+        if got != entry["name"].lower():
+            mismatches.append((entry["name"], str(font.path), got))
+    assert not mismatches, mismatches[:10]
+
+
+def test_condensed_family_name_resolves(ws):
+    src = Path("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf")
+    if not src.exists():
+        pytest.skip("DejaVuSansCondensed not installed")
+    font = _load_font(ws, '"DejaVu Sans Condensed"', "normal", 20)
+    assert str(font.path).endswith("DejaVuSansCondensed.ttf")
+    if Path("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf").exists():
+        bold = _load_font(ws, '"DejaVu Sans Condensed"', "bold", 20)
+        assert str(bold.path).endswith("DejaVuSansCondensed-Bold.ttf")
