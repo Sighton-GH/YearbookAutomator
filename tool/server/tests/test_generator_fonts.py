@@ -106,3 +106,49 @@ def test_condensed_family_name_resolves(ws):
     if Path("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf").exists():
         bold = _load_font(ws, '"DejaVu Sans Condensed"', "bold", 20)
         assert str(bold.path).endswith("DejaVuSansCondensed-Bold.ttf")
+
+
+DEJAVU = Path("/usr/share/fonts/truetype/dejavu")
+UBUNTU = Path("/usr/share/fonts/truetype/ubuntu")
+
+
+@pytest.mark.skipif(not (DEJAVU / "DejaVuSans.ttf").exists(), reason="DejaVu not installed")
+def test_dejavu_sans_regular_and_bold(ws):
+    font = _load_font(ws, '"DejaVu Sans"', "normal", size=30)
+    assert Path(font.path).name == "DejaVuSans.ttf"
+
+
+@pytest.mark.skipif(not (DEJAVU / "DejaVuSans-Bold.ttf").exists(), reason="DejaVu not installed")
+def test_dejavu_sans_bold_picks_bold(ws):
+    font = _load_font(ws, '"DejaVu Sans"', "bold", size=30)
+    assert Path(font.path).name == "DejaVuSans-Bold.ttf"
+
+
+@pytest.mark.skipif(not (UBUNTU / "Ubuntu-R.ttf").exists(), reason="Ubuntu not installed")
+def test_ubuntu_regular(ws):
+    font = _load_font(ws, '"Ubuntu"', "normal", size=30)
+    assert Path(font.path).name == "Ubuntu-R.ttf"
+
+
+@pytest.mark.skipif(not (UBUNTU / "Ubuntu-B.ttf").exists(), reason="Ubuntu not installed")
+def test_ubuntu_bold(ws):
+    font = _load_font(ws, '"Ubuntu"', "bold", size=30)
+    assert Path(font.path).name == "Ubuntu-B.ttf"
+
+
+@pytest.mark.skipif(not (LIB / "LiberationSans-Regular.ttf").exists(), reason="Liberation fonts not installed")
+def test_liberation_sans_regular(ws):
+    font = _load_font(ws, '"Liberation Sans"', "normal", size=30)
+    assert Path(font.path).name == "LiberationSans-Regular.ttf"
+
+
+@pytest.mark.skipif(not (LIB / "LiberationSans-Bold.ttf").exists(), reason="Liberation fonts not installed")
+def test_liberation_sans_bold(ws):
+    font = _load_font(ws, '"Liberation Sans"', "bold", size=30)
+    assert Path(font.path).name == "LiberationSans-Bold.ttf"
+
+
+@pytest.mark.skipif(not (DEJAVU / "DejaVuSansCondensed.ttf").exists(), reason="DejaVu not installed")
+def test_dejavu_sans_condensed_regular(ws):
+    font = _load_font(ws, '"DejaVu Sans Condensed"', "normal", size=30)
+    assert Path(font.path).name == "DejaVuSansCondensed.ttf"
