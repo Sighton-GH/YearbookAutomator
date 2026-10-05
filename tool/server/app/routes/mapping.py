@@ -16,7 +16,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.mapping_review import apply_mapping_decisions
-from app.services.spreadsheet import ingest_spreadsheet
+from app.services.spreadsheet import RosterFormatError, ingest_spreadsheet
 from app.services.storage import safe_filename, save_upload, workspace_dir, workspace_file
 from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
 from app.services.background_removal import (
@@ -388,14 +388,17 @@ async def ingest(
         save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(mugshot_bytes))
         mugshots_file = io.BytesIO((root / "uploads" / "mugshots.zip").read_bytes())
 
-    return ingest_spreadsheet(
-        workspace_id,
-        spreadsheet_file,
-        spreadsheet_name,
-        mugshots_file,
-        naming_pattern,
-        advanced_name_match=advanced_name_match,
-    )
+    try:
+        return ingest_spreadsheet(
+            workspace_id,
+            spreadsheet_file,
+            spreadsheet_name,
+            mugshots_file,
+            naming_pattern,
+            advanced_name_match=advanced_name_match,
+        )
+    except RosterFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @router.post("/review", response_model=SpreadsheetPreview)
