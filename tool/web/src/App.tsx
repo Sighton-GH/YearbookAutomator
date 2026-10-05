@@ -2164,11 +2164,13 @@ export default function App({
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
           const statusText = statusResp.status || "";
+          let stuck = false;
           if (spreadPct !== lastProgress || statusText !== lastStatusText) {
             lastProgress = spreadPct;
             lastStatusText = statusText;
             lastChangeMs = Date.now();
           } else if (Date.now() - lastChangeMs >= 10 * 60 * 1000) {
+            stuck = true;
             pollIntervalMs = 2000;
             setStatus("Rendering seems stuck (no progress for 10 minutes). Press Cancel, then try again.");
           }
@@ -2215,7 +2217,7 @@ export default function App({
             }
           }
           if (etaSeconds !== null) parts.push(`ETA ${formatEtaSeconds(etaSeconds)}`);
-          if (!suppressStatus) {
+          if (!suppressStatus && !stuck) {
             setStatus(parts.join(" — "));
           }
 
