@@ -12,6 +12,7 @@ from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.placement import auto_place_slots_for_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
+from app.services.fonts import resolve_font_file
 
 
 _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
@@ -171,6 +172,14 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
             continue
         if uploaded.exists():
             loaded = _try_truetype(str(uploaded), size=size)
+            if loaded is not None:
+                return loaded
+
+    bold = (font_weight or "").strip().lower() in {"bold", "700", "800", "900"}
+    for cand in candidates:
+        path = resolve_font_file(workspace_id, cand, bold)
+        if path is not None:
+            loaded = _try_truetype(str(path), size=size)
             if loaded is not None:
                 return loaded
 

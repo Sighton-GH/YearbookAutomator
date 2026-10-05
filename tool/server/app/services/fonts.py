@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from functools import lru_cache
 from pathlib import Path
 from typing import List
 
@@ -64,3 +65,74 @@ def list_workspace_fonts(workspace_id: str) -> List[dict]:
 def font_mime(path: Path) -> str:
     mime, _ = mimetypes.guess_type(path.name)
     return mime or "font/ttf"
+
+
+_BOLD_WORDS = ("bold", "black", "heavy", "semibold", "demibold", "extrabold")
+_REGULAR_STYLES = ("regular", "book", "roman", "normal", "medium", "")
+
+
+def _family_and_style(path: Path) -> tuple[str, str]:
+    try:
+        font = TTFont(str(path), lazy=True)
+        family = style = ""
+        for rec in font["name"].names:
+            if rec.nameID == 1 and not family:
+                family = str(rec.toStr())
+            elif rec.nameID == 2 and not style:
+                style = str(rec.toStr())
+            elif rec.nameID == 16:  # typographic family wins when present
+                family = str(rec.toStr())
+            elif rec.nameID == 17:
+                style = str(rec.toStr())
+        return (family or path.stem), style
+    except Exception:
+        return path.stem, ""
+
+
+def _index(paths: list[Path]) -> dict[str, list[tuple[str, Path]]]:
+    out: dict[str, list[tuple[str, Path]]] = {}
+    for p in paths:
+        family, style = _family_and_style(p)
+        out.setdefault(family.strip().lower(), []).append((style.strip().lower(), p))
+    return out
+
+
+@lru_cache(maxsize=1)
+def _system_index() -> dict[str, list[tuple[str, Path]]]:
+    paths: list[Path] = []
+    for folder in SYSTEM_FONTS_DIRS:
+        if folder.exists():
+            paths.extend(folder.glob("**/*.ttf"))
+            paths.extend(folder.glob("**/*.otf"))
+    return _index(paths)
+
+
+def _pick_style(entries: list[tuple[str, Path]], bold: bool) -> Path | None:
+    def is_bold(style: str) -> bool:
+        return any(w in style for w in _BOLD_WORDS)
+
+    upright = [(s, p) for s, p in entries if "italic" not in s and "oblique" not in s]
+    pool = upright or entries
+    if bold:
+        for s, p in pool:
+            if is_bold(s):
+                return p
+    for wanted in _REGULAR_STYLES:
+        for s, p in pool:
+            if s == wanted:
+                return p
+    non_bold = [p for s, p in pool if not is_bold(s)]
+    return (non_bold or [p for _, p in pool] or [None])[0]
+
+
+def resolve_font_file(workspace_id: str, family: str, bold: bool) -> Path | None:
+    key = (family or "").strip().strip('"').strip("'").lower()
+    if not key:
+        return None
+    fonts_root = workspace_dir(workspace_id) / "fonts"
+    uploaded = [p for p in fonts_root.glob("*.*") if p.suffix.lower() in {".ttf", ".otf"}] if fonts_root.exists() else []
+    for index in (_index(uploaded), _system_index()):
+        entries = index.get(key)
+        if entries:
+            return _pick_style(entries, bold)
+    return None
