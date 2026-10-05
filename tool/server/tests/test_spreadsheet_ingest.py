@@ -1,4 +1,5 @@
 import io
+import zipfile
 from uuid import uuid4
 
 import pytest
@@ -17,6 +18,96 @@ def _data(tmp_path, monkeypatch):
 def names(csv_bytes, filename="r.csv"):
     r = s.ingest_spreadsheet(uuid4().hex, io.BytesIO(csv_bytes), filename, None)
     return [(p.index, p.first_name, p.last_name) for p in r.people]
+
+
+def _jpeg(color: str) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 20), color).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _zip(members: dict[str, bytes]) -> io.BytesIO:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+    buf.seek(0)
+    return buf
+
+
+def test_accented_roster_matches_ascii_filename():
+    ws = uuid4().hex
+    r = s.ingest_spreadsheet(
+        ws,
+        io.BytesIO("First Name,Last Name\nJosé,García\n".encode("utf-8")),
+        "r.csv",
+        _zip({"jose_garcia.jpg": _jpeg("red")}),
+        advanced_name_match=True,
+    )
+    assert r.people[0].mugshot_filename is not None
+
+
+def test_duplicate_basenames_get_unique_stored_names():
+    from app.services import storage
+
+    ws = uuid4().hex
+    r = s.ingest_spreadsheet(
+        ws,
+        io.BytesIO(b"First Name,Last Name\nAnn,Lee\nBob,Ray\n"),
+        "r.csv",
+        _zip({"x/001.jpg": _jpeg("red"), "y/001.jpg": _jpeg("blue")}),
+    )
+    assert r.people[0].mugshot_filename is not None
+    assert r.people[1].mugshot_filename is not None
+    assert r.people[0].mugshot_filename != r.people[1].mugshot_filename
+    first = (storage.BASE_DATA / ws / "mugshots" / r.people[0].mugshot_filename).read_bytes()
+    second = (storage.BASE_DATA / ws / "mugshots" / r.people[1].mugshot_filename).read_bytes()
+    assert first != second
+
+
+def test_one_corrupt_member_does_not_fail_ingest():
+    ws = uuid4().hex
+    r = s.ingest_spreadsheet(
+        ws,
+        io.BytesIO(b"First Name,Last Name\nAnn,Lee\nBob,Ray\nCat,Day\n"),
+        "r.csv",
+        _zip(
+            {
+                "001.jpg": _jpeg("red"),
+                "002.jpg": _jpeg("blue"),
+                "003.jpg": b"not an image",
+            }
+        ),
+    )
+    assert r.people[0].mugshot_filename is not None
+    assert r.people[1].mugshot_filename is not None
+    assert any("003.jpg" in w for w in r.warnings)
+
+
+def test_unpadded_numbers_match_with_default_pattern():
+    ws = uuid4().hex
+    r = s.ingest_spreadsheet(
+        ws,
+        io.BytesIO(b"First Name,Last Name\nAnn,Lee\nBob,Ray\n"),
+        "r.csv",
+        _zip({"1.jpg": _jpeg("red"), "2.jpg": _jpeg("blue")}),
+        naming_pattern=r"\d{1,4}",
+    )
+    assert r.people[0].mugshot_filename is not None
+    assert r.people[1].mugshot_filename is not None
+
+
+def test_archive_junk_members_are_silently_skipped():
+    ws = uuid4().hex
+    r = s.ingest_spreadsheet(
+        ws,
+        io.BytesIO(b"First Name,Last Name\nAnn,Lee\n"),
+        "r.csv",
+        _zip({"__MACOSX/._001.jpg": _jpeg("red"), ".DS_Store": b"junk"}),
+    )
+    assert r.warnings == []
 
 
 def test_blank_rows_are_dropped_and_indices_stay_contiguous():
