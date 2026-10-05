@@ -640,6 +640,12 @@ def _render_name(
 
 
 def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None) -> Path:
+    if len(payload.people) > len(payload.slots):
+        raise ValueError(
+            f"This spread has {len(payload.people)} students but only {len(payload.slots)} slots. "
+            "Re-render with 'Render all', which splits students across spreads."
+        )
+
     def tick(pct: int, msg: str):
         if progress_cb:
             progress_cb(pct, msg)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Box(BaseModel):
@@ -125,6 +126,18 @@ class GenerationRequest(BaseModel):
         default=None,
         description="Optional hex colour (e.g. #ffffff). If provided and a baby photo has transparency, transparent pixels are filled with this colour before pasting.",
     )
+
+    @field_validator("baby_background_color")
+    @classmethod
+    def _validate_baby_background_color(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        if re.fullmatch(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", text):
+            return text
+        raise ValueError("Baby photo background colour must be a hex colour like #ffffff")
 
     center_baby_on_face: bool = Field(
         default=False,
