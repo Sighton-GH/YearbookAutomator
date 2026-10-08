@@ -13,6 +13,7 @@ import re
 import time
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
@@ -25,7 +26,8 @@ from app.services.licensing import (
     get_required_license_key_from_headers,
     validate_and_record_use,
 )
-from app.services.placement import assign_logical_slots
+from app.services.placement import assign_logical_slots, auto_place_slots_for_people
+from app.services.render_test_strip import render_test_strip
 from app.services.licensing_usage import append_usage_event
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
@@ -246,6 +248,46 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if usage_payload is not None:
         resp["usage"] = usage_payload
     return resp
+
+
+@router.post("/preview-strip")
+async def preview_strip(payload: GenerationRequest, request: Request) -> dict[str, Any]:
+    """Render the first two resolved slots with the real renderer, scaled down for the Style step.
+
+    Synchronous and bounded: two students, never counts towards licence usage.
+    """
+    enforce_workspace_write(request, payload.workspace_id)
+    reserved, reserve_reason = try_reserve_generation(payload.workspace_id)
+    if not reserved:
+        status_code = 409 if reserve_reason == "workspace_generation_in_progress" else 503
+        raise HTTPException(status_code=status_code, detail=reserve_reason, headers={"Retry-After": "10"})
+    try:
+        if not get_face_detection_settings().enable_center_on_face_ops:
+            payload.center_baby_on_face = False
+        if payload.auto_place:
+            people, slots = auto_place_slots_for_people(
+                people=payload.people,
+                slots=payload.slots,
+                placement_mode=payload.placement_mode,
+                slot_assignments=payload.slot_assignments,
+                force_alphabetical=payload.force_alphabetical,
+            )
+            payload = payload.model_copy(update={"people": list(people), "slots": list(slots), "auto_place": False})
+        warnings: list[str] = []
+
+        def render(req: GenerationRequest):
+            return generate_composite(req, warning_cb=lambda w: warnings.append(w) if w not in warnings else None)
+
+        try:
+            image = await run_in_threadpool(render_test_strip, payload, render)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        out_path = workspace_file(payload.workspace_id, "preview_strip.png")
+        image.save(out_path, format="PNG")
+        restrict_file_permissions(out_path)
+        return {"output": out_path.name, "width": image.width, "height": image.height, "warnings": warnings}
+    finally:
+        release_generation(payload.workspace_id)
 
 
 class CancelGenerationRequest(BaseModel):
