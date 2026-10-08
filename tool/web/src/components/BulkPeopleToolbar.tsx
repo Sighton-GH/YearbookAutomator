@@ -1,72 +1,75 @@
 import {useEffect, useRef, useState} from "react";
 import {assetUrl, cancelRemoveBackgroundJob, removeBackgroundStatus, startRemoveBackgroundJob, uploadImage, type BackgroundMode, type PersonRecord} from "../api";
-import {formatServerMessage} from "../configFile";
 import {applyBulkPeople, type BulkAction} from "../utils/bulkPeople";
+import {runBulkQueue, type QueueMode, type QueueResult} from "../utils/bulkQueue";
 import {faceCentreImage} from "../utils/faceCentreImage";
 
-export function BulkPeopleToolbar({people, selected, onSelection, locked, workspaceId, disabled, onPeople, onBusy, babyAspect, backgroundMode}: {
+export function BulkPeopleToolbar({people, selected, onSelection, locked, workspaceId, disabled, onPeople, onBusy, babyAspectFor, backgroundMode}: {
   people: PersonRecord[]; selected: Set<number>; onSelection: (value: Set<number>) => void; locked: Record<number, true>;
-  workspaceId: string | null; disabled: boolean; onPeople: (value: PersonRecord[]) => void; onBusy: (value: boolean) => void; babyAspect: number; backgroundMode: BackgroundMode;
+  workspaceId: string | null; disabled: boolean; onPeople: (value: PersonRecord[]) => void; onBusy: (value: boolean) => void; babyAspectFor: (personIndex: number) => number; backgroundMode: BackgroundMode;
 }) {
   const [action, setAction] = useState<BulkAction>("clear-quotes");
   const [size, setSize] = useState(40);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
-  const stopped = useRef(false);
+  const signalRef = useRef<{stopped: boolean}>({stopped: false});
   const currentJob = useRef<string | null>(null);
-  useEffect(() => () => {stopped.current = true; if (currentJob.current) void cancelRemoveBackgroundJob(currentJob.current).catch(() => undefined);}, []);
+  const running = useRef(false);
+  const mounted = useRef(true);
+  // Latest props, so a long queue never acts on the people/aspect/mode captured at click time.
+  const latest = useRef({people, locked, babyAspectFor, backgroundMode, workspaceId});
+  latest.current = {people, locked, babyAspectFor, backgroundMode, workspaceId};
+  const stopQueue = () => {
+    signalRef.current.stopped = true;
+    if (currentJob.current) void cancelRemoveBackgroundJob(currentJob.current).catch(() => undefined);
+  };
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false; stopQueue();};}, []);
+  // A different workspace owns different people and photos: never let a running queue cross over.
+  useEffect(() => {if (running.current) stopQueue();}, [workspaceId]);
   const available = people.filter(p => selected.has(p.index) && !locked[p.index]);
-  const process = async (mode: "background" | "face") => {
-    if (!workspaceId || busy || disabled) return;
-    stopped.current = false; setBusy(true); onBusy(true); setProgress(0); setMessage("");
-    let next = people;
-    let completed = 0;
-    let skipped = 0;
-    let failures = 0;
+  const process = async (mode: QueueMode) => {
+    if (!workspaceId || busy || disabled || running.current) return;
+    running.current = true;
+    const signal = {stopped: false}; signalRef.current = signal;
+    const ws = workspaceId;
+    const items = available.map(p => ({index: p.index, filename: p.baby_photo_filename ?? null}));
+    const guard = <T,>(fn: () => T) => {if (mounted.current) fn();};
+    setBusy(true); onBusy(true); setProgress(0); setMessage("");
+    let result: QueueResult = {completed: 0, skipped: 0, failures: 0, stopped: false, error: null};
     try {
-      for (const person of available) {
-        if (stopped.current) break;
-        const filename = person.baby_photo_filename;
-        if (!filename) {skipped++; completed++; setProgress(completed / available.length * 100); continue;}
-        try {
-          let output: string | null = null;
-          if (mode === "background") {
-            const job = await startRemoveBackgroundJob({workspaceId, kind: "baby", filename, backgroundMode});
-            currentJob.current = job.job_id;
-            const deadline = Date.now() + 10 * 60 * 1000;
-            while (!stopped.current) {
-              const status = await removeBackgroundStatus(job.job_id);
-              setProgress((completed + status.progress / 100) / available.length * 100);
-              if (status.status === "done") {output = status.output_filename; break;}
-              if (status.status === "error" || status.status === "cancelled" || status.error) throw new Error(status.error || status.message || "Photo processing stopped");
-              if (Date.now() > deadline) throw new Error("Photo processing timed out");
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            if (stopped.current) await cancelRemoveBackgroundJob(job.job_id);
-            currentJob.current = null;
-          } else {
-            const response = await fetch(assetUrl(workspaceId, "baby", filename));
-            if (!response.ok) throw new Error("Could not load the baby photo");
-            const blob = await faceCentreImage(await response.blob(), babyAspect);
-            if (blob && !stopped.current) output = await uploadImage(workspaceId, "baby", new File([blob], "face-centred.png", {type: "image/png"}));
-            else skipped++;
-          }
-          if (output && !stopped.current) {
-            next = next.map(p => p.index === person.index ? {...p, baby_photo_filename: output, baby_background_removal_failed: false} : p);
-            onPeople(next);
-          }
-        } catch (err) {
-          failures++; setMessage(formatServerMessage(err));
-          if (currentJob.current) {await cancelRemoveBackgroundJob(currentJob.current).catch(() => undefined); currentJob.current = null;}
-          // Stop on an API refusal or failure rather than hammering the same endpoint.
-          stopped.current = true;
-        }
-        completed++; setProgress(completed / available.length * 100);
-      }
+      result = await runBulkQueue({
+        mode, items, signal,
+        deps: {
+          startJob: filename => startRemoveBackgroundJob({workspaceId: ws, kind: "baby", filename, backgroundMode: latest.current.backgroundMode}),
+          jobStatus: removeBackgroundStatus, cancelJob: cancelRemoveBackgroundJob,
+          fetchPhoto: async filename => {const r = await fetch(assetUrl(ws, "baby", filename)); if (!r.ok) throw new Error("Could not load the baby photo"); return r.blob();},
+          centre: faceCentreImage,
+          upload: blob => uploadImage(ws, "baby", new File([blob], "face-centred.png", {type: "image/png"})),
+          sleep: ms => new Promise(resolve => setTimeout(resolve, ms)), now: () => Date.now(),
+        },
+        aspectFor: index => latest.current.babyAspectFor(index),
+        skipNow: (index, filename) => latest.current.workspaceId !== ws || Boolean(latest.current.locked[index]) || !latest.current.people.some(p => p.index === index && p.baby_photo_filename === filename),
+        apply: (index, filename, output) => {
+          if (signal.stopped || latest.current.workspaceId !== ws) return false;
+          // Read-modify-write against the freshest people (not the click-time snapshot), synchronously.
+          const current = latest.current.people;
+          if (!current.some(p => p.index === index && p.baby_photo_filename === filename)) return false;
+          const next = current.map(p => p.index === index ? {...p, baby_photo_filename: output, baby_background_removal_failed: false} : p);
+          latest.current = {...latest.current, people: next};
+          onPeople(next);
+          return true;
+        },
+        onProgress: value => guard(() => setProgress(value)),
+        onJob: id => {currentJob.current = id;},
+      });
     } finally {
-      setBusy(false); onBusy(false);
-      setMessage(prev => `${completed} of ${available.length} processed, ${skipped} skipped (no photo or face), ${failures} failed.${stopped.current ? " Queue stopped." : ""}${prev ? ` ${prev}` : ""}`);
+      running.current = false; currentJob.current = null;
+      onBusy(false);
+      guard(() => {
+        setBusy(false);
+        setMessage(`${result.completed} of ${items.length} processed, ${result.skipped} skipped (no photo, no face, locked or changed meanwhile), ${result.failures} failed.${result.stopped ? " Queue stopped." : ""}${result.error ? ` ${result.error}` : ""}`);
+      });
     }
   };
   return <section className="panel stack" aria-label="Bulk student actions">
@@ -77,7 +80,7 @@ export function BulkPeopleToolbar({people, selected, onSelection, locked, worksp
     {(action === "name-size" || action === "quote-size") && <label>Font size <input type="number" min={1} max={500} value={size} disabled={busy} onChange={e => setSize(Number(e.target.value))} /></label>}
     <button type="button" disabled={disabled || busy || !available.length || !Number.isInteger(size) || size < 1 || size > 500} onClick={() => onPeople(applyBulkPeople(people, selected, locked, action, size))}>Apply to selected</button></div>
     <p className="muted small">Photo processing uses each selected student's assigned baby photo, not defaults. Originals are kept. Students without photos or a detected face are skipped.</p>
-    <div className="inline"><button type="button" disabled={disabled || busy || !available.length || !workspaceId} onClick={() => void process("face")}>Centre baby photos on faces</button><button type="button" disabled={disabled || busy || !available.length || !workspaceId} onClick={() => void process("background")}>Remove baby photo backgrounds</button>{busy && <button type="button" onClick={() => {stopped.current = true;}}>Stop queue</button>}</div>
+    <div className="inline"><button type="button" disabled={disabled || busy || !available.length || !workspaceId} onClick={() => void process("face")}>Centre baby photos on faces</button><button type="button" disabled={disabled || busy || !available.length || !workspaceId} onClick={() => void process("background")}>Remove baby photo backgrounds</button>{busy && <button type="button" onClick={stopQueue}>Stop queue</button>}</div>
     {busy && <progress max={100} value={progress} aria-label="Bulk photo processing progress" />}
     {message && <p role="status">{message}</p>}
   </section>;

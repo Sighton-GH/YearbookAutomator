@@ -597,7 +597,7 @@ export function PeopleTab({
           }}
         />
 
-        <BulkPeopleToolbar people={people} selected={bulkSelected} onSelection={setBulkSelected} locked={lockedPeople} workspaceId={workspaceId} disabled={loading} onPeople={setPeople} onBusy={setBulkBusy} babyAspect={babyAspectFor(babyMaskBox)} backgroundMode={babyBackgroundMode} />
+        <BulkPeopleToolbar people={people} selected={bulkSelected} onSelection={setBulkSelected} locked={lockedPeople} workspaceId={workspaceId} disabled={loading} onPeople={setPeople} onBusy={setBulkBusy} babyAspectFor={(personIndex: number) => babyAspectFor(babyBoxFor(personIndex))} backgroundMode={babyBackgroundMode} />
         <AddStudent disabled={loading || bulkBusy || !workspaceId} onAdd={async (first, last, quote, portrait) => {
           if (!workspaceId) return;
           try {
