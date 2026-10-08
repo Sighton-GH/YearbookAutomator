@@ -75,7 +75,7 @@ Status means implemented and evidence gathered, not that every possible provider
 - Native background inference cannot be stopped mid-call; partial P3-07 stated above.
 - Unicode CBDT/mixed-font RTL limits remain partial F1.7.
 - Full all-control screenshot acceptance incomplete even when focused automated tests exist; UX REPORT names its coverage gaps.
-- Final browser suite, fresh S9/S11 retained evidence and final delta audit are pending. Do not call ready.
+- Fresh isolated browser suite passed17specs exceptthepre-racefixF4attempt; correctedF4andfullflowrerunpass. FinalaxeandRegroupdelta/reviewremainpending. S9/S11evidenceisretained;S12workerspending. Do notcallready.
 
 ## Gate record
 Baseline at untouched base: 184 backend, TS clean,lint 0 errors/7 warnings, build passed (baseline recorded separately).
@@ -93,3 +93,6 @@ Known issues and explicit semantics:
 - uploadImageAs config-import explicitly requests restore_exact. It may deliberately overwrite same-named source assets inthatworkspace. Normal uploads withoutrestore_exact remain collision-safe; editor replay validates reservednames and exact returnedname.
 - Independent audit examined substantial normalizeddiffs and fixdeltas but was not a literal every-linecertification ofall202files. No production/GPU/fullproviderproof.
 - Regroup overlappingduplicate defect is still awaitingworkerpatch/retest.
+
+## Latest stable gate checkpoint 8c43cee0
+373backendtestspassed,19warnings,44.15s.68frontendunitspass;TypeScriptclean;ESLint0errors/7warnings;build4.17s. FreshF4requestassertions and40personthree-spreadrender/downloadpass. Final12-viewaxeinitial+populatedboththemes rerunpendingafterlastone-nodefix. S12Regroupdefectstillblocking.
