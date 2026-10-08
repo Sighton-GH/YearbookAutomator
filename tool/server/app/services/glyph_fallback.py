@@ -26,7 +26,7 @@ def font_coverage(path: str) -> frozenset[int]:
         return frozenset()
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=4096)
 def color_font(path: str) -> bool:
     try:
         with TTFont(path, lazy=True) as font:
@@ -41,10 +41,13 @@ def system_font_paths() -> tuple[str, ...]:
 
 @lru_cache(maxsize=4096)
 def fallback_path(codepoint: int, paths: tuple[str, ...], prefer_color: bool = False) -> str | None:
-    candidates = [p for p in paths if codepoint in font_coverage(p)]
+    # Stop at the first covering face. Eager scans of every installed font
+    # exceed the coverage cache and reparse thousands of cmaps per fit size.
     if prefer_color:
-        candidates.sort(key=lambda p: not color_font(p))
-    return candidates[0] if candidates else None
+        for path in paths:
+            if color_font(path) and codepoint in font_coverage(path):
+                return path
+    return next((path for path in paths if codepoint in font_coverage(path)), None)
 
 
 def clear_glyph_caches():
@@ -100,9 +103,11 @@ def glyph_runs(text: str, primary, size: int, *, paths: tuple[str, ...] | None =
             color_font(p) and ord(char) in font_coverage(p) for p in paths)
         if (ord(char) not in coverage or wants_color) and not char.isspace() and not invisible:
             path = fallback_path(ord(char), paths, _emoji(char))
-            ordered = ([path] if path else []) + [p for p in paths if p != path and ord(char) in font_coverage(p)]
+            ordered = iter(([path] if path else []) + list(paths))
             chosen = None
             for p in ordered:
+                if ord(char) not in font_coverage(p):
+                    continue
                 try:
                     if p not in loaded:
                         loaded[p] = ImageFont.truetype(p, size)
