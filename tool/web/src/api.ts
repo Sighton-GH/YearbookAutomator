@@ -343,8 +343,12 @@ export async function uploadImageAs(
   const form = new FormData();
   form.append("workspace_id", workspaceId);
   form.append("kind", kind);
+  form.append("restore_exact", "true");
 
   const safeName = (desiredFilename || file.name || `${kind}.png`).split(/[\\/]/).pop() || `${kind}.png`;
+  if (kind === "baby" && /^baby_(preview|edit)_[A-Za-z0-9_-]+\.png$/.test(safeName)) {
+    form.append("editor_owned", "replay");
+  }
   const uploadFile = new File([file], safeName, {
     type: file.type || "application/octet-stream",
     lastModified: file.lastModified,

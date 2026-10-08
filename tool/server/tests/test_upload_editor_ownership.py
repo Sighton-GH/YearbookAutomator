@@ -34,3 +34,26 @@ def test_only_editor_owned_upload_uses_cleanup_namespace(generation_client):
     assert r.status_code==200,r.text
     assert r.json()["deleted"]==2
     assert (storage.workspace_dir(ws)/"baby"/names[0]).exists()
+
+
+def test_chained_editor_replay_restores_exact_destinations(generation_client):
+    client,ws=generation_client
+    root=storage.workspace_dir(ws)/"baby"
+    previous=None
+    for name in ("baby_edit_0_123.png","baby_edit_0_456.png"):
+        if previous:
+            assert (root/previous).exists()
+            content=(root/previous).read_bytes()
+        else:content=png("red")
+        r=client.post("/api/mapping/upload-image",data={"workspace_id":ws,"kind":"baby","editor_owned":"replay","restore_exact":"true"},files={"file":(name,content,"image/png")})
+        assert r.status_code==200,r.text
+        assert r.json()["filename"]==name
+        assert (root/name).exists()
+        previous=name
+    assert Image.open(root/previous).getpixel((0,0))==(255,0,0,255)
+
+
+def test_editor_replay_cannot_claim_arbitrary_cleanup_filename(generation_client):
+    client,ws=generation_client
+    r=client.post("/api/mapping/upload-image",data={"workspace_id":ws,"kind":"baby","editor_owned":"replay"},files={"file":("original.png",png("blue"),"image/png")})
+    assert r.status_code==400

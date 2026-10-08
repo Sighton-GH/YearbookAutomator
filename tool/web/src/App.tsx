@@ -1306,7 +1306,8 @@ export default function App({
           typeof h.rotation_degrees === "number" ? h.rotation_degrees : 0
         );
         const file = new File([outBlob], h.output_filename, { type: "image/png" });
-        await uploadImageAs(ws, "baby", file, h.output_filename);
+        const restored = await uploadImageAs(ws, "baby", file, h.output_filename);
+        if (restored !== h.output_filename) throw new Error("The replay filename was not restored");
       } finally {
         URL.revokeObjectURL(objectUrl);
       }

@@ -442,7 +442,8 @@ async def upload_image(
     file: UploadFile = File(...),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
-    editor_owned: Literal["preview", "edit"] | None = Form(None),
+    editor_owned: Literal["preview", "edit", "replay"] | None = Form(None),
+    restore_exact: bool = Form(False),
 ) -> dict[str, str]:
     enforce_workspace_write(request, workspace_id)
 
@@ -455,7 +456,11 @@ async def upload_image(
     if editor_owned is not None:
         if kind != "baby":
             raise HTTPException(status_code=400, detail="Editor images must be baby photos")
-        filename = f"baby_{editor_owned}_{uuid.uuid4().hex}.png"
+        if editor_owned == "replay":
+            if not re.fullmatch(r"baby_(?:preview|edit)_[A-Za-z0-9_-]+\.png", filename):
+                raise HTTPException(status_code=400, detail="Invalid editor replay filename")
+        else:
+            filename = f"baby_{editor_owned}_{uuid.uuid4().hex}.png"
     elif kind == "baby" and filename.startswith(("baby_preview_", "baby_edit_")):
         filename = "uploaded_" + filename
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
@@ -474,7 +479,7 @@ async def upload_image(
     else:
         # Source uploads never replace an existing student asset by basename.
         target = workspace_dir(workspace_id) / subdir / filename
-        if target.exists():
+        if target.exists() and not restore_exact:
             filename = f"{Path(filename).stem}_{uuid.uuid4().hex}{Path(filename).suffix}"
 
     if kind == "baby" and remove_background:
