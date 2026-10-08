@@ -67,6 +67,7 @@ import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { NoticeDialog } from "./components/NoticeDialog";
+import { applyReplayFallbacks, replayFailureWarnings, type ReplayFailure } from "./utils/replayFallback";
 import { TipsBox } from "./components/TipsBox";
 import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/RoadmapRail";
 import { TabBar, type TabBarItem } from "./components/TabBar";
@@ -400,6 +401,7 @@ export default function App({
   const [configImportBusy, setConfigImportBusy] = useState(false);
   const [configImportStatus, setConfigImportStatus] = useState<string>("");
   const [configImportError, setConfigImportError] = useState<string>("");
+  const [importReplayWarnings, setImportReplayWarnings] = useState<string[]>([]);
   const [configToImport, setConfigToImport] = useState<ConfigFileV1<PersistedSessionV1> | null>(null);
   const [importLowResWarning, setImportLowResWarning] = useState<string | null>(null);
   const [importPortraitReviewOpen, setImportPortraitReviewOpen] = useState(false);
@@ -1172,16 +1174,17 @@ export default function App({
     }
   };
 
-  const replayBabyEditsIfNeeded = async (session: PersistedSessionV1, ws: string) => {
+  const replayBabyEditsIfNeeded = async (session: PersistedSessionV1, ws: string): Promise<ReplayFailure[]> => {
+    const failures: ReplayFailure[] = [];
     const history = (session.babyEditHistory ?? []).filter((h) => h && h.kind === "baby");
-    if (!history.length) return;
+    if (!history.length) return failures;
 
     const requestedOutputs = new Set<string>();
     for (const p of session.people ?? []) {
       if (p?.baby_photo_filename) requestedOutputs.add(String(p.baby_photo_filename));
     }
     if (session.defaultBabyFilename) requestedOutputs.add(String(session.defaultBabyFilename));
-    if (!requestedOutputs.size) return;
+    if (!requestedOutputs.size) return failures;
 
     // Only replay operations that are needed to materialize currently-referenced filenames.
     const neededFilenames = new Set<string>(requestedOutputs);
@@ -1193,7 +1196,7 @@ export default function App({
         neededFilenames.add(h.input_filename);
       }
     }
-    if (!neededOps.size) return;
+    if (!neededOps.size) return failures;
 
     const exists = async (filename: string): Promise<boolean> => {
       try {
@@ -1215,6 +1218,9 @@ export default function App({
       const h = history[i];
 
       if (await exists(h.output_filename)) continue;
+
+      // P3-08: a failed operation must not abort the import; fall back to the unedited input.
+      try {
 
       setConfigImportStatus(`Restoring baby edits (${i + 1}/${history.length})…`);
 
@@ -1264,7 +1270,11 @@ export default function App({
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
+      } catch {
+        failures.push({ op: h });
+      }
     }
+    return failures;
   };
 
   const runImportMissingAssetUpload = async (file: File) => {
@@ -1491,20 +1501,27 @@ export default function App({
         setConfigImportBusy(true);
         // If the config references edited baby images, recreate them now (so missing-asset
         // checks don't force the user to hunt down intermediate edit outputs).
+        let sToApply = s;
+        let replayWarnings: string[] = [];
         if (needsBaby && importBabyDone) {
-          await replayBabyEditsIfNeeded(s, importWorkspaceId);
+          const failures = await replayBabyEditsIfNeeded(s, importWorkspaceId);
+          if (failures.length) {
+            replayWarnings = replayFailureWarnings(failures, s);
+            sToApply = applyReplayFallbacks(s, failures);
+          }
         }
 
         // Defaults are available without user uploads; if the config captured a workspace-specific
         // default filename that doesn't exist in this new workspace, drop it and fall back.
-        await clearMissingDefaultsForImport(s, importWorkspaceId);
+        await clearMissingDefaultsForImport(sToApply, importWorkspaceId);
 
         setConfigImportStatus("Checking for missing referenced files…");
-        const missing = await computeMissingAssets(s, importWorkspaceId);
+        const missing = await computeMissingAssets(sToApply, importWorkspaceId);
         if (missing) return;
 
         // Re-apply session last to ensure we restore the intended step/settings.
-        applyImportedSession(s, importWorkspaceId);
+        applyImportedSession(sToApply, importWorkspaceId);
+        setImportReplayWarnings(replayWarnings);
         setImportFinalized(true);
         setConfigImportStatus("Import complete");
         setShowConfigModal(false);
@@ -2761,6 +2778,18 @@ export default function App({
           importLowResResolverRef.current = null;
           setImportLowResWarning(null);
         }}
+      />
+      <NoticeDialog
+        open={importReplayWarnings.length > 0 && !showConfigModal}
+        title="Import finished with a few notes"
+        message={
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {importReplayWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        }
+        onAction={() => setImportReplayWarnings([])}
       />
       <NoticeDialog
         open={importPortraitReviewOpen}
