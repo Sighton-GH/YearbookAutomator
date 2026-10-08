@@ -1,11 +1,11 @@
-# Delivery status: review in progress, not ready
+# Delivery status: patch handoff with explicit partial acceptance
 
 Repository: https://github.com/Sighton-GH/YearbookAutomator
 Base: glm-base-2026-10 (53b904b40b6836e0ab68ea9045b7414ec97a6c87).
 Code: glm/plans-2-3. UX artifacts prepared separately for glm/ux-review from the same base. Local patches/bundles only; no push, PR, merge or deployment performed.
 
 ## Summary
-Implemented the Plan 3 and Plan 2 work in isolated fictional-data environments. Independent audits found real gaps after initial green tests; fixes and scope limits are recorded in AUDIT-RESPONSES.md. Full-resolution final walkthrough found missing F4 request wiring and expensive Unicode font scans; both were fixed and actual outputs rechecked. The final handoff remains blocked on the complete latest browser suite, independent final delta review, retained S9/S11 evidence and all-new-control walkthrough coverage. This document is a status record, not a ready claim.
+Implemented the Plan 3 and Plan 2 work in isolated fictional-data environments. Independent audits found real gaps after initial green tests; fixes and scope limits are recorded in AUDIT-RESPONSES.md. Full-resolution final walkthrough found missing F4 request wiring and expensive Unicode font scans; both were fixed and actual outputs rechecked. Final local gates and retained independent evidence are now recorded below. This is a patch handoff with partial and unverified items, not an all-controls/all-providers acceptance claim.
 
 ## Plan 3
 Status means implemented and evidence gathered, not that every possible provider/platform path is proven.
@@ -75,7 +75,7 @@ Status means implemented and evidence gathered, not that every possible provider
 - Native background inference cannot be stopped mid-call; partial P3-07 stated above.
 - Unicode CBDT/mixed-font RTL limits remain partial F1.7.
 - Full all-control screenshot acceptance incomplete even when focused automated tests exist; UX REPORT names its coverage gaps.
-- Fresh isolated browser batch passed all completed specs except the original F4 harness race; corrected F4, full-flow and 12-view axe reruns pass. F4 worker report remains pending. Regroup delta is self-verified with patched-render inspection, not separately audited. S9/S11 and S12 F1/F2/F3 evidence is retained. Do not call ready.
+- Fresh isolated browser batch passed all completed specs except the original F4 harness race; corrected F4, full-flow and 12-view axe reruns pass. F4 worker report is retained in the UX branch. Regroup delta is self-verified with patched-render inspection, not separately audited. S9/S11 and S12 F1/F2/F3 evidence is retained. Partial acceptance remains explicit.
 
 ## Gate record
 Baseline at untouched base: 184 backend, TS clean,lint 0 errors/7 warnings, build passed (baseline recorded separately).
@@ -101,4 +101,8 @@ Known issues and explicit semantics:
 S12 text controls on 3f8fbc69 have retained real-render evidence: hex/swatch colors, real font styles/weights and variable font uploads, alignment, vertical alignment, tracking, effects, quote justification/line spacing, and reset. At name wrap minimum 70, a named overflow warning appears for both students. The second line exceeds the name box and the strip's slot-union-plus-20-pixel crop cuts it. The renderer honors the minimum rather than shrinking below it; enlarge the box or lower the minimum. Minimum-6 wrap versus shrink and name line spacing are not visually established. Some People/Layout bulk and advanced variants remain unverified in the independent report.
 
 ## Post-Regroup gate checkpoint 03cf08a9
-373 backend tests pass with the updated both-mode placement/render/XLSX transactions, 19 warnings, 41.84 seconds. 68 frontend units and three TSX layout integration cases pass. TypeScript clean, lint 0 errors/7 warnings, build 4.00 seconds. Layout browser regression passes in 13.6 seconds. The 12-view axe, F4 and full-flow gates passed immediately before this isolated layout delta. Final S12 F4 worker evidence remains pending. Regroup delta is self-verified plus patched-render inspected; no separate final delta auditor.
+373 backend tests pass with the updated both-mode placement/render/XLSX transactions, 19 warnings, 41.84 seconds. 68 frontend units and three TSX layout integration cases pass. TypeScript clean, lint 0 errors/7 warnings, build 4.00 seconds. Layout browser regression passes in 13.6 seconds. The 12-view axe, F4 and full-flow gates passed immediately before this isolated layout delta. Final S12 F4 worker evidence is retained. Regroup delta is self-verified plus patched-render inspected; no separate final delta auditor.
+
+## Final retained evidence and limits
+The F4 worker verified portrait ellipse/rounded/border/shadow, baby rectangle-slot shape/border/shadow, PNG DPI metadata, PDF page size and MediaBox/TrimBox/crop marks, and safe-area overlay. I inspected the contact sheets, baby zoom, PDF marks and safe-area pixels. Mismatched-aspect contain/fill, actual face-aware crop, per-student/global baby fill, upscale warning, and that worker's portrait editor path were not verified. The separate local F4 editor/request regression passed, but is not native GPU detector proof.
+Corrected F2/F3 report supersedes the original cutout allegation. Filename reverse/disabled outputs were inspected by that worker. Actual native bulk photo queue output, some bulk quote-size/exclude/include variants, extra zoom inputs and advanced detection settings remain unverified. Final Regroup delta is self-verified plus patched-render inspected, not separately audited. No worker remains running.
