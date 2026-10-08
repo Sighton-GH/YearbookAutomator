@@ -27,3 +27,8 @@ test("foldName strips combining marks and case", () => {
   assert.equal(foldName("  Émile "), "emile");
   assert.equal(foldName(null), "");
 });
+
+test("Unicode casefold matches Python for German and Greek names", () => {
+  assert.equal(foldName("Straße"), "strasse");
+  assert.equal(foldName("ς"), "σ");
+});
