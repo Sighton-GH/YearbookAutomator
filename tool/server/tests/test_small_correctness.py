@@ -130,7 +130,8 @@ def test_baby_zip_background_failure_has_plain_warning(monkeypatch):
         advanced_name_match=True, partial_name_match=False, convert_pdfs=False,
         remove_background=True, background_mode="simple",
     ))
-    assert any(BACKGROUND_FAILURE in warning for warning in result.warnings)
+    assert any("original photo was kept" in warning for warning in result.warnings)
+    assert result.people[0].baby_photo_filename
     assert all("OpenCV" not in warning for warning in result.warnings)
 
 
