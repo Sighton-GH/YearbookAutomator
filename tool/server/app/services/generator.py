@@ -805,7 +805,12 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                         face_box = None
                         if portrait_style.face_aware and person.mugshot_focus is None and portrait_style.fit == "cover":
                             if mugshot_filename not in portrait_face_cache:
-                                portrait_face_cache[mugshot_filename] = detect_face(m_img)
+                                try:
+                                    portrait_face_cache[mugshot_filename] = detect_face(m_img)
+                                except Exception:
+                                    portrait_face_cache[mugshot_filename] = None
+                                    if warning_cb:
+                                        warning_cb(f"Portrait face detection failed for {person.first_name} {person.last_name}; it was centred instead.")
                             face = portrait_face_cache[mugshot_filename]
                             if face is not None:
                                 b = face.box

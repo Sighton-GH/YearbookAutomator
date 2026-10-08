@@ -83,3 +83,14 @@ def test_mapping_response_keeps_omitted_fill_omitted():
     assert "baby_fill_color" not in restored.model_fields_set
     p.baby_fill_color = None
     assert p.model_dump()["baby_fill_color"] is None
+
+
+def test_portrait_detector_exception_falls_back_without_failing_render(tmp_path, monkeypatch):
+    req = request(tmp_path, monkeypatch, mugshot_face_aware=True)
+    req.people[0].first_name="Fictional"
+    def fail(_image):raise RuntimeError("unavailable provider")
+    monkeypatch.setattr(generator,"detect_face",fail)
+    warnings=[]
+    output=generator.generate_composite(req,warning_cb=warnings.append)
+    with Image.open(output) as image:assert image.getpixel((10,10))==(255,0,0)
+    assert any("Portrait face detection failed for Fictional" in w for w in warnings)
