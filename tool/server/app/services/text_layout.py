@@ -10,6 +10,7 @@ from typing import Callable, Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.services.glyph_fallback import UnicodeDraw
 from app.services.text_color import parse_text_color
 from app.services.text_spacing import draw_tracked, tracked_bounds
 from app.services.text_effects import TextShadow, composite_text
@@ -29,6 +30,7 @@ class TextStyle:
     stroke_color: str = '#ffffff'
     shadow: TextShadow | None = None
     name_fit: Literal['shrink', 'wrap'] = 'shrink'
+    language: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,11 +159,14 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     content = (text.upper() if all_caps else text).strip()
     if not content:
         return TextResult(None, ())
-    draw = ImageDraw.Draw(image)
+    native_draw = ImageDraw.Draw(image)
+    unicode_draw = UnicodeDraw(native_draw, warnings, language=style.language)
+    needs_unicode = unicode_draw.needs_layout(content, load_font(start_size))
+    draw = unicode_draw if needs_unicode else native_draw
     width = max(1, int(max_width if max_width is not None else box.width))
     height = max(1, int(max_height if max_height is not None else box.height))
     # Preserve legacy ascender positioning, fitting and default spacing.
-    if (style.valign == 'top' and style.align in {'left', 'center'}
+    if (not needs_unicode and style.valign == 'top' and style.align in {'left', 'center'}
             and parse_text_color(style.color) == (20, 30, 50)
             and style.letter_spacing == 0 and style.line_spacing is None
             and style.stroke_width == 0 and style.shadow is None
@@ -193,7 +198,7 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     if overflow:
         append_once(warnings, fitting_warning(student, kind))
     def paint(layer):
-        layer_draw = ImageDraw.Draw(layer)
+        layer_draw = UnicodeDraw(ImageDraw.Draw(layer), warnings, language=style.language) if needs_unicode else ImageDraw.Draw(layer)
         for i, line in enumerate(lines):
             _draw_line(layer_draw, (box.x, y + i * step), line, font, style, width,
                        style.align == 'justify' and i < len(lines) - 1)

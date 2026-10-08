@@ -1,4 +1,4 @@
-"""F1.7 Unicode capability helpers. Not automatically wired into text_layout.
+"""F1.7 Unicode run plans shared by text fitting and painting.
 
 Use whole shaped runs where possible. Per-character fallback cannot guarantee
 complex-script shaping; warnings make that limitation explicit.
@@ -56,7 +56,11 @@ def clear_glyph_caches():
 
 def script_kwargs(text: str, language: str | None = None,
                   warnings: list[str] | None = None) -> dict:
-    rtl = any(unicodedata.bidirectional(c) in {'R', 'AL', 'AN'} for c in text)
+    # Paragraph direction follows the first strong character, not an RTL word
+    # embedded in an otherwise left-to-right paragraph.
+    strong = next((unicodedata.bidirectional(c) for c in text
+                   if unicodedata.bidirectional(c) in {'L', 'R', 'AL'}), 'L')
+    rtl = strong in {'R', 'AL'}
     if not rtl:
         return {'language': language} if language and features.check('raqm') else {}
     if not features.check('raqm'):
@@ -89,8 +93,12 @@ def glyph_runs(text: str, primary, size: int, *, paths: tuple[str, ...] | None =
     runs = []
     loaded = {}
     for char in text:
-        chosen, embedded, shown = primary, False, char
-        if ord(char) not in coverage and not char.isspace():
+        chosen, embedded, shown = primary, color_font(str(primary.path)) if hasattr(primary, 'path') else False, char
+        # Formatting controls and variation selectors must stay with shaped runs.
+        invisible = unicodedata.category(char) == 'Cf' or 0xFE00 <= ord(char) <= 0xFE0F
+        wants_color = _emoji(char) and not embedded and any(
+            color_font(p) and ord(char) in font_coverage(p) for p in paths)
+        if (ord(char) not in coverage or wants_color) and not char.isspace() and not invisible:
             path = fallback_path(ord(char), paths, _emoji(char))
             ordered = ([path] if path else []) + [p for p in paths if p != path and ord(char) in font_coverage(p)]
             chosen = None
@@ -102,6 +110,8 @@ def glyph_runs(text: str, primary, size: int, *, paths: tuple[str, ...] | None =
                     break
                 except (OSError, ValueError):
                     continue
+            if chosen is None and ord(char) in coverage:
+                chosen = primary
             if chosen is None:
                 chosen, shown = primary, '?'
                 append_once(warnings, f'A glyph (U+{ord(char):04X}) is unavailable in installed fonts. A question mark was used.')
@@ -142,3 +152,103 @@ def draw_unicode(draw: ImageDraw.ImageDraw, xy, text, font, size: int, *,
             except (UnicodeError, OSError, ValueError, TypeError):
                 pass
     return x - xy[0]
+
+
+class UnicodeDraw:
+    """A shared run plan for ink measurement and drawing, at primary baselines.
+
+    Single-face text goes straight to Pillow, retaining kerning/shaping. Mixed
+    faces share the primary ascender rather than each face's top anchor.
+    """
+    def __init__(self, draw, warnings=None, paths=None, language=None):
+        self.draw = draw
+        self.language = language
+        self.warnings = warnings
+        self.paths = system_font_paths() if paths is None else paths
+        self._plans = {}
+
+    def plan(self, text, font):
+        key = (text, font)
+        if key not in self._plans:
+            runs = glyph_runs(text, font, getattr(font, 'size', 16),
+                              paths=self.paths, warnings=self.warnings)
+            kwargs = script_kwargs(text, self.language, warnings=self.warnings)
+            if len(runs) > 1 and kwargs.get('direction') == 'rtl':
+                append_once(self.warnings, 'Mixed-font right-to-left text may have incorrect ordering. Please check the real rendering preview.')
+                runs.reverse()
+            self._plans[key] = runs, kwargs
+        return self._plans[key]
+
+    def needs_layout(self, text, font):
+        runs, kwargs = self.plan(text, font)
+        return bool(kwargs or len(runs) != 1 or runs[0].font is not font
+                    or runs[0].text != text or runs[0].embedded_color)
+
+    def _bounds(self, text, font, stroke_width=0):
+        runs, kwargs = self.plan(text, font)
+        if len(runs) == 1 and runs[0].font is font:
+            return self.draw.textbbox((0, 0), runs[0].text, font=font,
+                                      stroke_width=stroke_width, **kwargs)
+        ascent = font.getmetrics()[0] if hasattr(font, 'getmetrics') else 0
+        x, bounds = 0.0, []
+        for run in runs:
+            bounds.append(self.draw.textbbox((x, ascent), run.text, font=run.font,
+                                             anchor='ls', stroke_width=stroke_width, **kwargs))
+            x += run.font.getlength(run.text, **kwargs)
+        if not bounds:
+            return (0, 0, 0, 0)
+        return (min(b[0] for b in bounds), min(b[1] for b in bounds),
+                max(b[2] for b in bounds), max(b[3] for b in bounds))
+
+    def textbbox(self, xy, text, font, **kwargs):
+        b = self._bounds(text, font, kwargs.get('stroke_width', 0))
+        return (b[0] + xy[0], b[1] + xy[1], b[2] + xy[0], b[3] + xy[1])
+
+    def text(self, xy, text, font, fill, anchor='la', **options):
+        runs, kwargs = self.plan(text, font)
+        if len(runs) == 1 and runs[0].font is font:
+            return self.draw.text(xy, runs[0].text, font=font, fill=fill,
+                                  anchor=anchor, embedded_color=runs[0].embedded_color,
+                                  **options, **kwargs)
+        advances = [run.font.getlength(run.text, **kwargs) for run in runs]
+        x, y = xy
+        if anchor == 'ma':
+            x -= sum(advances) / 2
+        elif anchor == 'ra':
+            x -= sum(advances)
+        ascent = font.getmetrics()[0] if hasattr(font, 'getmetrics') else 0
+        for run, advance in zip(runs, advances):
+            self.draw.text((x, y + ascent), run.text, font=run.font, fill=fill,
+                           anchor='ls', embedded_color=run.embedded_color,
+                           **options, **kwargs)
+            x += advance
+
+    def draw_tracked(self, xy, text, font, spacing, *, fill, anchor='la', **kwargs):
+        # Tracking separates glyphs by definition. Warn on scripts requiring
+        # contextual shaping rather than silently presenting correct-looking fit.
+        if any(unicodedata.combining(c) or unicodedata.bidirectional(c) in {'R', 'AL'} for c in text):
+            append_once(self.warnings, 'Letter spacing splits complex-script shaping. Please check the real rendering preview.')
+        positions, x = [], 0.0
+        for char in text:
+            positions.append((char, x))
+            runs, script = self.plan(char, font)
+            x += sum(r.font.getlength(r.text, **script) for r in runs) + spacing
+        left, _, right, _ = self.tracked_bounds(text, font, spacing, positions)
+        px, py = xy
+        if anchor == 'ma':
+            px -= (left + right) / 2
+        elif anchor == 'ra':
+            px -= right
+        for char, dx in positions:
+            self.text((px + dx, py), char, font, fill, **kwargs)
+
+    def tracked_bounds(self, text, font, spacing, positions=None):
+        if positions is None:
+            positions, x = [], 0.0
+            for char in text:
+                positions.append((char, x))
+                runs, script = self.plan(char, font)
+                x += sum(r.font.getlength(r.text, **script) for r in runs) + spacing
+        bounds = [self.textbbox((x, 0), char, font) for char, x in positions]
+        return (min(b[0] for b in bounds), min(b[1] for b in bounds),
+                max(b[2] for b in bounds), max(b[3] for b in bounds)) if bounds else (0, 0, 0, 0)

@@ -13,6 +13,8 @@ def glyph_positions(text, font, letter_spacing=0):
 
 
 def tracked_bounds(draw, text, font, letter_spacing):
+    if hasattr(draw, 'tracked_bounds'):
+        return draw.tracked_bounds(text, font, letter_spacing)
     if not text:
         return (0, 0, 0, 0)
     bounds = [draw.textbbox((x, 0), char, font=font)
@@ -23,6 +25,8 @@ def tracked_bounds(draw, text, font, letter_spacing):
 
 def draw_tracked(draw, xy, text, font, letter_spacing, *, fill, anchor='la', **kwargs):
     """Use whole-run drawing when tracking=0 to preserve shaping and pixels."""
+    if letter_spacing and hasattr(draw, 'draw_tracked'):
+        return draw.draw_tracked(xy, text, font, letter_spacing, fill=fill, anchor=anchor, **kwargs)
     if not letter_spacing:
         draw.text(xy, text, font=font, fill=fill, anchor=anchor, **kwargs)
         return
