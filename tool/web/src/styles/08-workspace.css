@@ -863,3 +863,7 @@
 .style-preview-card .style-preview-tag { color: #52616b; }
 
 [data-theme="dark"] button.tab-bar-item.active { color: var(--accent-contrast); }
+
+/* Keep completed state and rotating guidance readable during theme transitions. */
+[data-theme="dark"] .process-done-badge { color: var(--text); }
+[data-theme="dark"] .tips-box-body { color: var(--text); }
