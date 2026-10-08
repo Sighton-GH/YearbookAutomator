@@ -72,3 +72,10 @@ test("delete adjusts selection", () => {
 test("slot_assignments remap after delete", () => {
   assert.deepEqual(remapSlotAssignmentsAfterDelete({ 0: 0, 1: 1, 2: 2, 3: 3 }, 1), { 0: 0, 2: 1, 3: 2 });
 });
+
+test("duplicate preserves optional cutout shape without treating it as a box", () => {
+  const slot = { ...mk(100, 100), baby_shape: "ellipse" as const };
+  const result = duplicateSlot([slot], 0, size);
+  assert.equal(result.slots[1].baby_shape, "ellipse");
+  assert.equal(result.slots[1].baby_photo.x, slot.baby_photo.x + 20);
+});

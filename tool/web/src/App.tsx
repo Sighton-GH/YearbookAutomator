@@ -1380,7 +1380,7 @@ export default function App({
           setParseNameColor(saved.templateParse?.nameColor ?? "");
           setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
           setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-    setParseTolerance(saved.templateParse?.tolerance);
+          setParseTolerance(saved.templateParse?.tolerance);
           resetSlots(saved.slots ?? []);
           setParsedSlots(saved.parsedSlots ?? []);
           setTemplateSize(saved.templateSize ?? null);
@@ -1615,7 +1615,7 @@ export default function App({
         setParseNameColor(saved.templateParse?.nameColor ?? "");
         setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
         setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-    setParseTolerance(saved.templateParse?.tolerance);
+        setParseTolerance(saved.templateParse?.tolerance);
         resetSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
@@ -2660,7 +2660,7 @@ export default function App({
       : null;
   const showEditStep =
     editTabForStep !== null &&
-    (editTabForStep !== "layout" || templateReady) &&
+    (editTabForStep !== "layout" || templateSize != null || layoutHistory.canRedo) &&
     (editTabForStep !== "people" || rosterReady);
 
   const templateTabs: TabBarItem<"upload" | "review">[] = [
@@ -2669,7 +2669,7 @@ export default function App({
       id: "review",
       label: "Review parsing",
       icon: <Eye size={14} />,
-      disabled: !templateReady,
+      disabled: !templateReady && templateSize == null && !layoutHistory.canRedo,
       disabledReason: "Parse a template first",
     },
   ];

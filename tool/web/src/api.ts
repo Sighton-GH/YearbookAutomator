@@ -163,13 +163,16 @@ export async function getAdminFeatureFlags() {
 }
 
 export async function regenerateBabyMask(workspace_id: string, box: Box, baby_shape: BabyShape = "auto") {
-  const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
-  return data;
-}
-
-export async function regenerateBabyMask(workspace_id: string, box: Box, baby_shape: BabyShape = "auto") {
-  const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
-  return data;
+  try {
+    const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+      const detail = JSON.parse(await error.response.data.text()).detail;
+      if (typeof detail === "string") throw new Error(detail);
+    }
+    throw error;
+  }
 }
 
 export async function parseTemplate(

@@ -40,14 +40,46 @@ test('layout edits, gesture history, renumber and reload on fictional template',
   await expect(page.getByText('125%',{exact:true})).toBeVisible();
   expect(Number(await canvas.locator('circle').first().getAttribute('r'))).toBeCloseTo(r/1.25);
   await page.getByRole('button',{name:'Fit template',exact:true}).click();
+  // A multi-move drag is a single undo step; pointer capture allows release outside SVG boxes.
+  const first = portraits.first();
+  const beforeDrag = Number(await first.getAttribute('x'));
+  const bounds = await first.boundingBox();
+  if (!bounds) throw new Error('Missing portrait bounds');
+  await page.mouse.move(bounds.x + 30, bounds.y + 30); await page.mouse.down();
+  await page.mouse.move(bounds.x + 50, bounds.y + 35, {steps: 5}); await page.mouse.up();
+  const afterDrag = Number(await first.getAttribute('x'));
+  expect(afterDrag).toBeGreaterThan(beforeDrag);
+  await page.getByRole('button',{name:'Undo layout',exact:true}).click();
+  await expect(first).toHaveAttribute('x',String(beforeDrag));
+  await page.getByRole('button',{name:'Redo layout',exact:true}).click();
+  await expect(first).toHaveAttribute('x',String(afterDrag));
+  const beforePan = await canvas.locator('svg > g').getAttribute('transform');
+  await canvas.focus(); await page.keyboard.down('Space');
+  await page.mouse.move(bounds.x + 30,bounds.y + 30); await page.mouse.down();
+  await page.mouse.move(bounds.x + 60,bounds.y + 60); await page.mouse.up(); await page.keyboard.up('Space');
+  expect(await canvas.locator('svg > g').getAttribute('transform')).not.toBe(beforePan);
+  await expect(first).toHaveAttribute('x',String(afterDrag));
+  await page.getByRole('button',{name:'Fit template',exact:true}).click();
   await page.getByRole('button',{name:'Renumber slots',exact:true}).click();
   await portraits.nth(1).click({position:{x:30,y:30}});
   await portraits.nth(0).click({position:{x:30,y:30}});
   await page.getByRole('button',{name:'Apply order',exact:true}).click();
   await expect(canvas.locator('circle')).toHaveCount(0);
   await page.screenshot({path:'/tmp/f3-layout.png',fullPage:true});
+  // Delete to an empty layout, then recover. The editor must not disappear at zero slots.
+  const countBeforeDeletes = await portraits.count();
+  for (let i = 0; i < countBeforeDeletes; i++) {
+    await page.getByRole('combobox',{name:'Select layout slot'}).selectOption('0');
+    await page.getByRole('button',{name:'Delete slot',exact:true}).click();
+    await page.getByRole('dialog',{name:'Delete selected slot?'}).getByRole('button',{name:'Delete slot',exact:true}).click();
+  }
+  await expect(portraits).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Add slot',exact:true})).toBeEnabled();
+  for (let i = 0; i < countBeforeDeletes; i++) await page.getByRole('button',{name:'Undo layout',exact:true}).click();
+  await expect(portraits).toHaveCount(countBeforeDeletes);
   await page.waitForTimeout(1000);
   await page.reload();
+  await page.getByRole("tab",{name:"Review parsing",exact:true}).click();
   await expect(page.getByRole('button',{name:'Undo layout',exact:true})).toBeDisabled();
   await expect(portraits).toHaveCount(originalCount+1);
 });

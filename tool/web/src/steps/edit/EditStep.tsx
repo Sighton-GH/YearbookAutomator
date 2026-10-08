@@ -189,6 +189,8 @@ export function EditStep({
       {editTab === "layout" && (
         <LayoutTab
           slots={slots}
+          workspaceId={workspaceId}
+          skipBabyPhotos={skipBabyPhotos}
           templateSize={templateSize}
           onSlots={onSlots}
           previewMode={previewMode}

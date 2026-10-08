@@ -1,4 +1,4 @@
-import type { SlotBoxKind, Box, TemplateSlots } from "../api";
+import type { BabyShape, SlotBoxKind, Box, TemplateSlots } from "../api";
 import { clampBox } from "../utils/slots";
 
 const PARTS: (SlotBoxKind)[] = ["mugshot", "baby_photo", "name", "quote"];
@@ -34,6 +34,11 @@ export function SlotInspectorFields({
 
   return (
     <div className="slot-inspector-fields">
+      <label className="field"><span>Cutout shape</span>
+        <select aria-label="Cutout shape" value={slot.baby_shape ?? "auto"} onChange={event => onChange({ ...slot, baby_shape: event.target.value as BabyShape })}>
+          <option value="auto">Auto (blue guide)</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="rounded">Rounded</option>
+        </select>
+      </label>
       {PARTS.map((part) => (
         <div key={part} className="slot-inspector-part">
           <div className="slot-inspector-part-label">{PART_LABELS[part]}</div>

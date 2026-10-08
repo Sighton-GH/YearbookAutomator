@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { LayoutGrid } from "lucide-react";
+import { regenerateBabyMask } from "../../api";
 import type { SlotBoxKind, Box, RawParseDebug, TemplateSlots } from "../../api";
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -14,6 +15,8 @@ import { groupSlotsByProximity } from "../../utils/slots";
 
 export function LayoutTab({
   slots,
+  workspaceId,
+  skipBabyPhotos = false,
   templateSize,
   onSlots,
   previewMode,
@@ -30,6 +33,8 @@ export function LayoutTab({
   placementMode = "left_then_right",
 }: {
   slots: TemplateSlots[];
+  workspaceId?: string | null;
+  skipBabyPhotos?: boolean;
   templateSize: { width: number; height: number } | null;
   onSlots: (slots: TemplateSlots[], gestureKey?: string) => void;
   previewMode: "clean" | "annotated";
@@ -45,6 +50,42 @@ export function LayoutTab({
   placementMode?: PlacementMode;
   layoutHistory?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }) {
+  const [maskRetry, setMaskRetry] = useState(0);
+  const [gestureActive, setGestureActive] = useState(false);
+  const [maskResults, setMaskResults] = useState<Record<string, { url?: string; error?: string }>>({});
+  const maskCache = useRef(new Map<string, { url?: string; error?: string }>());
+  const maskKey = useCallback((slot: TemplateSlots) => JSON.stringify([workspaceId, slot.baby_photo, slot.baby_shape ?? "auto"]), [workspaceId]);
+  useEffect(() => {
+    const cache = maskCache.current;
+    setMaskResults({});
+    return () => { for (const result of cache.values()) if (result.url) URL.revokeObjectURL(result.url); cache.clear(); };
+  }, [workspaceId, rawDebug]);
+  useEffect(() => {
+    if (!workspaceId || gestureActive || skipBabyPhotos) return;
+    let canceled = false;
+    // Fields settle for 500ms; pointer gestures are explicitly gated until release.
+    const timer = setTimeout(() => {
+      void (async () => {
+        for (const slot of slots) {
+          const key = maskKey(slot);
+          if (maskCache.current.has(key)) continue;
+          try {
+            const blob = await regenerateBabyMask(workspaceId, slot.baby_photo, slot.baby_shape ?? "auto");
+            if (canceled) return;
+            const result = { url: URL.createObjectURL(blob) };
+            maskCache.current.set(key, result);
+            setMaskResults(previous => ({ ...previous, [key]: result }));
+          } catch (error) {
+            if (canceled) return;
+            const result = { error: error instanceof Error ? error.message : "Could not update this cutout. Choose a shape and try again." };
+            maskCache.current.set(key, result);
+            setMaskResults(previous => ({ ...previous, [key]: result }));
+          }
+        }
+      })();
+    }, 500);
+    return () => { canceled = true; clearTimeout(timer); };
+  }, [slots, workspaceId, gestureActive, maskKey, skipBabyPhotos, rawDebug, maskRetry]);
   const [showDetected, setShowDetected] = useState(false);
   const [renumberClicks, setRenumberClicks] = useState<number[] | null>(null);
   const numbers = effectiveSlotNumbers(slots, placementMode, null);
@@ -59,6 +100,7 @@ export function LayoutTab({
       return;
     }
     onSlots(regrouped);
+    onSelectedSlot(null);
   };
   const regroupMessage = regroupConfirm
     ? `Regrouping keeps ${regroupConfirm.length} slots and removes ${slots.length - regroupConfirm.length}. Continue?`
@@ -74,6 +116,12 @@ export function LayoutTab({
     }}>
       <div className="stack" style={{ gap: 12 }}>
         <div className="preview-toggle">
+          <label className="inline">Select slot
+            <select aria-label="Select layout slot" value={selectedSlot ?? ""} disabled={renumberClicks != null} onChange={event => onSelectedSlot(event.target.value === "" ? null : Number(event.target.value))}>
+              <option value="">None</option>
+              {slots.map((_, index) => <option key={index} value={index}>Slot {numbers[index]} (array {index + 1})</option>)}
+            </select>
+          </label>
           <button type="button" className="chip" disabled={!layoutHistory?.canUndo} onClick={() => { setRenumberClicks(null); onSelectedSlot(null); layoutHistory?.undo(); }}>Undo layout</button>
           <button type="button" className="chip" disabled={!layoutHistory?.canRedo} onClick={() => { setRenumberClicks(null); onSelectedSlot(null); layoutHistory?.redo(); }}>Redo layout</button>
           <button type="button" className="chip" disabled={!slots.length} onClick={() => setRenumberClicks(renumberClicks == null ? [] : null)}>{renumberClicks == null ? "Renumber slots" : "Cancel renumber"}</button>
@@ -81,17 +129,17 @@ export function LayoutTab({
             const result = applyRenumberSequence(slots, renumberClicks);
             onSlots(result.slots); onSelectedSlot(null); setRenumberClicks(null);
           }}>Apply order</button>}
-          <button type="button" className="chip" disabled={!templateSize} onClick={() => {
+          <button type="button" className="chip" disabled={!templateSize || renumberClicks != null} onClick={() => {
             if (!templateSize) return;
             const result = addSlot(slots, templateSize);
             onSlots(result.slots); onSelectedSlot(result.selectedIndex);
           }}>Add slot</button>
-          <button type="button" className="chip" disabled={!selected || !templateSize} onClick={() => {
+          <button type="button" className="chip" disabled={!selected || !templateSize || renumberClicks != null} onClick={() => {
             if (!templateSize || selectedSlot == null) return;
             const result = duplicateSlot(slots, selectedSlot, templateSize);
             onSlots(result.slots); onSelectedSlot(result.selectedIndex);
           }}>Duplicate slot</button>
-          <button type="button" className="chip danger" disabled={!selected} onClick={() => setDeleteConfirm(true)}>Delete slot</button>
+          <button type="button" className="chip danger" disabled={!selected || renumberClicks != null} onClick={() => setDeleteConfirm(true)}>Delete slot</button>
           <button
             type="button"
             className={clsx("chip", { active: previewMode === "clean" })}
@@ -112,7 +160,7 @@ export function LayoutTab({
             type="button"
             className="chip"
             onClick={requestRegroup}
-            disabled={!slots.length}
+            disabled={!slots.length || renumberClicks != null}
           >
             Regroup nearby slots
           </button>
@@ -134,7 +182,7 @@ export function LayoutTab({
           cancelLabel="Cancel"
           onCancel={() => setRegroupConfirm(null)}
           onConfirm={() => {
-            if (regroupConfirm) onSlots(regroupConfirm);
+            if (regroupConfirm) { onSlots(regroupConfirm); onSelectedSlot(null); }
             setRegroupConfirm(null);
           }}
         />
@@ -148,6 +196,7 @@ export function LayoutTab({
         <TemplatePreview
           slots={slots}
           rawDebug={showDetected ? rawDebug : null}
+          onGestureActive={setGestureActive}
           slotNumbers={numbers}
           renumbering={renumberClicks != null}
           renumberClicks={renumberClicks ?? []}
@@ -230,6 +279,10 @@ export function LayoutTab({
                 onSlots(copy);
               }}
             />
+            {!skipBabyPhotos && maskResults[maskKey(selected)]?.error && <p className="upload-error" role="alert">{maskResults[maskKey(selected)].error} You can choose Rectangle, Ellipse, or Rounded above.
+              <button type="button" className="chip small" onClick={() => { maskCache.current.delete(maskKey(selected)); setMaskRetry(value => value + 1); }}>Retry cutout</button>
+            </p>}
+            {!skipBabyPhotos && maskResults[maskKey(selected)]?.url && <div><span className="muted small">Baby cutout preview</span><img alt="Baby cutout mask preview" src={maskResults[maskKey(selected)].url} style={{ display: "block", maxWidth: "100%", maxHeight: 140, background: "#888" }} /></div>}
             {parsedSlots.length > 0 && (
               <button
                 type="button"
