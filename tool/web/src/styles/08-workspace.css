@@ -874,3 +874,8 @@
 [data-theme="light"] button.tab-bar-item.active { color: #ffffff; }
 [data-theme="light"] .process-done-badge { color: #0c7053; }
 [data-theme="dark"] button.chip.active { color: var(--accent-contrast); }
+
+/* The card's translucency also blends its ink, so use darker light-theme ink. */
+[data-theme="light"] .tips-box strong,
+[data-theme="light"] .tips-box-close,
+[data-theme="light"] .tips-box-body { color: #34434c; }
