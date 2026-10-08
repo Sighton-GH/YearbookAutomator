@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Annotated
 import io
 import logging
 import uuid
@@ -442,8 +442,8 @@ async def upload_image(
     file: UploadFile = File(...),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
-    editor_owned: Literal["preview", "edit", "replay"] | None = Form(None),
-    restore_exact: bool = Form(False),
+    editor_owned: Annotated[Literal["preview", "edit", "replay"] | None, Form()] = None,
+    restore_exact: Annotated[bool, Form()] = False,
 ) -> dict[str, str]:
     enforce_workspace_write(request, workspace_id)
 
