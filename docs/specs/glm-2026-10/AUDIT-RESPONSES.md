@@ -34,8 +34,14 @@ Audits reviewed: frontend/backend/Plan 3 acceptance at96d772c0, later F1 typogra
 |Final mask atomic/quota|Atomic temporary replacement and quota checks, readable413.|failure/quota/HTTP regression tests|
 
 ## Final independent audit checkpoint d048fb65
-- Bulk face-centre same-name overwrite: per-person UUID editor-owned upload, plus server collision-safe ordinary uploads. Real HTTP red/blue same-basename regression preserves first image.
+- Auditor retracted the UI bulk same-name data-loss claim: api.ts already randomized filenames. Direct API same-name overwrites were real and hardened. Additional defence: per-person UUID editor-owned upload, plus server collision-safe ordinary uploads. Real HTTP red/blue same-basename regression preserves first image.
 - Style strip double-applied slot pins: clear assignments after resolving full-project placement; route test asserts ordered positions420,20 and emptypins.
 - Editor cleanup namespace: explicit editor_owned preview/edit Form field allocates UUID server filenames; ordinary prefix names remain renamed/protected. HTTP cleanup test deletes two editor images while preserving the ordinary original.
 - Focused regression:5backendHTTP pass;66frontendunitpass;TypeScriptclean;lint0errors/7warnings;build6.46s. Full final gates/re-audit remain pending.
 - Independent Regroup bug after overlapping duplication is awaiting a worker patch and retest; do not treat F3 acceptance as closed.
+
+## Further final audit corrections
+- F4 portrait detector exceptions now centre and warn with the person name, without failing the render; real render regression covers thrown detector.
+- P3-11 frontend strips only nonzero canonical combining classes, matching Python and preserving Indic vowel marks. Both runtimes test कुमार versus कुमर.
+- P3-08 config import explicitly restores exact destinations. Editor replay permits only validated baby_edit/baby_preview PNG names, with App returned-name verification and HTTP chained replay regression.
+- F1.7 remaining performance limit: at32cached cmaps, distinct missing glyphs may each scan all installedfonts once (auditor100font/3glyph probe300parses). Path-list caching avoids repeating at each fit size but is not a globalcompactcoverageindex. A boundedcompactindex is futurework; arbitrarylargercmapcache previously exceeded2GB.
