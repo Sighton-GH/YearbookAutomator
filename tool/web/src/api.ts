@@ -20,6 +20,31 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url;
+    if (
+      status === 401 &&
+      typeof url === "string" &&
+      url.startsWith("/api/") &&
+      !url.startsWith("/api/licensing/")
+    ) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ymga:license-invalid", {
+            detail: { reason: error?.response?.data?.reason ?? null },
+          })
+        );
+      } catch {
+        // ignore dispatch failures (e.g. no window); error is still re-thrown below
+      }
+    }
+    throw error;
+  }
+);
+
 export type Box = { x: number; y: number; width: number; height: number };
 export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box };
 export type RawParseDebug = {
@@ -312,8 +337,8 @@ export async function uploadBabyZip(
   form.append("workspace_id", workspaceId);
   form.append("people_json", JSON.stringify(people));
   if (babyZip) form.append("baby_zip", babyZip);
-  if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
-  if (opts?.partialNameMatch) form.append("partial_name_match", "true");
+  form.append("advanced_name_match", opts?.advancedNameMatch === false ? "false" : "true");
+  form.append("partial_name_match", opts?.partialNameMatch ? "true" : "false");
   if (opts?.convertPdfs) form.append("convert_pdfs", "true");
   if (opts?.removeBackground) form.append("remove_background", "true");
   if (opts?.backgroundMode) form.append("background_mode", opts.backgroundMode);
@@ -342,7 +367,7 @@ export async function uploadQuotesSpreadsheet(
   form.append("workspace_id", workspaceId);
   form.append("people_json", JSON.stringify(people));
   if (quotesSheet) form.append("quotes_spreadsheet", quotesSheet);
-  if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
+  form.append("advanced_name_match", opts?.advancedNameMatch === false ? "false" : "true");
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/upload-quotes-spreadsheet", form, {
     headers: { "Content-Type": "multipart/form-data" },
     signal: opts?.signal,
@@ -422,6 +447,14 @@ export async function generationStatus(jobId: string) {
     workspace_id?: string;
   }>("/api/generation/status", { params: { job_id: jobId } });
   return data;
+}
+
+export async function cancelGeneration(jobId: string, workspaceId: string): Promise<boolean> {
+  const { data } = await axios.post<{ ok: boolean }>("/api/generation/cancel", {
+    job_id: jobId,
+    workspace_id: workspaceId,
+  });
+  return Boolean(data.ok);
 }
 
 export async function generationListOutputs(workspaceId: string): Promise<GenerationOutputsResponse> {

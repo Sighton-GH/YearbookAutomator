@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.storage import InvalidWorkspacePath, safe_filename, workspace_dir, workspace_file
@@ -74,7 +74,7 @@ def _detect_baby_slot_shape(template_ref: Image.Image, slot_box) -> str:
 def _try_open_rgb(path: Path) -> Image.Image | None:
     try:
         with Image.open(path) as img:
-            return img.convert("RGB")
+            return ImageOps.exif_transpose(img).convert("RGB")
     except Exception:
         return None
 
@@ -85,9 +85,10 @@ def _try_open_baby_rgb(path: Path, baby_bg_rgb: tuple[int, int, int] | None) -> 
 
     try:
         with Image.open(path) as img:
+            upright = ImageOps.exif_transpose(img)
             if baby_bg_rgb is None:
-                return img.convert("RGB")
-            return _fill_transparency(img, baby_bg_rgb)
+                return upright.convert("RGB")
+            return _fill_transparency(upright, baby_bg_rgb)
     except Exception:
         return None
 

@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.models.schemas import GenerationRequest
 from app.services.licensing import (
@@ -29,8 +30,11 @@ from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
 from app.services.storage import restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services.progress import (
+    GenerationCancelled,
     get_job,
+    raise_if_cancelled,
     release_generation,
+    request_cancel,
     start_job,
     try_reserve_generation,
     update_job,
@@ -46,20 +50,34 @@ _SAFE_BASENAME_RE = re.compile(r"[^0-9A-Za-z._-]+")
 _OUTPUT_EXTS = {".png", ".pdf", ".tif", ".tiff"}
 
 
+_SPREAD_NUM_RE = re.compile(r"^output_(\d+)$")
+
+
 def _list_output_files(root) -> list:
-    # Prefer multi-spread outputs if present; otherwise fall back to a single output.<ext>.
-    spread_files: list = []
-    for ext in sorted(_OUTPUT_EXTS):
-        spread_files.extend(sorted(root.glob(f"output_*.{ext.lstrip('.')}")))
+    """Return the most recent render's spread files, ordered by spread number.
 
-    if not spread_files:
-        for ext in sorted(_OUTPUT_EXTS):
-            single = root / f"output{ext}"
-            if single.exists():
-                spread_files = [single]
-                break
+    A workspace can hold leftovers from earlier renders in other formats; only the
+    extension group with the newest file is returned.
+    """
+    candidates = [p for p in root.glob("output*") if p.is_file() and p.suffix.lower() in _OUTPUT_EXTS]
+    if not candidates:
+        return []
+    newest_ext = max(candidates, key=lambda p: p.stat().st_mtime).suffix.lower()
+    group = [p for p in candidates if p.suffix.lower() == newest_ext]
+    spreads = [p for p in group if _SPREAD_NUM_RE.match(p.stem)]
+    if spreads:
+        return sorted(spreads, key=lambda p: int(_SPREAD_NUM_RE.match(p.stem).group(1)))
+    return [p for p in group if p.stem == "output"][:1]
 
-    return spread_files
+
+def _clear_previous_outputs(root, keep: str) -> None:
+    """Delete output.* / output_*.* files (any format) except `keep`. Never touches preview.*."""
+    for p in root.glob("output*"):
+        if p.is_file() and p.name != keep and p.suffix.lower() in _OUTPUT_EXTS and (p.stem == "output" or _SPREAD_NUM_RE.match(p.stem)):
+            try:
+                p.unlink()
+            except OSError:
+                pass
 
 
 def _find_preview_file(root) -> str | None:
@@ -181,6 +199,10 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             }
 
     job_id = uuid4().hex
+    # A new full render starts at spread 1 (or the single-file output): drop leftovers
+    # from earlier renders so downloads never mix old and new spreads.
+    if re.match(r"^output(_0*1)?\.[a-z]+$", requested_output):
+        _clear_previous_outputs(workspace_dir(payload.workspace_id), keep=requested_output)
     try:
         start_job(job_id, payload.workspace_id)
     except Exception:
@@ -196,9 +218,15 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
         pass
 
     def run_generation():
+        def progress_cb(pct, msg):
+            raise_if_cancelled(job_id)
+            update_job(job_id, progress=pct, status=msg)
+
         try:
-            out_path = generate_composite(payload, progress_cb=lambda pct, msg: update_job(job_id, progress=pct, status=msg))
+            out_path = generate_composite(payload, progress_cb=progress_cb)
             update_job(job_id, progress=100, status="done", output=out_path.name)
+        except GenerationCancelled:
+            update_job(job_id, status="cancelled", error="generation_cancelled")
         except Exception as exc:  # pragma: no cover - defensive
             update_job(job_id, status="error", error=str(exc))
         finally:
@@ -213,6 +241,20 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if usage_payload is not None:
         resp["usage"] = usage_payload
     return resp
+
+
+class CancelGenerationRequest(BaseModel):
+    job_id: str
+    workspace_id: str
+
+
+@router.post("/cancel")
+async def cancel(payload: CancelGenerationRequest, request: Request) -> dict[str, Any]:
+    enforce_workspace_write(request, payload.workspace_id)
+    job = get_job(payload.job_id)
+    if not job or job.get("workspace_id") != payload.workspace_id:
+        return {"ok": False}
+    return {"ok": request_cancel(payload.job_id)}
 
 
 @router.get("/download")

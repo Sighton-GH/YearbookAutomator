@@ -87,3 +87,69 @@ def test_force_alphabetical_sorts_before_placement():
 
     assert [p.index for p in placed_people] == [2, 3, 1, 4]
     assert len(placed_slots) == len(placed_people)
+
+
+def test_out_of_range_slot_assignment_falls_back_to_default_slot():
+    slots = [_mk_slot(0, 0), _mk_slot(200, 0), _mk_slot(400, 0)]
+    people = [
+        PersonRecord(index=1, first_name="Ada", last_name="Alpha"),
+        PersonRecord(index=2, first_name="Ben", last_name="Beta"),
+        PersonRecord(index=3, first_name="Cy", last_name="Gamma"),
+    ]
+
+    _, placed_slots = auto_place_slots_for_people(
+        people=people,
+        slots=slots,
+        placement_mode="simultaneous",
+        slot_assignments={3: 99},
+    )
+
+    assert len(placed_slots) == 3
+    assert len({(s.mugshot.x, s.mugshot.y) for s in placed_slots}) == 3
+    assert (placed_slots[2].mugshot.x, placed_slots[2].mugshot.y) == (
+        slots[2].mugshot.x,
+        slots[2].mugshot.y,
+    )
+
+
+def test_colliding_slot_assignments_resolve_to_distinct_slots():
+    slots = [_mk_slot(0, 0), _mk_slot(200, 0), _mk_slot(400, 0)]
+    people = [
+        PersonRecord(index=1, first_name="Amy", last_name="Alpha"),
+        PersonRecord(index=2, first_name="Ben", last_name="Beta"),
+        PersonRecord(index=3, first_name="Cy", last_name="Gamma"),
+    ]
+
+    _, placed_slots = auto_place_slots_for_people(
+        people=people,
+        slots=slots,
+        placement_mode="simultaneous",
+        slot_assignments={1: 1, 2: 1},
+    )
+
+    assert len(placed_slots) == 3
+    coords = [(s.mugshot.x, s.mugshot.y) for s in placed_slots]
+    assert len(set(coords)) == 3
+    # First claimant keeps slot 1; the loser falls back to its default.
+    assert coords[0] == (slots[0].mugshot.x, slots[0].mugshot.y)
+
+
+def test_single_override_bumps_others_to_lowest_free_slots():
+    slots = [_mk_slot(0, 0), _mk_slot(200, 0), _mk_slot(400, 0)]
+    people = [
+        PersonRecord(index=1, first_name="Amy", last_name="Alpha"),
+        PersonRecord(index=2, first_name="Ben", last_name="Beta"),
+        PersonRecord(index=3, first_name="Cy", last_name="Gamma"),
+    ]
+
+    _, placed_slots = auto_place_slots_for_people(
+        people=people,
+        slots=slots,
+        placement_mode="simultaneous",
+        slot_assignments={3: 1},
+    )
+
+    coords = [(s.mugshot.x, s.mugshot.y) for s in placed_slots]
+    assert coords[0] == (slots[1].mugshot.x, slots[1].mugshot.y)
+    assert coords[1] == (slots[2].mugshot.x, slots[2].mugshot.y)
+    assert coords[2] == (slots[0].mugshot.x, slots[0].mugshot.y)

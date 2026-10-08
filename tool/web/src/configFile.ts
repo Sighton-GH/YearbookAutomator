@@ -34,15 +34,23 @@ export async function readTextFile(file: File): Promise<string> {
   return await file.text();
 }
 
+const FRIENDLY_SERVER_CODES: Record<string, string> = {
+  workspace_generation_in_progress: "A render is already running for this project. Wait for it to finish (or cancel it), then try again.",
+  server_generation_capacity_reached: "The server is busy rendering other projects. Please try again in a minute.",
+  workspace_image_job_in_progress: "Another photo is still being processed for this project. Wait for it to finish, then try again.",
+  generation_cancelled: "Rendering was cancelled.",
+};
+
 export function describeApiError(err: unknown, fallback: string): string {
   const anyErr: any = err;
   const detail = anyErr?.response?.data?.detail;
-  if (typeof detail === "string" && detail.trim()) return detail;
+  if (typeof detail === "string" && detail.trim()) return FRIENDLY_SERVER_CODES[detail.trim()] ?? detail;
   const reason = anyErr?.response?.data?.reason;
   const hint = anyErr?.response?.data?.hint;
   if (typeof reason === "string" && reason.trim()) {
+    const friendlyReason = FRIENDLY_SERVER_CODES[reason.trim()] ?? reason;
     const h = typeof hint === "string" && hint.trim() ? ` — ${hint}` : "";
-    return `${fallback}: ${reason}${h}`;
+    return `${fallback}: ${friendlyReason}${h}`;
   }
   if (anyErr?.message && String(anyErr.message).trim()) return String(anyErr.message);
   return fallback;

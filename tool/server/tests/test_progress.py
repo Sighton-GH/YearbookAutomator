@@ -23,3 +23,21 @@ def test_progress_lifecycle():
 
     progress.clear_job(job_id)
     assert progress.get_job(job_id) is None
+
+
+def test_request_cancel_marks_job_and_unknown_job_returns_false():
+    from app.services import progress
+    progress.start_job("job-c1", "ws1")
+    assert progress.is_cancel_requested("job-c1") is False
+    assert progress.request_cancel("job-c1") is True
+    assert progress.is_cancel_requested("job-c1") is True
+    assert progress.request_cancel("no-such-job") is False
+
+
+def test_cancel_check_raises_inside_progress_callback():
+    import pytest
+    from app.services import progress
+    progress.start_job("job-c2", "ws1")
+    progress.request_cancel("job-c2")
+    with pytest.raises(progress.GenerationCancelled):
+        progress.raise_if_cancelled("job-c2")

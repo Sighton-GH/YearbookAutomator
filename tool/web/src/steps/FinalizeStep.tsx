@@ -23,6 +23,7 @@ export function FinalizeStep({
   canContinue,
   handleRenderPreview,
   handleRenderAll,
+  onCancelRender,
   workspaceId,
   previewPath,
   previewNonce,
@@ -51,6 +52,7 @@ export function FinalizeStep({
   canContinue: boolean;
   handleRenderPreview: () => void;
   handleRenderAll: () => void;
+  onCancelRender?: () => void;
   workspaceId: string | null;
   previewPath: string | null;
   previewNonce: number;
@@ -213,6 +215,11 @@ export function FinalizeStep({
             <button className="primary" disabled={loading || !canContinue} onClick={handleRenderAll}>
               {loading ? "Rendering..." : "Render all"}
             </button>
+            {loading && onCancelRender && (
+              <button type="button" onClick={onCancelRender}>
+                Cancel
+              </button>
+            )}
             {previewPath && workspaceId && (
               <button
                 onClick={() => {

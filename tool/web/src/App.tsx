@@ -25,6 +25,7 @@ import {
   generationDownloadSpreadsheetUrl,
   generationStatus,
   generationListOutputs,
+  cancelGeneration,
   touchWorkspace,
   deleteWorkspace,
   getWorkspaceState,
@@ -380,7 +381,7 @@ export default function App({
   }, [templateSize, outputSize]);
 
   // Persisted options for spreadsheet+portrait ingest.
-  const defaultNamingPattern = "\\d{3,4}";
+  const defaultNamingPattern = "\\d{1,4}";
   const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
@@ -420,6 +421,8 @@ export default function App({
 
   const defaultBabyUploadInFlight = useRef<Promise<string> | null>(null);
   const defaultMugshotUploadInFlight = useRef<Promise<string> | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const cancelRequestedRef = useRef(false);
 
   const isServerProvidedDefaultBaby = (filename: string | null | undefined): boolean => {
     const name = String(filename || "").toLowerCase();
@@ -942,6 +945,18 @@ export default function App({
     setQuoteAllCaps(Boolean(session.quoteAllCaps));
     setQuoteAlign((session.quoteAlign as Align) ?? "left");
     setPeoplePerSpread(typeof session.peoplePerSpread === "number" ? session.peoplePerSpread : 16);
+    if (session.outputFormat === "png" || session.outputFormat === "pdf" || session.outputFormat === "tiff") {
+      setOutputFormat(session.outputFormat);
+    }
+    if (
+      session.outputSize &&
+      typeof session.outputSize.width === "number" &&
+      typeof session.outputSize.height === "number" &&
+      session.outputSize.width > 0 &&
+      session.outputSize.height > 0
+    ) {
+      setOutputSize({ width: session.outputSize.width, height: session.outputSize.height });
+    }
 
     setTemplatePreviewUrl(`${templateCleanUrl(newWorkspaceId)}&t=${Date.now()}`);
     setAnnotatedPreviewUrl(`${templateAnnotatedUrl(newWorkspaceId)}&t=${Date.now()}`);
@@ -1009,14 +1024,19 @@ export default function App({
     const annotated = annotatedOverride ?? importAnnotated;
     const clean = cleanOverride ?? importClean;
     if (!annotated || !clean) return;
+    if (!workspaceId) {
+      setConfigImportError("Your session is still starting. Wait a moment and try again.");
+      return;
+    }
     setConfigImportError("");
     setConfigImportBusy(true);
     try {
       const s = configToImport.session;
-      const newWs = await importTemplateRemote({
+      const resp = await importTemplateRemote({
         session: s,
         annotated,
         clean,
+        workspaceId,
         parseTemplate,
         setStatus: setConfigImportStatus,
         promptHandlers: {
@@ -1037,11 +1057,20 @@ export default function App({
       });
 
       // Bind everything to the new workspace.
-      setImportWorkspaceId(newWs);
+      setImportWorkspaceId(resp.template_id);
       setImportTemplateDone(true);
 
       // Apply config session immediately (so the user lands back on their stage).
-      applyImportedSession(s, newWs);
+      applyImportedSession(s, resp.template_id);
+      if (!s.templateSize || s.templateSize.width !== resp.width || s.templateSize.height !== resp.height) {
+        setSlots(resp.slots);
+        setParsedSlots(resp.slots.map((x) => ({ ...x })));
+        setTemplateSize({ width: resp.width, height: resp.height });
+        setConfigImportStatus(
+          (prev) =>
+            `${prev} The template you uploaded is a different size from the one in this config, so the freshly detected layout was used instead of the saved slot positions.`.trim()
+        );
+      }
     } catch (err) {
       setConfigImportError(`Template parsing failed.\n${formatServerMessage(err)}`);
       setConfigImportStatus("");
@@ -1484,6 +1513,23 @@ export default function App({
       }
 
       const shouldUseSavedWorkspace = !initialWorkspaceId || initialWorkspaceId === saved?.workspaceId;
+
+      // The server handed us a different workspace than the saved session
+      // (restart or expiry): stash the saved settings as a backup before the
+      // autosave persist effect overwrites them, and explain what happened.
+      if (saved?.workspaceId && initialWorkspaceId && initialWorkspaceId !== saved.workspaceId) {
+        try {
+          window.localStorage.setItem(
+            "ymga-session-backup-v1",
+            JSON.stringify({ ...saved, saved_at: new Date().toISOString() })
+          );
+        } catch {
+          // ignore quota / privacy mode; the notice below still applies
+        }
+        setStatus(
+          "Your previous project's files are no longer on the server (the session expired or the server was restarted). Your settings were saved as a backup — use File → Upload config after re-uploading files, or start again."
+        );
+      }
 
       // Only auto-restore when starting fresh (avoid clobbering in-flight UI state).
       if (saved && shouldUseSavedWorkspace && !(workspaceId || templateId || people.length || slots.length)) {
@@ -2066,6 +2112,7 @@ export default function App({
     countUsage?: boolean;
     suppressStatus?: boolean;
     manageLoading?: boolean;
+    onError?: (message: string) => void;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
     const manageLoading = opts.manageLoading ?? true;
@@ -2145,15 +2192,31 @@ export default function App({
       });
 
       const jobId = gen.jobId;
+      activeJobIdRef.current = jobId;
       if (opts.countUsage && gen.usage) setUsageInfo(gen.usage);
 
       const jobStartMs = performance.now();
+      let lastProgress = -1;
+      let lastStatusText = "";
+      let lastChangeMs = Date.now();
+      let pollIntervalMs = 400;
 
       while (true) {
         try {
           const statusResp = await generationStatus(jobId);
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
+          const statusText = statusResp.status || "";
+          let stuck = false;
+          if (spreadPct !== lastProgress || statusText !== lastStatusText) {
+            lastProgress = spreadPct;
+            lastStatusText = statusText;
+            lastChangeMs = Date.now();
+          } else if (Date.now() - lastChangeMs >= 10 * 60 * 1000) {
+            stuck = true;
+            pollIntervalMs = 2000;
+            setStatus("Rendering seems stuck (no progress for 10 minutes). Press Cancel, then try again.");
+          }
           const hasMulti = Boolean(opts.spreadIndex && opts.totalSpreads && typeof opts.overallStartMs === "number");
 
           // Progress bar: overall for multi-spread renders, per-spread otherwise.
@@ -2197,13 +2260,17 @@ export default function App({
             }
           }
           if (etaSeconds !== null) parts.push(`ETA ${formatEtaSeconds(etaSeconds)}`);
-          if (!suppressStatus) {
+          if (!suppressStatus && !stuck) {
             setStatus(parts.join(" — "));
           }
 
           if (statusResp.error) {
+            const cancelled = cancelRequestedRef.current && statusResp.error === "generation_cancelled";
+            const msg = cancelled ? "Rendering cancelled." : `Generation failed.\nserver message:\n${statusResp.error}`;
+            activeJobIdRef.current = null;
+            opts.onError?.(msg);
             if (!suppressStatus) {
-              setStatus(`Generation failed.\nserver message:\n${statusResp.error}`);
+              setStatus(msg);
             }
             if (manageLoading) {
               setLoading(false);
@@ -2212,6 +2279,7 @@ export default function App({
           }
           if (statusResp.output) {
             opts.onDone?.(statusResp.output);
+            activeJobIdRef.current = null;
             if (!suppressStatus) {
               setStatus(opts.outputFilename ? "Preview ready" : "Generation complete");
               setProgress(100);
@@ -2221,11 +2289,14 @@ export default function App({
             }
             return statusResp.output;
           }
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
         } catch (err) {
           console.error(err);
+          activeJobIdRef.current = null;
+          const msg = `Generation polling failed.\n${formatServerMessage(err)}`;
+          opts.onError?.(msg);
           if (!suppressStatus) {
-            setStatus(`Generation polling failed.\n${formatServerMessage(err)}`);
+            setStatus(msg);
           }
           if (manageLoading) {
             setLoading(false);
@@ -2238,9 +2309,12 @@ export default function App({
       return null;
     } catch (err) {
       console.error(err);
+      activeJobIdRef.current = null;
       const base = opts.outputFilename ? "Preview generation failed" : "Generation failed";
+      const msg = `${base}.\n${formatServerMessage(err)}`;
+      opts.onError?.(msg);
       if (!suppressStatus) {
-        setStatus(`${base}.\n${formatServerMessage(err)}`);
+        setStatus(msg);
       }
       if (manageLoading) {
         setLoading(false);
@@ -2249,8 +2323,21 @@ export default function App({
     }
   };
 
+  const handleCancelRender = async () => {
+    cancelRequestedRef.current = true;
+    const id = activeJobIdRef.current;
+    if (id && workspaceId) {
+      try {
+        await cancelGeneration(id, workspaceId);
+      } catch {
+        /* status poll will surface it */
+      }
+    }
+  };
+
   const handleRenderPreview = async () => {
     if (!workspaceId || !templateId) return;
+    cancelRequestedRef.current = false;
     const count = Math.min(slots.length || people.length, people.length);
     const previewPeople = getPeopleForGeneration(people).slice(0, count);
 
@@ -2269,6 +2356,7 @@ export default function App({
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
 
+    cancelRequestedRef.current = false;
     setUsageInfo(null);
 
     const peopleForAll = getPeopleForGeneration(people);
@@ -2283,19 +2371,24 @@ export default function App({
     setOutputPath(null);
 
     const overallStartMs = performance.now();
-    const maxParallel = 3;
+    const maxParallel = 1;
     const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
     const results: (string | null)[] = Array.from({ length: totalSpreads }, () => null);
     let completed = 0;
     let nextIndex = 0;
     let failed = false;
+    let lastError: string | null = null;
 
     setLoading(true);
     setProgress(0);
-    setStatus(`Rendering ${totalSpreads} spreads (max ${maxParallel} at a time)...`);
+    setStatus(`Rendering ${totalSpreads} spreads…`);
 
     const worker = async () => {
       while (true) {
+        if (cancelRequestedRef.current) {
+          failed = true;
+          return;
+        }
         if (failed) return;
         const spreadIdx = nextIndex;
         if (spreadIdx >= totalSpreads) return;
@@ -2304,7 +2397,7 @@ export default function App({
         const start = spreadIdx * perSpread;
         const end = Math.min(peopleForAll.length, start + perSpread);
         const spreadPeople = peopleForAll.slice(start, end);
-        const filename = `output_${String(spreadIdx + 1).padStart(2, "0")}.${ext}`;
+        const filename = `output_${String(spreadIdx + 1).padStart(totalSpreads >= 100 ? 3 : 2, "0")}.${ext}`;
         const out = await runGeneration({
           outputFilename: filename,
           peopleOverride: spreadPeople,
@@ -2314,6 +2407,9 @@ export default function App({
           countUsage: spreadIdx === 0,
           suppressStatus: true,
           manageLoading: false,
+          onError: (message) => {
+            lastError = message;
+          },
         });
 
         if (!out) {
@@ -2334,7 +2430,11 @@ export default function App({
     await Promise.all(workers);
 
     if (failed) {
-      setStatus("Generation failed.\nOne or more spreads did not render successfully.");
+      if (cancelRequestedRef.current) {
+        setStatus(`Rendering cancelled after ${completed} of ${totalSpreads} spreads.`);
+      } else {
+        setStatus(`Generation stopped at spread ${completed + 1} of ${totalSpreads}. The spreads already finished are still available below; fix the problem shown above and press Render all again.${lastError ? `\n${lastError}` : ""}`);
+      }
       setLoading(false);
       return;
     }
@@ -2528,14 +2628,17 @@ export default function App({
       try {
         setLoading(true);
         setProgress(0);
+        if (!workspaceId) {
+          setStatus("Could not load the sample project: your session is still starting. Wait a moment and try again.");
+          return;
+        }
         setStatus("Loading sample project — preparing template…");
         const annotated = await fetchAsPng(withBase("assets/Annotated Sample.webp"), "sample-annotated.png");
         const clean = await fetchAsPng(withBase("assets/Clean Sample.webp"), "sample-clean.png");
         updateAnnotatedFile(annotated);
         updateCleanFile(clean);
         setStatus("Loading sample project — detecting layout…");
-        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea });
-        setWorkspaceId(parsed.template_id);
+        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, workspaceId: workspaceId || undefined });
         setTemplateId(parsed.template_id);
         setSlots(parsed.slots);
         setParsedSlots(parsed.slots.map((s) => ({ ...s })));
@@ -2555,7 +2658,7 @@ export default function App({
         setActiveStep("people");
         setStatus("Sample project loaded — explore the People step, then Style and Generate.");
       } catch (err) {
-        setStatus(`Could not load the sample project. ${err instanceof Error ? err.message : ""}`.trim());
+        setStatus(`Could not load the sample project. ${formatServerMessage(err)}`);
       } finally {
         setLoading(false);
         if (typeof window !== "undefined") window.dispatchEvent(new Event("ymga:load-sample-done"));
@@ -3106,6 +3209,7 @@ export default function App({
                 canContinue={canContinue}
                 handleRenderPreview={handleRenderPreview}
                 handleRenderAll={handleRenderAll}
+                onCancelRender={handleCancelRender}
                 workspaceId={workspaceId}
                 previewPath={previewPath}
                 previewNonce={previewNonce}

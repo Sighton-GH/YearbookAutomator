@@ -5,13 +5,14 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from PIL import UnidentifiedImageError
 
 from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.placement import auto_place_slots_for_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
+from app.services.fonts import resolve_font_file
 
 
 _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
@@ -171,6 +172,14 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
             continue
         if uploaded.exists():
             loaded = _try_truetype(str(uploaded), size=size)
+            if loaded is not None:
+                return loaded
+
+    bold = (font_weight or "").strip().lower() in {"bold", "700", "800", "900"}
+    for cand in candidates:
+        path = resolve_font_file(workspace_id, cand, bold)
+        if path is not None:
+            loaded = _try_truetype(str(path), size=size)
             if loaded is not None:
                 return loaded
 
@@ -499,15 +508,70 @@ def _detect_baby_slot_shape(template_rgb: Image.Image, slot_box) -> str:
     return "rect"
 
 
+def _open_rgb_upright(path: Path) -> Image.Image:
+    with Image.open(path) as img:
+        return ImageOps.exif_transpose(img).convert("RGB")
+
+
+def _open_template_rgb(path: Path) -> Image.Image:
+    with Image.open(path) as img:
+        if "A" in img.getbands() or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            canvas = Image.new("RGB", rgba.size, (255, 255, 255))
+            canvas.paste(rgba, (0, 0), rgba.getchannel("A"))
+            return canvas
+        return img.convert("RGB")
+
+
 def _baby_mask_path(workspace_id: str, slot_box) -> Path:
     root = workspace_dir(workspace_id)
     masks_dir = root / "masks" / "baby"
     return masks_dir / f"{int(slot_box.x)}_{int(slot_box.y)}_{int(slot_box.width)}_{int(slot_box.height)}.png"
 
 
+def _find_baby_mask_path(workspace_id: str, slot_box) -> Path | None:
+    exact = _baby_mask_path(workspace_id, slot_box)
+    if exact.exists():
+        return exact
+    masks_dir = workspace_dir(workspace_id) / "masks" / "baby"
+    if not masks_dir.is_dir():
+        return None
+    sx, sy = int(slot_box.x), int(slot_box.y)
+    sw, sh = int(slot_box.width), int(slot_box.height)
+    if sw <= 0 or sh <= 0:
+        return None
+    best: Path | None = None
+    best_iou = 0.0
+    for candidate in masks_dir.glob("*.png"):
+        parts = candidate.stem.split("_")
+        if len(parts) != 4:
+            continue
+        try:
+            cx, cy, cw, ch = (int(p) for p in parts)
+        except ValueError:
+            continue
+        if cw <= 0 or ch <= 0:
+            continue
+        ix0, iy0 = max(sx, cx), max(sy, cy)
+        ix1, iy1 = min(sx + sw, cx + cw), min(sy + sh, cy + ch)
+        inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+        if inter <= 0:
+            continue
+        union = sw * sh + cw * ch - inter
+        if union <= 0:
+            continue
+        iou = inter / union
+        if iou > best_iou:
+            best_iou = iou
+            best = candidate
+    if best is not None and best_iou >= 0.8:
+        return best
+    return None
+
+
 def _load_baby_mask(workspace_id: str, slot_box) -> Image.Image | None:
-    path = _baby_mask_path(workspace_id, slot_box)
-    if not path.exists():
+    path = _find_baby_mask_path(workspace_id, slot_box)
+    if path is None or not path.exists():
         return None
     try:
         mask = Image.open(path).convert("L")
@@ -547,12 +611,41 @@ def _paste_image(
         base.paste(fitted, (target.x, target.y))
 
 
-def _render_text(draw: ImageDraw.ImageDraw, text: str, slot_box, font, align: str, all_caps: bool):
-    content = text.upper() if all_caps else text
-    draw.multiline_text((slot_box.x, slot_box.y), content, font=font, fill=(20, 30, 50), align=align)
+def _render_name(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    box,
+    load_font: Callable[[int], ImageFont.ImageFont],
+    start_size: int,
+    align: str,
+    all_caps: bool,
+    min_size: int = 8,
+) -> None:
+    content = (text.upper() if all_caps else text).strip()
+    if not content:
+        return
+    max_width = max(1, int(box.width))
+    for size in range(int(start_size), int(min_size) - 1, -1):
+        font = load_font(size)
+        bbox = draw.textbbox((0, 0), content, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            chosen = font
+            break
+    else:
+        chosen = load_font(int(min_size))
+    if align == "center":
+        draw.text((box.x + box.width / 2, box.y), content, font=chosen, fill=(20, 30, 50), anchor="ma")
+    else:
+        draw.text((box.x, box.y), content, font=chosen, fill=(20, 30, 50), anchor="la")
 
 
 def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None) -> Path:
+    if len(payload.people) > len(payload.slots):
+        raise ValueError(
+            f"This spread has {len(payload.people)} students but only {len(payload.slots)} slots. "
+            "Re-render with 'Render all', which splits students across spreads."
+        )
+
     def tick(pct: int, msg: str):
         if progress_cb:
             progress_cb(pct, msg)
@@ -568,7 +661,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     output_format = (getattr(payload, "output_format", "png") or "png").lower()
     tick(5, "Loading template")
-    base = Image.open(template_path).convert("RGB")
+    base = _open_template_rgb(template_path)
     template_ref = base.copy()
     template_w, template_h = base.size
     for slot in payload.slots:
@@ -588,7 +681,6 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     quote_align = payload.quote_align or payload.align
     quote_all_caps = payload.quote_all_caps if payload.quote_all_caps is not None else payload.all_caps
 
-    name_font = _load_font(payload.workspace_id, name_font_family, name_font_weight, size=name_font_size)
     quote_font = _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=quote_font_size)
     draw = ImageDraw.Draw(base)
 
@@ -621,17 +713,18 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     def _try_open_rgb(path: Path) -> Image.Image | None:
         try:
             with Image.open(path) as img:
-                return img.convert("RGB")
+                return ImageOps.exif_transpose(img).convert("RGB")
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
     def _try_open_baby_rgb(path: Path) -> Image.Image | None:
         try:
             with Image.open(path) as img:
+                upright = ImageOps.exif_transpose(img)
                 if baby_bg_rgb is None:
                     # Preserve historical behavior: convert directly to RGB.
-                    return img.convert("RGB")
-                return _fill_transparency(img, baby_bg_rgb)
+                    return upright.convert("RGB")
+                return _fill_transparency(upright, baby_bg_rgb)
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
@@ -691,7 +784,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             break
 
         quote = person.quote or payload.default_quote or ""
-        _render_text(draw, f"{person.first_name} {person.last_name}", slot.name, name_font, name_align, name_all_caps)
+        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s), name_font_size, name_align, name_all_caps)
         if quote:
             max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
             _render_wrapped_text(

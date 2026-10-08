@@ -49,7 +49,32 @@ def start_job(job_id: str, workspace_id: str) -> None:
             "output": None,
             "error": None,
             "updated_at": time.time(),
+            "cancel_requested": False,
         }
+
+
+class GenerationCancelled(Exception):
+    pass
+
+
+def request_cancel(job_id: str) -> bool:
+    with _lock:
+        job = _progress.get(job_id)
+        if job is None:
+            return False
+        job["cancel_requested"] = True
+        return True
+
+
+def is_cancel_requested(job_id: str) -> bool:
+    with _lock:
+        job = _progress.get(job_id)
+        return bool(job and job.get("cancel_requested"))
+
+
+def raise_if_cancelled(job_id: str) -> None:
+    if is_cancel_requested(job_id):
+        raise GenerationCancelled()
 
 
 def update_job(job_id: str, *, progress: Optional[int] = None, status: Optional[str] = None, output: Optional[str] = None, error: Optional[str] = None) -> None:

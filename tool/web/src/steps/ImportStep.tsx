@@ -304,6 +304,7 @@ export function ImportStep({
   const [lowResWarning, setLowResWarning] = useState<string | null>(null);
   const [portraitReviewOpen, setPortraitReviewOpen] = useState(false);
   const [portraitReviewMessage, setPortraitReviewMessage] = useState<string | null>(null);
+  const [sizeMismatchMessage, setSizeMismatchMessage] = useState<string | null>(null);
   const [autoDuplicatePortrait, setAutoDuplicatePortrait] = useState(false);
   const [annotatedPreviewOpen, setAnnotatedPreviewOpen] = useState(false);
   const [cleanPreviewOpen, setCleanPreviewOpen] = useState(false);
@@ -311,6 +312,7 @@ export function ImportStep({
   const lastHandledKeyRef = useRef<string | null>(null);
   const lowResResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
   const portraitReviewResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
+  const sizeMismatchResolverRef = useRef<((choice: "continue" | "cancel") => void) | null>(null);
   const templateEstimateRef = useRef(4);
 
   // --- Roster + Portraits card state ---
@@ -319,7 +321,7 @@ export function ImportStep({
   const [showMissingPortraits, setShowMissingPortraits] = useState(false);
   const [showAdvancedNaming, setShowAdvancedNaming] = useState(false);
   const portraitsEstimateRef = useRef(10);
-  const defaultNamingPattern = "\\d{3,4}";
+  const defaultNamingPattern = "\\d{1,4}";
 
   // --- Quotes card state ---
   const [quotesSheet, setQuotesSheet] = useState<File | null>(null);
@@ -418,8 +420,8 @@ export function ImportStep({
     if (missingAnnotated || missingClean) {
       setShowMissingTemplate(true);
       const missing: string[] = [];
-      if (missingAnnotated) missing.push("Annotated template (.png)");
-      if (missingClean) missing.push("Clean template (.png)");
+      if (missingAnnotated) missing.push("Annotated template (.png or .jpg)");
+      if (missingClean) missing.push("Clean template (.png or .jpg)");
       setStatus(`Missing required file(s): ${missing.join(", ")}`);
       scrollTo(templateRef.current);
       return false;
@@ -446,6 +448,11 @@ export function ImportStep({
                   portraitReviewResolverRef.current = resolve;
                   setPortraitReviewMessage(message);
                   setPortraitReviewOpen(true);
+                }),
+              onSizeMismatch: (message) =>
+                new Promise<"continue" | "cancel">((resolve) => {
+                  sizeMismatchResolverRef.current = resolve;
+                  setSizeMismatchMessage(message);
                 }),
             },
           });
@@ -544,12 +551,9 @@ export function ImportStep({
       setStatus("Parse the template first");
       return null;
     }
-    if (!sheet || !zip) {
+    if (!sheet) {
       setShowMissingPortraits(true);
-      const missing: string[] = [];
-      if (!sheet) missing.push("Spreadsheet (.xlsx or .csv)");
-      if (!zip) missing.push("Portraits ZIP (.zip)");
-      setStatus(`Missing required file(s): ${missing.join(", ")}`);
+      setStatus("Missing required file(s): Spreadsheet (.xlsx or .csv)");
       scrollTo(portraitsRef.current);
       return null;
     }
@@ -602,7 +606,11 @@ export function ImportStep({
       const nextWarnings = resp.warnings ?? [];
       onPortraitWarnings(nextWarnings);
       onPortraitCompletedErrorCount(nextWarnings.length);
-      setStatus("Portrait mapping processing completed");
+      if (!zip) {
+        setStatus("Roster loaded without portraits. Students will use the default portrait until you upload a portraits ZIP.");
+      } else {
+        setStatus("Portrait mapping processing completed");
+      }
       setProgress(100);
       setPortraitsStage("done");
       return resp.people;
@@ -982,6 +990,23 @@ export function ImportStep({
         busy={templateRotating}
       />
       <ConfirmDialog
+        open={Boolean(sizeMismatchMessage)}
+        title="Template sizes differ"
+        message={sizeMismatchMessage ?? undefined}
+        confirmLabel="Continue"
+        cancelLabel="Go back"
+        onCancel={() => {
+          sizeMismatchResolverRef.current?.("cancel");
+          sizeMismatchResolverRef.current = null;
+          setSizeMismatchMessage(null);
+        }}
+        onConfirm={() => {
+          sizeMismatchResolverRef.current?.("continue");
+          sizeMismatchResolverRef.current = null;
+          setSizeMismatchMessage(null);
+        }}
+      />
+      <ConfirmDialog
         open={Boolean(importConfirm)}
         title="Continue without everything?"
         message={importConfirmMessage}
@@ -1051,10 +1076,10 @@ export function ImportStep({
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           <div>
-            <div className="upload-title">Annotated template (.png)</div>
+            <div className="upload-title">Annotated template (.png or .jpg)</div>
             {missingAnnotatedUi && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
             <UploadDropLabel
-              accept="image/png"
+              accept="image/png,image/jpeg,image/webp"
               disabled={loading}
               className={missingAnnotatedUi ? "invalid" : undefined}
               onFile={(file) => {
@@ -1064,7 +1089,7 @@ export function ImportStep({
             >
               <input
                 type="file"
-                accept="image/png"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
                   setShowMissingTemplate(false);
                   onAnnotatedChange(e.target.files?.[0] ?? null);
@@ -1087,10 +1112,10 @@ export function ImportStep({
           </div>
 
           <div>
-            <div className="upload-title">Clean template (.png)</div>
+            <div className="upload-title">Clean template (.png or .jpg)</div>
             {missingCleanUi && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
             <UploadDropLabel
-              accept="image/png"
+              accept="image/png,image/jpeg,image/webp"
               disabled={loading}
               className={missingCleanUi ? "invalid" : undefined}
               onFile={(file) => {
@@ -1100,7 +1125,7 @@ export function ImportStep({
             >
               <input
                 type="file"
-                accept="image/png"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
                   setShowMissingTemplate(false);
                   onCleanChange(e.target.files?.[0] ?? null);
@@ -1261,7 +1286,7 @@ export function ImportStep({
           <StageIcon status={portraitsLocked ? "pending" : portraitsStage} />
           <h3>Roster &amp; Portraits</h3>
           <InfoPopover
-            content="Upload a spreadsheet (.xlsx or .csv) and a portraits ZIP. By default, this matches portraits by digits first (example: 001.jpg → row 1), with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings."
+            content="Upload a spreadsheet (.xlsx or .csv); a portraits ZIP is optional. Portrait files named with the row number (1.jpg, 01.jpg or 001.jpg → row 1) are matched first, with rows starting at 1 (header ignored). With Prioritize names enabled, filenames containing a student's first+last name are matched first. Non-matching files are skipped and listed in warnings. Without a portraits ZIP, students use the default portrait until you upload one."
             ariaLabel="Roster and portraits description"
             position="below"
           />
@@ -1280,6 +1305,7 @@ export function ImportStep({
                 onFile={(file) => {
                   setShowMissingPortraits(false);
                   setSheet(file);
+                  setPortraitsStage("pending");
                 }}
               >
                 <input
@@ -1288,21 +1314,21 @@ export function ImportStep({
                   onChange={(e) => {
                     setShowMissingPortraits(false);
                     setSheet(e.target.files?.[0] ?? null);
+                    setPortraitsStage("pending");
                   }}
                 />
                 {sheet && <span className="muted small">{sheet.name}</span>}
               </UploadDropLabel>
             </div>
             <div>
-              <div className="upload-title">Portraits ZIP</div>
-              {showMissingPortraits && !zip && <div className="upload-error"><span aria-hidden="true">❗</span> Please upload a file</div>}
+              <div className="upload-title">Portraits ZIP (optional)</div>
               <UploadDropLabel
                 accept=".zip"
                 disabled={loading || portraitsLocked}
-                className={showMissingPortraits && !zip ? "invalid" : undefined}
                 onFile={(file) => {
                   setShowMissingPortraits(false);
                   setZip(file);
+                  setPortraitsStage("pending");
                 }}
               >
                 <input
@@ -1311,6 +1337,7 @@ export function ImportStep({
                   onChange={(e) => {
                     setShowMissingPortraits(false);
                     setZip(e.target.files?.[0] ?? null);
+                    setPortraitsStage("pending");
                   }}
                 />
                 {zip && <span className="muted small">{zip.name}</span>}
@@ -1328,7 +1355,7 @@ export function ImportStep({
             <label className="field">
               <span className="inline" style={{ alignItems: "center", gap: 6 }}>
                 <span>Filename pattern (regex)</span>
-                <InfoPopover content="Default matches 3–4 digit stems (e.g., 001.jpg). Non-matching files are skipped." ariaLabel="Filename pattern description" />
+                <InfoPopover content="Default matches 1–4 digit stems (e.g., 1.jpg, 01.jpg or 001.jpg). Non-matching files are skipped." ariaLabel="Filename pattern description" />
               </span>
               <input type="text" value={namingPattern} onChange={(e) => setNamingPattern(e.target.value)} placeholder={defaultNamingPattern} />
             </label>
@@ -1402,8 +1429,22 @@ export function ImportStep({
         )}
         <fieldset className="import-card-fieldset">
           <div className="upload-title">Quotes spreadsheet (optional)</div>
-          <UploadDropLabel accept=".xlsx,.csv" disabled={loading} onFile={setQuotesSheet}>
-            <input type="file" accept=".xlsx,.csv" onChange={(e) => setQuotesSheet(e.target.files?.[0] ?? null)} />
+          <UploadDropLabel
+            accept=".xlsx,.csv"
+            disabled={loading}
+            onFile={(file) => {
+              setQuotesSheet(file);
+              setQuotesStage("pending");
+            }}
+          >
+            <input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(e) => {
+                setQuotesSheet(e.target.files?.[0] ?? null);
+                setQuotesStage("pending");
+              }}
+            />
             {quotesSheet && <span className="muted small">{quotesSheet.name}</span>}
           </UploadDropLabel>
           {advancedNameMatchingEnabled && (
@@ -1471,8 +1512,22 @@ export function ImportStep({
         )}
         <fieldset className="import-card-fieldset">
           <div className="upload-title">Baby photo ZIP (optional)</div>
-            <UploadDropLabel accept=".zip" disabled={loading} onFile={setBabyZip}>
-              <input type="file" accept=".zip" onChange={(e) => setBabyZip(e.target.files?.[0] ?? null)} />
+            <UploadDropLabel
+              accept=".zip"
+              disabled={loading}
+              onFile={(file) => {
+                setBabyZip(file);
+                setBabyStage("pending");
+              }}
+            >
+              <input
+                type="file"
+                accept=".zip"
+                onChange={(e) => {
+                  setBabyZip(e.target.files?.[0] ?? null);
+                  setBabyStage("pending");
+                }}
+              />
               {babyZip && <span className="muted small">{babyZip.name}</span>}
             </UploadDropLabel>
 

@@ -16,9 +16,23 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
 from app.services.mapping_review import apply_mapping_decisions
-from app.services.spreadsheet import ingest_spreadsheet
+from app.services.spreadsheet import RosterFormatError, ingest_spreadsheet
+from app.services.name_matching import (
+    compact_name,
+    is_archive_junk,
+    match_people,
+    name_tokens,
+    normalize_name,
+    unique_stored_name,
+)
 from app.services.storage import safe_filename, save_upload, workspace_dir, workspace_file
-from app.services.upload_security import read_zip_member, validate_image_bytes, validate_spreadsheet_bytes, validate_zip_archive
+from app.services.upload_security import (
+    UnsafeUpload,
+    read_zip_member,
+    validate_image_bytes,
+    validate_spreadsheet_bytes,
+    validate_zip_archive,
+)
 from app.services.background_removal import (
     BackgroundMode,
     background_removed_filename,
@@ -31,7 +45,6 @@ from app.services.background_jobs import (
     try_reserve_job as try_reserve_bg_job,
     update_job as update_bg_job,
     get_job as get_bg_job,
-    pop_result_bytes as pop_bg_result_bytes,
     to_status_payload,
 )
 from app.services.admin_settings import get_face_detection_settings
@@ -174,22 +187,6 @@ async def detect_face_center_api(image: UploadFile = File(...)):
     )
 
 
-def _normalize_name(text: str) -> str:
-    lowered = (text or "").lower()
-    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
-    lowered = re.sub(r"\s+", " ", lowered).strip()
-    return lowered
-
-
-def _tokens(text: str) -> list[str]:
-    norm = _normalize_name(text)
-    return norm.split() if norm else []
-
-
-def _compact(text: str) -> str:
-    return re.sub(r"\s+", "", _normalize_name(text))
-
-
 _FILENAME_STOPWORDS = {
     "blob",
     "img",
@@ -213,7 +210,7 @@ def _compact_filename_name(stem_raw: str) -> str:
     partial matching compares the actual name portion.
     """
 
-    norm = _normalize_name(stem_raw)
+    norm = normalize_name(stem_raw)
     if not norm:
         return ""
     tokens = norm.split()
@@ -244,20 +241,6 @@ def _compact_filename_name(stem_raw: str) -> str:
     return "".join(kept)
 
 
-def _matches_name(stem_tokens: set[str], stem_compact: str, first_parts: list[str], last_parts: list[str]) -> bool:
-    if not first_parts or not last_parts:
-        return False
-    first_present = any(t in stem_tokens for t in first_parts)
-    last_present = any(t in stem_tokens for t in last_parts)
-    if first_present and last_present:
-        return True
-    first_compact = "".join(first_parts)
-    last_compact = "".join(last_parts)
-    return (first_compact in stem_compact and last_compact in stem_compact) or (
-        last_compact in stem_compact and first_compact in stem_compact
-    )
-
-
 def _char_similarity(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
@@ -276,8 +259,8 @@ def _best_partial_name_match(stem_compact: str, people: list[PersonRecord]) -> t
 
     scored: list[tuple[int, float]] = []
     for p in people:
-        full_a = _compact(f"{p.first_name} {p.last_name}")
-        full_b = _compact(f"{p.last_name} {p.first_name}")
+        full_a = compact_name(f"{p.first_name} {p.last_name}")
+        full_b = compact_name(f"{p.last_name} {p.first_name}")
         score = max(_char_similarity(stem_compact, full_a), _char_similarity(stem_compact, full_b))
         scored.append((p.index, score))
 
@@ -296,6 +279,31 @@ def _looks_like_email(text: str) -> bool:
 
 def _looks_like_url(text: str) -> bool:
     return bool(re.search(r"\bhttps?://\S+\b", text, flags=re.IGNORECASE))
+
+
+def _is_placeholder_quote(text: str) -> bool:
+    s = (text or "").strip().strip(".!?-\u2014\u2013:;'\"").strip().casefold()
+    if not s:
+        return True
+    return s in {
+        "rejected",
+        "reject",
+        "denied",
+        "not approved",
+        "n/a",
+        "na",
+        "none",
+        "nil",
+        "null",
+        "tbd",
+        "tba",
+        "pending",
+        "no quote",
+        "noquote",
+        "x",
+        "-",
+        "\u2014",
+    }
 
 
 def _looks_like_quote(text: str) -> bool:
@@ -327,7 +335,7 @@ async def ingest(
     spreadsheet: UploadFile | None = File(None),
     workspace_id: str = Form(...),
     mugshots_zip: UploadFile | None = File(None),
-    naming_pattern: str = Form(r"\d{3,4}"),
+    naming_pattern: str = Form(r"\d{1,4}"),
     advanced_name_match: bool = Form(False),
 ) -> SpreadsheetPreview:
     enforce_workspace_write(request, workspace_id)
@@ -388,14 +396,17 @@ async def ingest(
         save_upload(workspace_id, "uploads/mugshots.zip", io.BytesIO(mugshot_bytes))
         mugshots_file = io.BytesIO((root / "uploads" / "mugshots.zip").read_bytes())
 
-    return ingest_spreadsheet(
-        workspace_id,
-        spreadsheet_file,
-        spreadsheet_name,
-        mugshots_file,
-        naming_pattern,
-        advanced_name_match=advanced_name_match,
-    )
+    try:
+        return ingest_spreadsheet(
+            workspace_id,
+            spreadsheet_file,
+            spreadsheet_name,
+            mugshots_file,
+            naming_pattern,
+            advanced_name_match=advanced_name_match,
+        )
+    except RosterFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @router.post("/review", response_model=SpreadsheetPreview)
@@ -608,9 +619,9 @@ async def remove_background_preview_result(job_id: str, request: Request):
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     if job.get("status") != "done":
         raise HTTPException(status_code=409, detail="Job not completed")
-    b = pop_bg_result_bytes(job_id)
+    b = bytes(job.get("result_bytes") or b"")
     if not b:
-        raise HTTPException(status_code=410, detail="Preview already fetched")
+        raise HTTPException(status_code=404, detail="Preview not available")
     return Response(content=b, media_type="image/png")
 
 
@@ -659,17 +670,18 @@ async def upload_baby_zip(
     warnings: list[str] = []
 
     # Precompute name tokens.
-    name_tokens: dict[int, tuple[list[str], list[str]]] = {}
+    people_tokens: dict[int, tuple[list[str], list[str]]] = {}
     if advanced_name_match:
         for p in people:
-            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
-            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            first_parts = [t for t in name_tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in name_tokens(p.last_name) if len(t) >= 2]
             if not first_parts or not last_parts:
                 continue
             first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
-            name_tokens[p.index] = (first_candidates, last_parts)
+            people_tokens[p.index] = (first_candidates, last_parts)
 
     assigned: set[int] = set()
+    used_names: set[str] = set()
 
     async def _abort_if_disconnected() -> None:
         # When the UI's Stop button is pressed, the browser aborts the request.
@@ -691,6 +703,8 @@ async def upload_baby_zip(
         for member_info in archive_members:
             await _abort_if_disconnected()
             member = member_info.filename
+            if is_archive_junk(member):
+                continue
             filename_only = safe_filename(Path(member).name)
             suffix = Path(filename_only).suffix.lower()
             is_pdf = suffix == ".pdf"
@@ -698,16 +712,11 @@ async def upload_baby_zip(
                 warnings.append(f"Skipped baby file '{filename_only}' (unsupported type; images only).")
                 continue
             stem_raw = Path(filename_only).stem
-            stem_norm = _normalize_name(stem_raw)
-            stem_tokens = set(stem_norm.split()) if stem_norm else set()
-            stem_compact = _compact(stem_raw)
             stem_compact_name = _compact_filename_name(stem_raw)
 
             match_indices: list[int] = []
-            if advanced_name_match and name_tokens:
-                for person_index, (first_parts, last_parts) in name_tokens.items():
-                    if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
-                        match_indices.append(person_index)
+            if advanced_name_match and people_tokens:
+                match_indices = match_people(stem_raw, people_tokens)
 
             # Last resort: partial character similarity only when there was no name match.
             # This is intentionally conservative to avoid wrong assignments.
@@ -750,7 +759,11 @@ async def upload_baby_zip(
                         warnings.append(f"Skipped baby file '{filename_only}' (PDF conversion failed: {exc}).")
                         continue
                 else:
-                    validate_image_bytes(content, label=f"Baby photo '{filename_only}'")
+                    try:
+                        validate_image_bytes(content, label=f"Baby photo '{filename_only}'")
+                    except UnsafeUpload as exc:
+                        warnings.append(f"Skipped '{filename_only}': {exc}")
+                        continue
 
                 if remove_background:
                     await _abort_if_disconnected()
@@ -764,9 +777,14 @@ async def upload_baby_zip(
                         continue
                     await _abort_if_disconnected()
 
-                validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                try:
+                    validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                except UnsafeUpload as exc:
+                    warnings.append(f"Skipped '{filename_only}': {exc}")
+                    continue
 
-                out_path = save_upload(workspace_id, f"baby/{safe_filename(out_name)}", io.BytesIO(content))
+                stored = unique_stored_name(used_names, safe_filename(out_name))
+                out_path = save_upload(workspace_id, f"baby/{stored}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:
                         people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
@@ -830,9 +848,9 @@ async def upload_quotes_spreadsheet(
     buf = io.BytesIO(data)
     try:
         if filename.lower().endswith(".csv"):
-            df = pd.read_csv(buf)
+            df = pd.read_csv(buf, dtype=str, keep_default_na=False)
         else:
-            df = pd.read_excel(buf)
+            df = pd.read_excel(buf, dtype=str, keep_default_na=False)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not read quotes spreadsheet: {exc}")
 
@@ -845,8 +863,8 @@ async def upload_quotes_spreadsheet(
     person_tokens: dict[int, tuple[list[str], list[str]]] = {}
     if advanced_name_match:
         for p in people:
-            first_parts = [t for t in _tokens(p.first_name) if len(t) >= 2]
-            last_parts = [t for t in _tokens(p.last_name) if len(t) >= 2]
+            first_parts = [t for t in name_tokens(p.first_name) if len(t) >= 2]
+            last_parts = [t for t in name_tokens(p.last_name) if len(t) >= 2]
             if not first_parts or not last_parts:
                 continue
             first_candidates = list(dict.fromkeys([first_parts[0], first_parts[-1]]))
@@ -868,10 +886,13 @@ async def upload_quotes_spreadsheet(
         if quote_col is None and "quote" in low:
             quote_col = orig
 
-    def row_name_tokens(row) -> tuple[set[str], str]:
+    def row_name_tokens(row) -> tuple[str, set[str], str]:
         raw_name = ""
         if first_col is not None and last_col is not None:
-            raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
+            if first_col == last_col:
+                raw_name = str(row.get(first_col, ""))
+            else:
+                raw_name = f"{row.get(first_col, '')} {row.get(last_col, '')}"
         elif name_col is not None:
             raw_name = str(row.get(name_col, ""))
         else:
@@ -880,72 +901,108 @@ async def upload_quotes_spreadsheet(
                 if "name" in str(col).lower():
                     raw_name = str(row.get(col, ""))
                     break
-        stem_norm = _normalize_name(raw_name)
-        return (set(stem_norm.split()) if stem_norm else set(), _compact(raw_name))
+        stem_norm = normalize_name(raw_name)
+        return (raw_name, set(stem_norm.split()) if stem_norm else set(), compact_name(raw_name))
+
+    def _truncate(value: object, limit: int = 60) -> str:
+        s = "" if value is None else str(value)
+        return s if len(s) <= limit else s[:limit]
+
+    def _display_name(person_index: int) -> str:
+        person = next((p for p in people if p.index == person_index), None)
+        if person is None:
+            return f"person {person_index}"
+        full = f"{person.first_name} {person.last_name}".strip()
+        return full or f"person {person_index}"
+
+    has_name_column = (
+        (first_col is not None and last_col is not None)
+        or name_col is not None
+        or any("name" in str(c).lower() for c in df.columns)
+    )
+    if not has_name_column:
+        return SpreadsheetPreview(
+            workspace_id=workspace_id,
+            people=list(people),
+            warnings=[
+                "The quotes spreadsheet has no student name column, so quotes could not be matched. "
+                "Add 'First Name' and 'Last Name' columns (or one 'Name' column)."
+            ],
+        )
 
     updated = {p.index: p for p in people}
+    applied = 0
 
     for row_idx, row in df.iterrows():
-        stem_tokens, stem_compact = row_name_tokens(row)
+        raw_name, stem_tokens, stem_compact = row_name_tokens(row)
         if not stem_tokens and not stem_compact:
             continue
 
         matches: list[int] = []
         if advanced_name_match and person_tokens:
-            for person_index, (first_parts, last_parts) in person_tokens.items():
-                if _matches_name(stem_tokens, stem_compact, first_parts, last_parts):
-                    matches.append(person_index)
+            matches = match_people(raw_name, person_tokens)
         if len(matches) != 1:
             if len(matches) > 1:
                 warnings.append(f"Row {row_idx + 2}: matches multiple people by name")
             else:
-                warnings.append(f"Row {row_idx + 2}: no name match")
+                warnings.append(f"Row {row_idx + 2}: no student matched the name \"{_truncate(raw_name)}\".")
             continue
 
         person_index = matches[0]
 
-        # 1) Prefer an explicit "quote" column if present.
-        preferred = None
+        # 1) Prefer an explicit "quote" column if present: accept any non-empty
+        # cell that is not a link or email. Heuristic quote detection
+        # (_looks_like_quote) applies only to the fallback scan below.
         if quote_col is not None:
             val = row.get(quote_col)
-            if val is not None and not (isinstance(val, float) and pd.isna(val)):
-                s = str(val).strip()
-                if s and _looks_like_quote(s):
-                    preferred = s
-
-        # 2) Fall back to scanning the row for the best quote-like cell.
-        if preferred is None:
-            candidates: list[str] = []
-            for col in df.columns:
-                if col in {first_col, last_col, name_col, quote_col}:
-                    continue
-                val = row.get(col)
-                if val is None or (isinstance(val, float) and pd.isna(val)):
-                    continue
-                s = str(val).strip()
-                if not s:
-                    continue
-                candidates.append(s)
-
-            quote_candidates = [c for c in candidates if _looks_like_quote(c)]
-            if not quote_candidates:
-                # If quote column exists but didn't pass heuristics, include that detail.
-                if quote_col is not None:
-                    raw = row.get(quote_col)
-                    raw_s = "" if raw is None or (isinstance(raw, float) and pd.isna(raw)) else str(raw).strip()
-                    if raw_s:
-                        warnings.append(
-                            f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' did not look like a quote"
-                        )
-                    else:
-                        warnings.append(f"Row {row_idx + 2}: matched person {person_index} but '{quote_col}' was empty")
-                else:
-                    warnings.append(f"Row {row_idx + 2}: matched person {person_index} but no quote-like text found")
+            s = "" if val is None or (isinstance(val, float) and pd.isna(val)) else str(val).strip()
+            if not s:
+                warnings.append(f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell is empty.")
                 continue
-            preferred = max(quote_candidates, key=lambda s: len(s))
+            if _looks_like_url(s) or _looks_like_email(s):
+                warnings.append(
+                    f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell looks like a link or email, so it was not used."
+                )
+                continue
+            if _is_placeholder_quote(s):
+                warnings.append(
+                    f"Row {row_idx + 2}: {_display_name(person_index)} — the quote cell says \"{_truncate(s)}\", which looks like a placeholder, so no quote was used."
+                )
+                continue
+            updated[person_index] = updated[person_index].model_copy(update={"quote": s})
+            applied += 1
+            continue
+
+        # 2) No explicit quote column: scan the row for the best quote-like cell.
+        candidates: list[str] = []
+        for col in df.columns:
+            if col in {first_col, last_col, name_col}:
+                continue
+            val = row.get(col)
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                continue
+            s = str(val).strip()
+            if not s:
+                continue
+            candidates.append(s)
+
+        quote_candidates = [c for c in candidates if _looks_like_quote(c) and not _is_placeholder_quote(c)]
+        if not quote_candidates:
+            warnings.append(
+                f"Row {row_idx + 2}: {_display_name(person_index)} — no quote-like text found, so no quote was used."
+            )
+            continue
+        preferred = max(quote_candidates, key=lambda s: len(s))
 
         quote = preferred
         updated[person_index] = updated[person_index].model_copy(update={"quote": quote})
+        applied += 1
+
+    if applied == 0:
+        warnings.insert(
+            0,
+            "No rows matched a student on the roster. Check that the names in the quotes sheet match the roster spelling.",
+        )
 
     # preserve original order
     out_people = [updated[p.index] for p in people]

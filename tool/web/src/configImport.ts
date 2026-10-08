@@ -1,4 +1,5 @@
 import type { MissingAsset } from "./configFile";
+import type { TemplateSlots } from "./api";
 import { handleSpreadUploads, type SpreadUploadPromptHandlers } from "./utils/spreadUploadHandling";
 
 export type SessionLike = {
@@ -94,8 +95,9 @@ type ParseTemplateFn = (
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    workspaceId?: string;
   },
-) => Promise<{ template_id: string }>;
+) => Promise<{ template_id: string; width: number; height: number; slots: TemplateSlots[] }>;
 
 type IngestSpreadsheetFn = (
   ws: string,
@@ -134,10 +136,11 @@ export async function importTemplate<S extends SessionLike>(args: {
   session: S;
   annotated: File;
   clean: File;
+  workspaceId: string;
   parseTemplate: ParseTemplateFn;
   setStatus?: (s: string) => void;
   promptHandlers?: SpreadUploadPromptHandlers;
-}): Promise<string> {
+}): Promise<{ template_id: string; width: number; height: number; slots: TemplateSlots[] }> {
   const { session, annotated, clean, parseTemplate, setStatus, promptHandlers } = args;
   setStatus?.("Parsing template…");
 
@@ -152,10 +155,11 @@ export async function importTemplate<S extends SessionLike>(args: {
     nameColor: session.templateParse?.nameColor || undefined,
     quoteColor: session.templateParse?.quoteColor || undefined,
     minArea: typeof session.templateParse?.minArea === "number" ? session.templateParse.minArea : undefined,
+    workspaceId: args.workspaceId,
   });
 
   setStatus?.("Template parsed. Continue with portraits/spreadsheets if required.");
-  return resp.template_id;
+  return resp;
 }
 
 export async function importPortraits<S extends SessionLike>(args: {

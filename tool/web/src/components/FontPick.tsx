@@ -30,7 +30,7 @@ export function FontPick({
   availableFonts: { name: string; filename: string; source?: string }[];
 }) {
   const MIN_FONT_SIZE = 1;
-  const MAX_FONT_SIZE = 100;
+  const MAX_FONT_SIZE = 500;
   const [fontSizeDraft, setFontSizeDraft] = useState<string>(String(fontSize));
   const isEditingRef = useRef(false);
 
