@@ -215,3 +215,14 @@ def test_layout_language_forwarded_to_measurement_and_drawing(monkeypatch):
                 load_font=lambda s: ImageFont.truetype('DejaVuSans.ttf', s),
                 start_size=32, kind='name', style=TextStyle(language='ar'))
     assert calls and all(lang == 'ar' for lang in calls)
+
+def test_regular_fallback_stops_before_unneeded_font_files(monkeypatch):
+    gf.fallback_path.cache_clear()
+    inspected = []
+    def coverage(path):
+        inspected.append(path)
+        return frozenset({ord('中')})
+    monkeypatch.setattr(gf, 'font_coverage', coverage)
+    assert gf.fallback_path(ord('中'), ('first.ttf', 'unused.ttf')) == 'first.ttf'
+    assert inspected == ['first.ttf']
+    gf.fallback_path.cache_clear()

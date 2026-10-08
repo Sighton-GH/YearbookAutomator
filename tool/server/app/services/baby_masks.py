@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import io
+import os
+import uuid
 from pathlib import Path
 
 import cv2
@@ -9,7 +12,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from app.models.schemas import Box
-from app.services.storage import workspace_dir
+from app.services.storage import workspace_dir, ensure_workspace_capacity
 from app.services.template_parser import DEFAULT_BABY_HEX, _detect_boxes_with_color, _filled_mask
 
 MAX_MASK_PIXELS = 40_000_000
@@ -79,5 +82,14 @@ def regenerate_baby_mask(workspace_id: str, box: Box, shape: str = "auto") -> Pa
             raise ValueError("No baby cutout was detected in this box. Choose a cutout shape or move it over a blue guide.")
         mask = Image.fromarray(crop, mode="L")
     masks_dir.mkdir(parents=True, exist_ok=True)
-    mask.save(path, "PNG")
+    encoded = io.BytesIO()
+    mask.save(encoded, "PNG")
+    data = encoded.getvalue()
+    ensure_workspace_capacity(workspace_id, len(data), replacing=path)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return path

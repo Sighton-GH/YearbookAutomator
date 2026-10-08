@@ -146,3 +146,23 @@ def test_generation_explicit_shape_uses_override(tmp_path, monkeypatch):
     actual = Image.open(tmp_path / 'render.png')
     assert actual.getpixel((90, 10)) == (255, 255, 255)
     assert actual.getpixel((120, 40)) == (255, 0, 0)
+
+def test_mask_failed_replace_preserves_previous_bytes(project, monkeypatch):
+    from app.services import baby_masks
+    box = Box(x=210, y=40, width=180, height=160)
+    path = regenerate_baby_mask('mask-test', box, 'ellipse')
+    previous = path.read_bytes()
+    def fail(*args):
+        raise OSError('fictional replace failure')
+    monkeypatch.setattr(baby_masks.os, 'replace', fail)
+    with pytest.raises(OSError):
+        regenerate_baby_mask('mask-test', box, 'rectangle')
+    assert path.read_bytes() == previous
+    assert not list(path.parent.glob('*.tmp'))
+
+def test_mask_checks_quota_before_replacing(project, monkeypatch):
+    from app.services import baby_masks
+    called = []
+    monkeypatch.setattr(baby_masks, 'ensure_workspace_capacity', lambda workspace, count, replacing: called.append((workspace, count, replacing)))
+    path = regenerate_baby_mask('mask-test', Box(x=0, y=0, width=20, height=20), 'ellipse')
+    assert called[0][0] == 'mask-test' and called[0][1] > 0 and called[0][2] == path
