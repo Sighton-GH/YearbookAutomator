@@ -34,12 +34,16 @@ from app.services.upload_security import (
     validate_zip_archive,
 )
 from app.services.background_removal import (
+    prepare_background_model,
     BackgroundMode,
     background_removed_filename,
     remove_background as remove_background_bytes,
     BackgroundAlreadyRemovedError,
 )
 from app.services.background_jobs import (
+    BackgroundJobCancelled,
+    request_cancel as request_bg_cancel,
+    raise_if_cancelled as raise_if_bg_cancelled,
     release_job as release_bg_job,
     start_job as start_bg_job,
     try_reserve_job as try_reserve_bg_job,
@@ -504,16 +508,23 @@ async def remove_background_job(
 
     def run():
         try:
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=5, message="Reading image…")
             raw = src_path.read_bytes()
 
             # Rough but real stage progress. (GrabCut is the long pole.)
+            raise_if_bg_cancelled(job_id)
+            prepare_background_model(background_mode, lambda message: update_bg_job(job_id, progress=15, message=message))
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=15, message="Removing background…")
             out_png = remove_background_bytes(raw, mode=background_mode)
 
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=90, message="Saving…")
             save_upload(workspace_id, f"{subdir}/{out_name}", io.BytesIO(out_png))
             update_bg_job(job_id, progress=100, status="done", message="Done")
+        except BackgroundJobCancelled:
+            update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
             update_bg_job(job_id, error=str(exc), message="Failed")
         finally:
@@ -534,6 +545,16 @@ async def remove_background_status(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Job not found")
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return to_status_payload(job)
+
+
+@router.post("/remove-background-cancel")
+async def remove_background_cancel(request: Request, job_id: str = Form(...)):
+    job = get_bg_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    enforce_workspace_write(request, str(job.get("workspace_id") or ""))
+    request_bg_cancel(job_id)
+    return {"ok": True}
 
 
 @router.post("/remove-background-preview")
@@ -578,13 +599,18 @@ async def remove_background_preview_job(
 
     def run():
         try:
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=5, message="Reading image…")
             raw = src_path.read_bytes()
 
+            raise_if_bg_cancelled(job_id)
+            prepare_background_model(background_mode, lambda message: update_bg_job(job_id, progress=15, message=message))
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=15, message="Removing background…")
             try:
                 out_png = remove_background_bytes(raw, mode=background_mode, force=force, report_already_removed=True)
             except BackgroundAlreadyRemovedError:
+                raise_if_bg_cancelled(job_id)
                 # Signal the UI to offer a Force action.
                 update_bg_job(
                     job_id,
@@ -595,9 +621,12 @@ async def remove_background_preview_job(
                 )
                 return
 
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=95, message="Finalizing…")
             update_bg_job(job_id, result_bytes=out_png)
             update_bg_job(job_id, progress=100, status="done", message="Done")
+        except BackgroundJobCancelled:
+            update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
             update_bg_job(job_id, error=str(exc), message="Failed")
         finally:

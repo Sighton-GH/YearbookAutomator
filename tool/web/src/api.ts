@@ -500,6 +500,12 @@ export async function startRemoveBackgroundJob(params: {
   return data;
 }
 
+export async function cancelRemoveBackgroundJob(jobId: string) {
+  const form = new FormData();
+  form.append("job_id", jobId);
+  await axios.post("/api/mapping/remove-background-cancel", form);
+}
+
 export async function removeBackgroundStatus(jobId: string) {
   const { data } = await axios.get<{
     job_id: string;

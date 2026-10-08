@@ -196,6 +196,17 @@ def _acquire_rembg_session() -> object:
     return session
 
 
+def prepare_background_model(mode: BackgroundMode, on_download) -> None:
+    """Warm the model before inference so the UI can explain the first download."""
+    if mode != "ultra_complex":
+        return
+    model_home = Path(os.getenv("U2NET_HOME", str(Path.home() / ".u2net"))).expanduser()
+    if not (model_home / "isnet-general-use.onnx").is_file():
+        on_download("Downloading the background-removal model (one-time, about 179 MB)…")
+        session = _acquire_rembg_session()
+        _release_rembg_session(session)
+
+
 def _release_rembg_session(session: object) -> None:
     with _rembg_pool_condition:
         _rembg_pool.append(session)

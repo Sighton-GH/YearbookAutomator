@@ -3,6 +3,7 @@ import Cropper, { getInitialCropFromCroppedAreaPixels, type Area, type MediaSize
 import {
   assetUrl,
   babyMaskUrl,
+  cancelRemoveBackgroundJob,
   detectFaceCenter,
   fetchRemoveBackgroundPreviewResult,
   removeBackgroundPreviewStatus,
@@ -76,6 +77,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
   const [showChangesSaved, setShowChangesSaved] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const removeBgCancelRef = useRef(false);
+  const removeBgJobRef = useRef<string | null>(null);
   const changesSavedTimerRef = useRef<number | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -116,6 +118,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
   useEffect(() => {
     return () => {
+      removeBgCancelRef.current = true;
+      if (removeBgJobRef.current) void cancelRemoveBackgroundJob(removeBgJobRef.current).catch(() => undefined);
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
         previewUrlRef.current = null;
@@ -607,25 +611,23 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         force,
       });
 
-      const start = Date.now();
+      removeBgJobRef.current = job_id;
+      let cancelSent = false;
+      let lastNonDownload = Date.now();
       while (true) {
-        if (removeBgCancelRef.current) {
-          setRemoveBgMessage("Canceled");
-          setStatus("Background removal canceled.");
-          break;
+        if (removeBgCancelRef.current && !cancelSent) {
+          // eslint-disable-next-line no-await-in-loop
+          await cancelRemoveBackgroundJob(job_id);
+          cancelSent = true;
+          setRemoveBgMessage("Cancelling after the current processing stage…");
         }
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, 250));
-        if (removeBgCancelRef.current) {
-          setRemoveBgMessage("Canceled");
-          setStatus("Background removal canceled.");
-          break;
-        }
         // eslint-disable-next-line no-await-in-loop
         const s = await removeBackgroundPreviewStatus(job_id);
-        if (removeBgCancelRef.current) {
-          setRemoveBgMessage("Canceled");
-          setStatus("Background removal canceled.");
+        if (s.status === "cancelled") {
+          setRemoveBgMessage("Cancelled");
+          setStatus("Background removal cancelled.");
           break;
         }
         setRemoveBgProgress(Math.max(1, Math.min(100, Math.round(s.progress ?? 0))));
@@ -633,6 +635,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         setRemoveBgMessage(prefixServerMessage(s.message || "Working…"));
 
         if (s.status === "done") {
+          if (removeBgCancelRef.current) break;
           if (s.already_removed) {
             setRemoveBgAlreadyRemoved(true);
             setRemoveBgMessage("Background already removed");
@@ -655,15 +658,20 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
           setStatus(s.error ? `Background removal failed.\nserver message:\n${s.error}` : "Background removal failed.");
           break;
         }
-        if (Date.now() - start > 120_000) {
-          setStatus("Background removal is taking unusually long. Please try again.");
-          break;
+        if (s.message?.startsWith("Downloading the background-removal model")) lastNonDownload = Date.now();
+        if (!cancelSent && Date.now() - lastNonDownload > 120_000) {
+          // eslint-disable-next-line no-await-in-loop
+          await cancelRemoveBackgroundJob(job_id);
+          cancelSent = true;
+          removeBgCancelRef.current = true;
+          setStatus("Background removal is taking unusually long. Cancelling after the current processing stage.");
         }
       }
     } catch (err) {
       console.error(err);
       setStatus(`Background removal failed.\n${formatServerMessage(err)}`);
     } finally {
+      removeBgJobRef.current = null;
       setEditingBusy(false);
       setEditingAction(null);
     }
