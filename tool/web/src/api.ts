@@ -78,10 +78,19 @@ export type PersonRecord = {
 
 export type BackgroundMode = "simple" | "complex" | "ultra_complex";
 
+export type FilenameColumnCandidate = {
+  column: string;
+  listed: number;
+  found: number;
+  suggested: boolean;
+};
+
 export type SpreadsheetPreview = {
   workspace_id: string;
   people: PersonRecord[];
   warnings?: string[];
+  /** F2.6 (partial: not yet used by the UI). Roster columns that look like portrait filenames. */
+  filename_column_candidates?: FilenameColumnCandidate[];
 };
 
 export type FaceCenterResponse = {
@@ -207,6 +216,8 @@ export async function ingestSpreadsheet(
   opts?: {
     namingPattern?: string;
     advancedNameMatch?: boolean;
+    /** F2.6: roster column naming each student's portrait file. */
+    filenameColumn?: string | null;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
   }
@@ -217,6 +228,7 @@ export async function ingestSpreadsheet(
   if (mugshotsZip) form.append("mugshots_zip", mugshotsZip);
   if (opts?.namingPattern) form.append("naming_pattern", opts.namingPattern);
   if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
+  if (opts?.filenameColumn) form.append("filename_column", opts.filenameColumn);
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/ingest", form, {
     headers: { "Content-Type": "multipart/form-data" },
     signal: opts?.signal,

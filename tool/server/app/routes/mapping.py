@@ -347,8 +347,11 @@ async def ingest(
     mugshots_zip: UploadFile | None = File(None),
     naming_pattern: str = Form(r"\d{1,4}"),
     advanced_name_match: bool = Form(False),
+    filename_column: str | None = Form(None),
 ) -> SpreadsheetPreview:
     enforce_workspace_write(request, workspace_id)
+    if filename_column is not None and len(filename_column) > 200:
+        raise HTTPException(status_code=400, detail="Filename column name is too long")
     if len(naming_pattern) > 80:
         raise HTTPException(status_code=400, detail="Naming pattern is too long")
     if not get_face_detection_settings().enable_advanced_name_matching:
@@ -414,6 +417,7 @@ async def ingest(
             mugshots_file,
             naming_pattern,
             advanced_name_match=advanced_name_match,
+            filename_column=(filename_column or None),
         )
     except RosterFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None

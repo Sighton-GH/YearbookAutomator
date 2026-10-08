@@ -51,10 +51,18 @@ class PersonRecord(BaseModel):
     baby_background_removal_failed: bool = False
 
 
+class FilenameColumnCandidate(BaseModel):
+    column: str
+    listed: int
+    found: int
+    suggested: bool = False
+
+
 class SpreadsheetPreview(BaseModel):
     workspace_id: str
     people: list[PersonRecord]
     warnings: list[str] = Field(default_factory=list)
+    filename_column_candidates: list[FilenameColumnCandidate] = Field(default_factory=list)
 
 
 class MappingDecision(BaseModel):
