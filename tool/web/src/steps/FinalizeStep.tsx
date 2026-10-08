@@ -304,7 +304,9 @@ export function FinalizeStep({
 
       {workspaceId && files.length > 0 && (
         <div className="stack" style={{ gap: 16 }}>
-      <div className="callout">
+          <h3>Results</h3>
+          {usageInfo && typeof usageInfo.remaining === "number" && typeof usageInfo.limit === "number" && (
+            <div className="callout">
               <div className="stack" style={{ gap: 4 }}>
                 <strong>License usage</strong>
                 <div className="muted small">
