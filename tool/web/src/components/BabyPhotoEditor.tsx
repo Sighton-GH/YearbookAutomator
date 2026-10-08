@@ -33,6 +33,7 @@ type BabyPhotoEditorProps = {
   setPeople: (p: PersonRecord[]) => void;
   defaultBabyFilename: string | null;
   babyMaskBox: Box | null;
+  babyBoxByPerson?: Record<number, Box | null>;
   babyBackgroundColor: string;
   babyBackgroundMode: BackgroundMode;
   allowInsecureUploads: boolean;
@@ -48,7 +49,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     people,
     setPeople,
     defaultBabyFilename,
-    babyMaskBox,
+    babyMaskBox: defaultBabyMaskBox,
+    babyBoxByPerson,
     babyBackgroundColor,
     babyBackgroundMode,
     allowInsecureUploads,
@@ -102,6 +104,9 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
   const [editorCropSize, setEditorCropSize] = useState<{ width: number; height: number } | null>(null);
   const [editorMediaSize, setEditorMediaSize] = useState<MediaSize | null>(null);
 
+  const editingPersonIndex = editingIdx !== null ? people[editingIdx]?.index : undefined;
+  const babyMaskBox: Box | null =
+    (editingPersonIndex != null ? babyBoxByPerson?.[editingPersonIndex] : undefined) ?? defaultBabyMaskBox;
   const maskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
   const cropAspect = babyMaskBox ? babyMaskBox.width / Math.max(1, babyMaskBox.height) : 1;
   const outSize = babyMaskBox
@@ -951,6 +956,11 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                   onPointerDown={() => { setCenterFacePopoverOpen(false); pendingFaceCenterRef.current = null; }}
                   style={{ aspectRatio: `${outSize.width} / ${outSize.height}`, backgroundColor: babyFillColor ?? undefined }}
                 >
+                  <div
+                    className={maskUrl ? "baby-editor-clip baby-editor-clip-masked" : "baby-editor-clip"}
+                    data-testid="baby-editor-clip"
+                    style={maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : undefined}
+                  >
                   <Cropper
                     image={editingSrc}
                     crop={crop}
@@ -973,7 +983,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                     maxZoom={3}
                     restrictPosition={false}
                   />
-                  {maskUrl && <img src={maskUrl} className="baby-editor-mask" alt="" aria-hidden="true" />}
+                  </div>
                 </div>
 
                 <div className="grid two" style={{ alignItems: "end" }}>

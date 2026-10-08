@@ -58,6 +58,7 @@ export function PeopleTab({
   onBabyEditHistoryAdd,
   babyEditorProtectedFilenames,
   babyMaskBox,
+  babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
   loading,
@@ -92,6 +93,7 @@ export function PeopleTab({
   babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
+  babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   loading: boolean;
@@ -163,8 +165,14 @@ export function PeopleTab({
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
   };
 
-  const rawMaskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
-  const babyMaskCssUrl = rawMaskUrl ? `url(${rawMaskUrl})` : null;
+  // Each student's thumbnail uses the baby slot they are actually placed in; slot 1's shape
+  // is the fallback when placement is unknown (old behaviour).
+  const babyBoxFor = (personIndex: number | null | undefined): Box | null =>
+    (personIndex != null ? babyBoxByPerson?.[personIndex] : undefined) ?? babyMaskBox;
+  const babyMaskCssFor = (box: Box | null): string | null =>
+    workspaceId && box ? `url(${babyMaskUrl(workspaceId, box)})` : null;
+  const babyAspectFor = (box: Box | null): number =>
+    box && box.height > 0 ? box.width / box.height : 1;
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -177,8 +185,6 @@ export function PeopleTab({
   const babyFillColor = normalizeHexColor(babyBackgroundColor);
   // Every baby thumbnail uses the parsed baby slot's aspect ratio + mask so they all render
   // in an identical shape (matching the template slot) instead of each image's natural size.
-  const babyAspect =
-    babyMaskBox && babyMaskBox.height > 0 ? babyMaskBox.width / babyMaskBox.height : 1;
 
   // ---- Swap mode ----
   const LOCKED_SWAP_MESSAGE = "That student is locked. Unlock them in the Inspector to move them.";
@@ -522,6 +528,8 @@ export function PeopleTab({
           setPeople={setPeople}
           defaultBabyFilename={defaultBabyFilename}
           babyMaskBox={babyMaskBox}
+          babyBoxByPerson={babyBoxByPerson}
+          babyBoxByPerson={babyBoxByPerson}
           babyBackgroundColor={babyBackgroundColor}
           babyBackgroundMode={babyBackgroundMode}
           allowInsecureUploads={allowInsecureUploads}
@@ -701,6 +709,9 @@ export function PeopleTab({
               const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
               const displayQuote = (p.quote ?? "").trim() ? p.quote ?? "" : assignedDefaultQuote || defaultQuoteFallback;
               const babyFilename = p.baby_photo_filename || defaultBabyFilename;
+              const rowBabyBox = babyBoxFor(p.index);
+              const rowMaskCss = babyMaskCssFor(rowBabyBox);
+              const rowBabyAspect = babyAspectFor(rowBabyBox);
               const cardClasses = clsx("people-card-selectable", {
                 "people-card-selected": selectedIdx === rowIdx,
                 "swap-mode": swapMode === "card",
@@ -760,10 +771,10 @@ export function PeopleTab({
                           showMissingLabel: false,
                           emptyLabel: "No baby photo",
                           wrapperClassName: "thumb-cell-baby",
-                          className: rawMaskUrl ? "baby-thumb-masked" : undefined,
+                          className: rowMaskCss ? "baby-thumb-masked" : undefined,
                           style: {
-                            aspectRatio: String(babyAspect),
-                            ...(rawMaskUrl ? ({ ["--baby-mask" as never]: babyMaskCssUrl } as React.CSSProperties) : {}),
+                            aspectRatio: String(rowBabyAspect),
+                            ...(rowMaskCss ? ({ ["--baby-mask" as never]: rowMaskCss } as React.CSSProperties) : {}),
                           } as React.CSSProperties,
                           onLoad: () => markImageResolved(`${rowIdx}-baby`),
                           onError: () => markImageResolved(`${rowIdx}-baby`),
@@ -807,9 +818,9 @@ export function PeopleTab({
             assignedDefaultQuote={defaultQuoteAssignments[selected.index] ?? ""}
             defaultQuoteFallback={defaultQuoteFallback}
             babyFilename={selected.baby_photo_filename || defaultBabyFilename}
-            babyMaskCssUrl={babyMaskCssUrl}
+            babyMaskCssUrl={babyMaskCssFor(babyBoxFor(selected.index))}
             babyFillColor={babyFillColor}
-            babyAspect={babyAspect}
+            babyAspect={babyAspectFor(babyBoxFor(selected.index))}
             adjustment={adjustments[selected.index]}
             onShiftEnabled={(enabled) => setShiftEnabled(selected.index, enabled)}
             onShiftCount={(count) => setShiftCount(selected.index, count)}

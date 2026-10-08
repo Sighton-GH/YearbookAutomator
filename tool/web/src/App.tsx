@@ -72,6 +72,7 @@ import { TipsBox } from "./components/TipsBox";
 import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/RoadmapRail";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { cropToPngBlob } from "./utils/image";
+import { babyBoxesByPerson } from "./utils/babySlot";
 import { groupSlotsByProximity } from "./utils/slots";
 import {
   clearInflightRender,
@@ -2098,6 +2099,18 @@ export default function App({
     return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);
   }, [slots, placementMode, templateSize?.width]);
 
+  const babyBoxByPerson = useMemo(
+    () =>
+      babyBoxesByPerson({
+        people: forceAlphabetical ? [...people].sort(comparePeopleByLastName) : people,
+        slots,
+        slotNumberToIndex,
+        slotAssignments,
+        peoplePerSpread,
+      }),
+    [people, forceAlphabetical, slots, slotNumberToIndex, slotAssignments, peoplePerSpread]
+  );
+
   const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
 
   const defaultMugshotAssignments = useMemo(() => {
@@ -3288,6 +3301,7 @@ export default function App({
               ]}
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
+              babyBoxByPerson={babyBoxByPerson}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               loading={loading}
