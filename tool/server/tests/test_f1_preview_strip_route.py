@@ -42,3 +42,21 @@ def test_preview_strip_without_people_is_a_plain_400(generation_client):
     client, workspace_id = generation_client
     resp = client.post("/api/generation/preview-strip", json=_body(workspace_id, n_people=0))
     assert resp.status_code == 400
+
+
+def test_preview_strip_resolves_pins_only_once(generation_client, monkeypatch):
+    from app.routes import generation
+    client, workspace_id = generation_client
+    Image.new("RGB", (800, 800), "white").save(storage.workspace_dir(workspace_id) / "template_clean.png")
+    seen=[]
+    def fake_render(req, **kwargs):
+        seen.append(req)
+        path=storage.workspace_dir(workspace_id)/"probe.png"
+        Image.new("RGB", (800,800), "white").save(path)
+        return path
+    monkeypatch.setattr(generation,"generate_composite",fake_render)
+    slots=[{k:{**v,"x":v["x"]+offset} for k,v in SLOT.items()} for offset in (0,200,400)]
+    response=client.post("/api/generation/preview-strip",json=_body(workspace_id,slots=slots,slot_assignments={"1":3,"2":1}))
+    assert response.status_code==200,response.text
+    assert seen[0].slot_assignments=={}
+    assert [s.mugshot.x for s in seen[0].slots]==[420,20]

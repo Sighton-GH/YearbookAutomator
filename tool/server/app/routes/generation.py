@@ -272,7 +272,7 @@ async def preview_strip(payload: GenerationRequest, request: Request) -> dict[st
                 slot_assignments=payload.slot_assignments,
                 force_alphabetical=payload.force_alphabetical,
             )
-            payload = payload.model_copy(update={"people": list(people), "slots": list(slots), "auto_place": False})
+            payload = payload.model_copy(update={"people": list(people), "slots": list(slots), "auto_place": False, "slot_assignments": {}})
         warnings: list[str] = []
 
         def render(req: GenerationRequest):
