@@ -14,7 +14,7 @@ export function nextTrapIndex(current: number, count: number, shift: boolean): n
 }
 
 function focusables(root: HTMLElement): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => el.getClientRects().length > 0 || el === document.activeElement);
 }
 
 /**
@@ -50,14 +50,17 @@ export function useDialogFocus(
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      const root = containerRef.current;
+      if (!root) return;
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')).filter(el => el.getClientRects().length > 0);
+      const top = dialogs[dialogs.length - 1];
+      if (top && !root.contains(top) && top !== root && !top.contains(root)) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         onEscape();
         return;
       }
       if (e.key !== "Tab") return;
-      const root = containerRef.current;
-      if (!root) return;
       const items = focusables(root);
       const idx = items.indexOf(document.activeElement as HTMLElement);
       const next = nextTrapIndex(idx, items.length, e.shiftKey);

@@ -2437,7 +2437,7 @@ export default function App({
   // P3-13: after a reload, re-attach to a Render all that was still running.
   const resumeCheckedRef = useRef(false);
   useEffect(() => {
-    if (!workspaceId || resumeCheckedRef.current) return;
+    if (!workspaceId || !templateId || !people.length || !slots.length || resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
     const saved = loadInflightRender();
     if (!saved) return;
@@ -2456,6 +2456,7 @@ export default function App({
       listOutputs: generationListOutputs,
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       isCancelled: () => cancelRequestedRef.current,
+      onWarnings: warnings => setGenerationWarnings(old => [...new Set([...old, ...warnings])]),
       onProgress: (pct, message) => {
         setProgress(pct);
         setStatus(message);
@@ -2481,7 +2482,7 @@ export default function App({
       setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, templateId, people.length, slots.length]);
 
   const handleRenderAll = async (resumeFrom = 0, previousOutputs: string[] = [], priorJobIds: string[] = []) => {
     if (!workspaceId || !templateId) return;
@@ -2489,6 +2490,7 @@ export default function App({
 
     cancelRequestedRef.current = false;
     setUsageInfo(null);
+    if (resumeFrom === 0) setGenerationWarnings([]);
 
     const peopleForAll = getPeopleForGeneration(people);
 

@@ -60,13 +60,14 @@ export function loadInflightRender(storage: StorageLike | null = defaultStorage(
   }
 }
 
-type JobStatus = { progress?: number; status?: string; output?: string | null; error?: string | null };
+type JobStatus = { warnings?: string[]; progress?: number; status?: string; output?: string | null; error?: string | null };
 
 export type ResumeDeps = {
   getStatus: (jobId: string) => Promise<JobStatus>;
   listOutputs: (workspaceId: string) => Promise<{ outputs: string[] }>;
   sleep: (ms: number) => Promise<void>;
   isCancelled: () => boolean;
+  onWarnings?: (warnings: string[]) => void;
   onProgress: (pct: number, message: string) => void;
   onFinished: (outputs: string[], message: string) => void;
   pollMs?: number;
@@ -98,6 +99,7 @@ export async function resumeInflightRender(
     }
     if (!st || (st as { error?: string }).error === "not found") break;
     known = true;
+    if (st.warnings?.length) deps.onWarnings?.(st.warnings);
     if (st.error) {
       failed = st.error;
       break;

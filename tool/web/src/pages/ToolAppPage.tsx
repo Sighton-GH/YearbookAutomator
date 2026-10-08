@@ -193,8 +193,9 @@ export function ToolAppPage() {
     setLockActionError("");
     try {
       await activateLicense(key);
-    } catch {
-      setLockActionError(licenseThrownMessage(null));
+    } catch (err: unknown) {
+      const status = (err as {response?:{status?:number}})?.response?.status;
+      setLockActionError(status === 409 ? "This session is still in use on another device. Wait for the countdown or take over this session." : licenseThrownMessage(null));
     } finally {
       setLockBusy(false);
     }

@@ -71,3 +71,15 @@ def test_cleanup_endpoint_requires_write_access(monkeypatch):
     request = Request({"type": "http", "headers": []})
     with pytest.raises(HTTPException):
         asyncio.run(editor_images.cleanup(editor_images.EditorImageCleanup(workspace_id="editor-test"), request))
+
+
+def test_cleanup_skips_invalid_candidate_and_server_references(tmp_path, monkeypatch):
+    from app.services import storage
+    from app.services.editor_images import cleanup_editor_images
+    monkeypatch.setattr(storage,'BASE_DATA',tmp_path)
+    root=storage.workspace_dir('fictional-ref')
+    folder=root/'baby';folder.mkdir(exist_ok=True)
+    for name in ['baby_edit_keep.png','baby_preview_delete.png']:(folder/name).write_bytes(b'fictional')
+    storage.merge_workspace_meta('fictional-ref',{'tool_state':{'people':[{'baby_photo_filename':'baby_edit_keep.png'}]}})
+    assert cleanup_editor_images('fictional-ref',['baby_edit_../bad.png','baby_edit_keep.png','baby_preview_delete.png'],[]) == 1
+    assert (folder/'baby_edit_keep.png').exists()

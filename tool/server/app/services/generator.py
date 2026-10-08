@@ -368,7 +368,10 @@ def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
         from app.services.face_detection import detect_face_center_for_generation as detect
     except Exception:
         return None
-    return detect(img_rgb)
+    try:
+        return detect(img_rgb)
+    except Exception:
+        return None
 
 
 def detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
