@@ -514,7 +514,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       const file = new File([blob], `baby_edit_${personIndex}_${Date.now()}.png`, { type: "image/png" });
 
       const uploadedFilename = await uploadImage(workspaceId, "baby", file);
-      updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename }));
+      updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename, baby_background_removal_failed: hasPreview ? false : p.baby_background_removal_failed }));
 
       try {
         if (editingFilename && onBabyEditHistoryAdd) {
@@ -680,7 +680,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     }
     const original = originalBabyPeople.find((p) => p.index === person.index);
     const originalFilename = original?.baby_photo_filename ?? null;
-    updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: originalFilename }));
+    updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: originalFilename, baby_background_removal_failed: original?.baby_background_removal_failed ?? false }));
 
     const filenameForEditor = originalFilename ?? defaultBabyFilename;
     if (!filenameForEditor) {

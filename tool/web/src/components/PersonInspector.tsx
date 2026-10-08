@@ -165,6 +165,14 @@ export function PersonInspector({
               <button type="button" className="small" onClick={onOpenBabyEditor} disabled={isLocked || !babyFilename}>
                 <Pencil size={13} /> Edit
               </button>
+              {person.baby_background_removal_failed && babyFilename && (
+                <>
+                  <span className="muted small" style={{ gridColumn: "1 / -1", whiteSpace: "normal" }}>Background removal failed. Original photo kept.</span>
+                  <button type="button" className="small" style={{ gridColumn: "1 / -1", whiteSpace: "normal" }} onClick={onOpenBabyEditor} disabled={loading || isLocked}>
+                    <RotateCcw size={13} /> Retry background removal
+                  </button>
+                </>
+              )}
               <label className="upload-file-button small">
                 Replace
                 <input

@@ -47,6 +47,7 @@ class PersonRecord(BaseModel):
     mugshot_filename: Optional[str] = Field(default=None, max_length=180)
     quote: Optional[str] = Field(default=None, max_length=2_000)
     baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
+    baby_background_removal_failed: bool = False
 
 
 class SpreadsheetPreview(BaseModel):

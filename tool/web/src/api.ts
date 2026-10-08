@@ -72,6 +72,7 @@ export type PersonRecord = {
   mugshot_filename?: string | null;
   quote?: string | null;
   baby_photo_filename?: string | null;
+  baby_background_removal_failed?: boolean;
 };
 
 export type BackgroundMode = "simple" | "complex" | "ultra_complex";

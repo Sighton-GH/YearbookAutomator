@@ -458,14 +458,14 @@ export function PeopleTab({
       setStatus("No original baby photo to reset to");
       return;
     }
-    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: nextFilename }));
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: nextFilename, baby_background_removal_failed: original?.baby_background_removal_failed ?? false }));
     setStatus(`Reset baby photo for ${person.first_name}`);
   };
 
   const clearBabyFromPerson = (idx: number) => {
     const person = people[idx];
     if (!person) return;
-    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: null }));
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: null, baby_background_removal_failed: false }));
     setStatus(`Removed baby photo for ${person.first_name}`);
   };
 
@@ -477,7 +477,7 @@ export function PeopleTab({
     }
     try {
       const filename = await uploadImage(workspaceId, "baby", file, { removeBackground: false, backgroundMode: babyBackgroundMode });
-      updatePerson(idx, (p) => ({ ...p, baby_photo_filename: filename }));
+      updatePerson(idx, (p) => ({ ...p, baby_photo_filename: filename, baby_background_removal_failed: false }));
       setStatus(`Uploaded baby photo for ${people[idx].first_name}`);
     } catch (err) {
       console.error(err);

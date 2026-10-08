@@ -765,29 +765,39 @@ async def upload_baby_zip(
                         warnings.append(f"Skipped '{filename_only}': {exc}")
                         continue
 
-                if remove_background:
-                    await _abort_if_disconnected()
-                    try:
-                        content = remove_background_bytes(content, mode=background_mode)
-                        out_name = background_removed_filename(out_name, person_index=person_index)
-                    except Exception as exc:
-                        warnings.append(
-                            f"Skipped baby photo '{filename_only}' for person {person_index} (background removal failed: {exc})."
-                        )
-                        continue
-                    await _abort_if_disconnected()
-
+                # Keep a validated original as the fallback, including converted PDFs.
                 try:
-                    validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                    validate_image_bytes(content, label=f"Baby photo '{out_name}'")
                 except UnsafeUpload as exc:
                     warnings.append(f"Skipped '{filename_only}': {exc}")
                     continue
+
+                background_removal_failed = False
+                if remove_background:
+                    await _abort_if_disconnected()
+                    try:
+                        processed = remove_background_bytes(content, mode=background_mode)
+                        validate_image_bytes(processed, label=f"Processed baby photo '{out_name}'")
+                    except Exception:
+                        background_removal_failed = True
+                        person = next(p for p in people if p.index == person_index)
+                        full_name = f"{person.first_name} {person.last_name}".strip()
+                        warnings.append(
+                            f"Background removal failed for {full_name}'s photo; the original photo was kept."
+                        )
+                    else:
+                        content = processed
+                        out_name = background_removed_filename(out_name, person_index=person_index)
+                    await _abort_if_disconnected()
 
                 stored = unique_stored_name(used_names, safe_filename(out_name))
                 out_path = save_upload(workspace_id, f"baby/{stored}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:
-                        people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
+                        people[i] = p.model_copy(update={
+                            "baby_photo_filename": out_path.name,
+                            "baby_background_removal_failed": background_removal_failed,
+                        })
                         break
                 assigned.add(person_index)
             elif len(match_indices) > 1:
