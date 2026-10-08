@@ -175,7 +175,9 @@ def assign_logical_slots(
         claimed[logical_idx] = i
         assigned_logical[i] = logical_idx
 
-    return people, [int(l) for l in assigned_logical if l is not None], slot_number_to_index
+    if any(logical is None for logical in assigned_logical):
+        raise RuntimeError("Every student must receive a resolved slot")
+    return people, [int(logical) for logical in assigned_logical], slot_number_to_index
 
 
 def auto_place_slots_for_people(
