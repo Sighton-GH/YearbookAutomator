@@ -1,0 +1,33 @@
+import {test, expect} from '@playwright/test';
+import {activate, uploadProject} from './helpers';
+test('student editing, uploaded assets, exclusion, overrides and bulk persist', async ({page}) => {
+  await activate(page); await uploadProject(page);
+  await page.getByText('José García', {exact:true}).first().click();
+  await page.getByLabel('First name', {exact:true}).last().fill('Joseph');
+  await page.getByLabel('Name font size (blank uses global)').fill('31');
+  await page.getByRole('button', {name:'Choose from uploaded portraits', exact:true}).click();
+  await expect(page.locator('.asset-picker-grid button').first()).toBeVisible();
+  await page.locator('.asset-picker-grid button').last().click();
+  await page.getByRole('button', {name:'Remove from yearbook', exact:true}).click();
+  await page.getByRole('dialog').getByRole('button', {name:'Remove', exact:true}).click();
+  await expect(page.locator('.people-card-excluded')).toHaveCount(1);
+  await page.locator('.people-card-excluded').click();
+  await page.getByRole('button', {name:'Include in yearbook', exact:true}).click();
+  await expect(page.locator('.people-card-excluded')).toHaveCount(0);
+  await page.getByRole('button', {name:'Select all', exact:true}).click();
+  await page.getByLabel('Bulk action', {exact:true}).selectOption('clear-quotes');
+  await page.getByRole('button', {name:'Apply to selected', exact:true}).click();
+  await expect(page.getByLabel('No quote for this student')).toBeChecked();
+  await page.locator('.inspector-body').evaluate(el => {el.scrollTop = 0;});
+  await page.locator('.inspector-panel').screenshot({path:'/tmp/f2-position.png'});
+  await expect(page.getByLabel('Spread number')).toHaveValue('1');
+  await page.getByLabel('Name font size (blank uses global)').scrollIntoViewIfNeeded();
+  await page.locator('.inspector-panel').screenshot({path:'/tmp/f2-overrides.png'});
+  await page.locator('[aria-label="Bulk student actions"]').screenshot({path:'/tmp/f2-bulk.png'});
+  await page.reload();
+  await expect.poll(async () => page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('ymga.session.v1') || '{}');
+    const person = (stored.session || stored)?.people?.find((p: {first_name: string}) => p.first_name === 'Joseph');
+    return person ? {size: person.name_font_size, blank: person.quote_blank} : null;
+  })).toEqual({size:31, blank:true});
+});

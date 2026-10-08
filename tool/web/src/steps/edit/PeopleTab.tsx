@@ -1,3 +1,4 @@
+import { BulkPeopleToolbar } from "../../components/BulkPeopleToolbar";
 import { StudentPosition } from "../../components/StudentPosition";
 import { AddStudent } from "../../components/AddStudent";
 import { editPersonName } from "../../utils/personEdits";
@@ -107,6 +108,8 @@ export function PeopleTab({
   setStatus: (v: string) => void;
   loading: boolean;
 }) {
+  const [bulkSelected, setBulkSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const swapMode = peopleSwapMode;
   const setSwapMode = onPeopleSwapMode;
@@ -582,7 +585,8 @@ export function PeopleTab({
           }}
         />
 
-        <AddStudent disabled={loading || !workspaceId} onAdd={async (first, last, quote, portrait) => {
+        <BulkPeopleToolbar people={people} selected={bulkSelected} onSelection={setBulkSelected} locked={lockedPeople} workspaceId={workspaceId} disabled={loading} onPeople={setPeople} onBusy={setBulkBusy} babyAspect={babyAspect} backgroundMode={babyBackgroundMode} />
+        <AddStudent disabled={loading || bulkBusy || !workspaceId} onAdd={async (first, last, quote, portrait) => {
           if (!workspaceId) return;
           try {
             const filename = portrait ? await uploadImage(workspaceId, "mugshot", portrait) : null;
@@ -592,14 +596,14 @@ export function PeopleTab({
         {/* Toolbar */}
         <div className="panel people-toolbar">
           <div className="people-toolbar-row">
-            <button className="primary" onClick={() => setConfirmAction({ kind: "apply-mapping" })} disabled={loading || !people.length}>
+            <button className="primary" onClick={() => setConfirmAction({ kind: "apply-mapping" })} disabled={loading || bulkBusy || !people.length}>
               Apply mapping adjustments
             </button>
             <button
               type="button"
               className="danger"
               onClick={() => setConfirmAction({ kind: "reset-mapping" })}
-              disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
+              disabled={loading || bulkBusy || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
             >
               Reset portraits to how they were first matched
             </button>
@@ -742,7 +746,7 @@ export function PeopleTab({
                   person={p}
                   workspaceId={workspaceId}
                   className={cardClasses}
-                  draggable={swapMode !== "off" && !isLocked}
+                  draggable={!bulkBusy && swapMode !== "off" && !isLocked}
                   onDragStart={(evt) => {
                     if (swapMode === "off" || isLocked) return;
                     setDragIdx(rowIdx);
@@ -802,6 +806,7 @@ export function PeopleTab({
                   showQuote={false}
                   onClick={() => setSelectedIdx(rowIdx)}
                 >
+                  <label className="small" onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.first_name} ${p.last_name}`} checked={bulkSelected.has(p.index)} disabled={loading || bulkBusy} onChange={e => {const next = new Set(bulkSelected); if (e.target.checked) next.add(p.index); else next.delete(p.index); setBulkSelected(next);}} /> Select</label>
                   {p.excluded && <p className="muted small">Excluded from yearbook</p>}
                   {!skipQuotes && (
                     <p className="muted small people-card-quote-preview">{displayQuote ? displayQuote : "No quote"}</p>
@@ -826,13 +831,13 @@ export function PeopleTab({
       >
         {selected && selectedIdx != null && (
           <>
-          <StudentPosition key={`${selected.index}-${Boolean(selected.excluded)}`} person={selected} people={people} settings={positionSettings} disabled={loading || Boolean(lockedPeople[selected.index])} onPeople={setPeople} />
+          <StudentPosition key={`${selected.index}-${Boolean(selected.excluded)}`} person={selected} people={people} settings={positionSettings} disabled={loading || bulkBusy || Boolean(lockedPeople[selected.index])} onPeople={setPeople} />
           <PersonInspector
             person={selected}
             workspaceId={workspaceId}
             skipQuotes={skipQuotes}
             skipBabyPhotos={skipBabyPhotos}
-            isLocked={Boolean(lockedPeople[selected.index])}
+            isLocked={bulkBusy || Boolean(lockedPeople[selected.index])}
             onToggleLock={() => toggleLock(selected.index)}
             assignedDefaultMugshot={defaultMugshotAssignments[selected.index] ?? null}
             assignedDefaultQuote={defaultQuoteAssignments[selected.index] ?? ""}
