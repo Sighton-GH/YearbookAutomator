@@ -31,6 +31,7 @@ export function PersonInspector({
   onUploadReplacementPortrait,
   onRequestRemovePortrait,
   onRequestRemovePerson,
+  onRestorePerson,
   onNameChange,
   onQuoteChange,
   onQuoteBlank,
@@ -60,6 +61,7 @@ export function PersonInspector({
   onUploadReplacementPortrait: (file: File | null) => void;
   onRequestRemovePortrait: () => void;
   onRequestRemovePerson: () => void;
+  onRestorePerson: () => void;
   onNameChange: (field: "first_name" | "last_name", value: string) => void;
   onQuoteChange: (value: string) => void;
   onQuoteBlank: (value: boolean) => void;
@@ -103,8 +105,8 @@ export function PersonInspector({
             type="button"
             className="icon-btn danger"
             onClick={onRequestRemovePerson}
-            aria-label="Remove person"
-            title="Remove person"
+            aria-label="Remove from yearbook"
+            title="Remove from yearbook"
             disabled={isLocked}
           >
             <Trash2 size={15} />
@@ -112,6 +114,7 @@ export function PersonInspector({
         </div>
       </div>
 
+      {person.excluded && <p className="muted">Excluded from the yearbook. <button type="button" onClick={onRestorePerson} disabled={isLocked || loading}>Include in yearbook</button></p>}
       <section className="pi-section">
         <div className="inspector-section-title">Name</div>
         <label className="field"><span>First name</span><input maxLength={200} value={person.first_name} disabled={loading || isLocked} onChange={e => onNameChange("first_name", e.target.value)} /></label>

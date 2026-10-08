@@ -386,7 +386,7 @@ async def download_spreadsheet(workspace_id: str, request: Request):
                 placed = [(p, i + 1) for i, p in enumerate(placed_people)]
         else:
             placed = []
-            for idx, person in enumerate(payload.people):
+            for idx, person in enumerate(p for p in payload.people if not p.excluded):
                 raw_slot_number = int((payload.slot_assignments or {}).get(int(person.index), idx + 1))
                 placed.append((person, raw_slot_number if 1 <= raw_slot_number <= slot_count else 1))
 

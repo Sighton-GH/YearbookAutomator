@@ -2166,7 +2166,8 @@ export default function App({
   }, [defaultQuotesRandomize, defaultQuotes.length]);
 
   const getPeopleForGeneration = (list: PersonRecord[]) => {
-    return forceAlphabetical ? [...list].sort(comparePeopleByLastName) : list;
+    const active = list.filter(p => !p.excluded);
+    return forceAlphabetical ? [...active].sort(comparePeopleByLastName) : active;
   };
 
   const buildSlotsForPeople = (peopleList: PersonRecord[]) => {

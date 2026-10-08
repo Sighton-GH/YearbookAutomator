@@ -651,9 +651,10 @@ def _render_name(
 
 
 def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None, warning_cb: Callable[[str], None] | None = None) -> Path:
-    if len(payload.people) > len(payload.slots):
+    active_people = [p for p in payload.people if not p.excluded]
+    if len(active_people) > len(payload.slots):
         raise ValueError(
-            f"This spread has {len(payload.people)} students but only {len(payload.slots)} slots. "
+            f"This spread has {len(active_people)} students but only {len(payload.slots)} slots. "
             "Re-render with 'Render all', which splits students across spreads."
         )
 
@@ -699,12 +700,12 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     baby_mask_cache: dict[str, Image.Image | None] = {}
     baby_face_center_cache: dict[str, tuple[float, float] | None] = {}
 
-    effective_people = payload.people
+    effective_people = active_people
     effective_slots = payload.slots
 
     if getattr(payload, "auto_place", False):
         effective_people, effective_slots = auto_place_slots_for_people(
-            people=payload.people,
+            people=active_people,
             slots=payload.slots,
             placement_mode=getattr(payload, "placement_mode", "left_then_right"),
             slot_assignments=getattr(payload, "slot_assignments", None),

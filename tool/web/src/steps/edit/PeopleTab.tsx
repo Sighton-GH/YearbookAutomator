@@ -1,3 +1,4 @@
+import { AddStudent } from "../../components/AddStudent";
 import { editPersonName } from "../../utils/personEdits";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -318,7 +319,7 @@ export function PeopleTab({
   };
 
   const removePerson = (personIndex: number) => {
-    setPeople(people.filter((p) => p.index !== personIndex));
+    setPeople(people.map(p => p.index === personIndex ? {...p, excluded: true} : p));
     setAdjustments((prev) => {
       const { [personIndex]: _omit, ...rest } = prev;
       return rest;
@@ -557,7 +558,7 @@ export function PeopleTab({
           }
           message={
             confirmAction?.kind === "remove-person"
-              ? "This will remove the person from the list."
+              ? "This student will be excluded from the yearbook. You can include them again from the Inspector."
               : confirmAction?.kind === "remove-portrait"
                 ? "This will clear the portrait for this person."
                 : confirmAction?.kind === "apply-mapping"
@@ -578,6 +579,13 @@ export function PeopleTab({
           }}
         />
 
+        <AddStudent disabled={loading || !workspaceId} onAdd={async (first, last, quote, portrait) => {
+          if (!workspaceId) return;
+          try {
+            const filename = portrait ? await uploadImage(workspaceId, "mugshot", portrait) : null;
+            setPeople([...people, {index: Math.max(0, ...people.map(p => p.index)) + 1, first_name: first, last_name: last, quote, mugshot_filename: filename, added_manually: true}]);
+          } catch (err) { setStatus(`Could not add student. ${formatServerMessage(err)}`); }
+        }} />
         {/* Toolbar */}
         <div className="panel people-toolbar">
           <div className="people-toolbar-row">
@@ -723,6 +731,7 @@ export function PeopleTab({
                 dragging: swapMode === "card" && dragIdx === rowIdx,
                 "swap-target": swapEnabled && dropTarget === rowIdx,
                 "people-card-locked": isLocked,
+                "people-card-excluded": Boolean(p.excluded),
               });
               return (
                 <PeopleCard
@@ -790,6 +799,7 @@ export function PeopleTab({
                   showQuote={false}
                   onClick={() => setSelectedIdx(rowIdx)}
                 >
+                  {p.excluded && <p className="muted small">Excluded from yearbook</p>}
                   {!skipQuotes && (
                     <p className="muted small people-card-quote-preview">{displayQuote ? displayQuote : "No quote"}</p>
                   )}
@@ -832,6 +842,7 @@ export function PeopleTab({
             onUploadReplacementPortrait={(file) => void uploadReplacementPortrait(selected.index, file)}
             onRequestRemovePortrait={() => setConfirmAction({ kind: "remove-portrait", personIndex: selected.index })}
             onRequestRemovePerson={() => setConfirmAction({ kind: "remove-person", personIndex: selected.index })}
+            onRestorePerson={() => updatePerson(selectedIdx, prev => ({...prev, excluded: false}))}
             onNameChange={(field, value) => updatePerson(selectedIdx, prev => editPersonName(prev, field, value))}
             onQuoteChange={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote: value }))}
             onQuoteBlank={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote_blank: value }))}

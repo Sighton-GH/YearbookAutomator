@@ -64,6 +64,8 @@ class PersonRecord(BaseModel):
     original_first_name: str | None = Field(default=None, max_length=200)
     original_last_name: str | None = Field(default=None, max_length=200)
     quote_blank: bool = False
+    added_manually: bool = False
+    excluded: bool = False
     baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
     baby_background_removal_failed: bool = False
 
