@@ -11,6 +11,7 @@ from typing import Callable, Literal
 from PIL import Image, ImageDraw, ImageFont
 
 from app.services.text_color import parse_text_color
+from app.services.text_spacing import draw_tracked, tracked_bounds
 
 FontLoader = Callable[[int], ImageFont.ImageFont]
 
@@ -20,6 +21,8 @@ class TextStyle:
     align: Literal['left', 'center', 'right', 'justify'] = 'left'
     valign: Literal['top', 'middle', 'bottom'] = 'top'
     color: str = '#141e32'
+    line_spacing: float | None = None
+    letter_spacing: int = 0
 
 
 @dataclass(frozen=True)
@@ -30,7 +33,8 @@ class TextResult:
 
 
 def _width(draw, text, font, style):
-    bbox = draw.textbbox((0, 0), text, font=font)
+    bbox = (tracked_bounds(draw, text, font, style.letter_spacing)
+            if style.letter_spacing else draw.textbbox((0, 0), text, font=font))
     return float(bbox[2] - bbox[0])
 
 
@@ -63,6 +67,8 @@ def _wrap(draw, text, font, width, style):
 
 def _line_step(draw, font, size, style):
     # Pillow multiline_text uses the bottom of the 'A' bbox + spacing.
+    if style.line_spacing is not None:
+        return size * style.line_spacing
     return draw.textbbox((0, 0), 'A', font=font)[3]
 
 
@@ -71,8 +77,11 @@ def _fit(draw, text, load_font, start_size, min_size, width, height, kind, style
         font = load_font(size)
         lines = [text] if kind == 'name' else _wrap(draw, text, font, width, style)
         step = _line_step(draw, font, size, style)
-        bounds = [draw.textbbox((0, i * step), line, font=font)
-                  for i, line in enumerate(lines)]
+        bounds = []
+        for i, line in enumerate(lines):
+            b = (tracked_bounds(draw, line, font, style.letter_spacing)
+                 if style.letter_spacing else draw.textbbox((0, 0), line, font=font))
+            bounds.append((b[0], b[1] + i * step, b[2], b[3] + i * step))
         ink_height = max(b[3] for b in bounds) - min(b[1] for b in bounds)
         fits = (all(_width(draw, line, font, style) <= width for line in lines)
                 and ink_height <= height)
@@ -87,7 +96,7 @@ def _draw_line(draw, xy, text, font, style, width, justify):
         words = text.split()
         gap = (width - sum(_width(draw, word, font, style) for word in words)) / (len(words) - 1)
         for word in words:
-            draw.text((x, y), word, font=font, fill=parse_text_color(style.color), anchor='la')
+            draw_tracked(draw, (x, y), word, font, style.letter_spacing, fill=parse_text_color(style.color), anchor='la')
             x += _width(draw, word, font, style) + gap
     else:
         if style.align == 'center':
@@ -98,7 +107,7 @@ def _draw_line(draw, xy, text, font, style, width, justify):
             anchor = 'ra'
         else:
             anchor = 'la'
-        draw.text((x, y), text, font=font, fill=parse_text_color(style.color), anchor=anchor)
+        draw_tracked(draw, (x, y), text, font, style.letter_spacing, fill=parse_text_color(style.color), anchor=anchor)
 
 
 def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
@@ -112,6 +121,10 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     For quotes pass min(quote.width, mugshot.width*1.5) and mugshot.height.
     warnings is reserved for announced fallbacks in later feature helpers.
     """
+    if not -5 <= style.letter_spacing <= 50:
+        raise ValueError('Letter spacing must be -5 to 50 pixels')
+    if style.line_spacing is not None and not 0.5 <= style.line_spacing <= 3:
+        raise ValueError('Line spacing must be 0.5 to 3')
     parse_text_color(style.color)
     if kind not in {'name', 'quote'}:
         raise ValueError('kind must be name or quote')
@@ -127,7 +140,8 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     height = max(1, int(max_height if max_height is not None else box.height))
     # Preserve legacy ascender positioning, fitting and default spacing.
     if (style.valign == 'top' and style.align in {'left', 'center'}
-            and parse_text_color(style.color) == (20, 30, 50)):
+            and parse_text_color(style.color) == (20, 30, 50)
+            and style.letter_spacing == 0 and style.line_spacing is None):
         from app.services.generator import _render_name, _render_wrapped_text
         if kind == 'name':
             _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size)
