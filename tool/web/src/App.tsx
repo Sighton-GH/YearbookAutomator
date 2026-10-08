@@ -2285,7 +2285,7 @@ export default function App({
       while (true) {
         try {
           const statusResp = await generationStatus(jobId);
-          if (statusResp.warnings?.length) setGenerationWarnings((old) => [...new Set([...old, ...statusResp.warnings!])]);
+          if (statusResp.warnings?.length) setGenerationWarnings((old) => [...new Set([...old, ...statusResp.warnings!.map(w => opts.spreadIndex ? `Spread ${opts.spreadIndex}: ${w}` : w)])]);
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
           const statusText = statusResp.status || "";

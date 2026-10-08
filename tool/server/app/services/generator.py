@@ -163,7 +163,7 @@ def _try_truetype(name_or_path: str, size: int) -> ImageFont.FreeTypeFont | None
         return None
 
 
-def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int = 32) -> ImageFont.FreeTypeFont:
+def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int = 32, warning_cb: Callable[[str], None] | None = None) -> ImageFont.FreeTypeFont:
     # Prefer an uploaded font file (by filename) if present in the workspace.
     # Otherwise, try resolving a real TrueType font from the provided family/stack.
     fonts_dir = workspace_dir(workspace_id) / "fonts"
@@ -193,6 +193,9 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
         loaded = _try_truetype(cand, size=size)
         if loaded is not None:
             return loaded
+
+    if warning_cb:
+        warning_cb(f"Font {font_family!r} was not available, so a fallback font was used.")
 
     # Robust fallbacks: common Linux/cross-platform fonts first, then Windows fonts.
     for fallback in [
@@ -685,7 +688,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     quote_align = payload.quote_align or payload.align
     quote_all_caps = payload.quote_all_caps if payload.quote_all_caps is not None else payload.all_caps
 
-    quote_font = _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=quote_font_size)
+    quote_font = _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=quote_font_size, warning_cb=warning_cb)
     draw = ImageDraw.Draw(base)
 
     baby_shape_cache: dict[int, str] = {}
@@ -793,12 +796,12 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             break
 
         quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
-        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s), name_font_size, name_align, name_all_caps)
+        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s, warning_cb=warning_cb), name_font_size, name_align, name_all_caps)
         if quote:
             max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
             _render_wrapped_text(
                 draw=draw,
-                load_font=lambda s: _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=s),
+                load_font=lambda s: _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=s, warning_cb=warning_cb),
                 text=quote,
                 box=slot.quote,
                 max_width=max_quote_width,
