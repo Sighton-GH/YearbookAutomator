@@ -683,10 +683,10 @@ def _text_style(payload: GenerationRequest, prefix: str, align: str) -> TextStyl
 
 
 def _styled_loader(payload: GenerationRequest, prefix: str, family: str, weight: str, warnings: list[str]):
-    """Font loader for render_text. Legacy (upright) text keeps the base loader so
-    variable-font pixels do not change; only an explicit italic opts into the styled loader."""
-    if getattr(payload, f"{prefix}_font_style") == "italic":
-        return lambda s: load_styled_font(payload.workspace_id, family, weight, s, "italic", warnings)
+    """Keep default upright instances unchanged; explicit styles set real axes."""
+    font_style = getattr(payload, f"{prefix}_font_style") or "normal"
+    if font_style == "italic" or weight.strip().lower() in {"bold", "700", "800", "900"}:
+        return lambda s: load_styled_font(payload.workspace_id, family, weight, s, font_style, warnings)
     return lambda s: _load_font(payload.workspace_id, family, weight, size=s)
 
 
