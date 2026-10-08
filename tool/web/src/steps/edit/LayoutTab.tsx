@@ -6,6 +6,7 @@ import { TemplatePreview } from "../../components/TemplatePreview";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Inspector } from "../../components/Inspector";
 import { SlotInspectorFields } from "../../components/SlotInspectorFields";
+import { addSlot, duplicateSlot, deleteSlot, type SlotKey } from "../../utils/layout/slotOps";
 import { groupSlotsByProximity } from "../../utils/slots";
 
 export function LayoutTab({
@@ -38,6 +39,7 @@ export function LayoutTab({
   rawDebug: RawParseDebug | null;
 }) {
   const selected = selectedSlot != null ? slots[selectedSlot] : null;
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [regroupConfirm, setRegroupConfirm] = useState<TemplateSlots[] | null>(null);
 
   const requestRegroup = () => {
@@ -56,6 +58,17 @@ export function LayoutTab({
     <div className="layout-with-inspector">
       <div className="stack" style={{ gap: 12 }}>
         <div className="preview-toggle">
+          <button type="button" className="chip" disabled={!templateSize} onClick={() => {
+            if (!templateSize) return;
+            const result = addSlot(slots, templateSize);
+            onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+          }}>Add slot</button>
+          <button type="button" className="chip" disabled={!selected || !templateSize} onClick={() => {
+            if (!templateSize || selectedSlot == null) return;
+            const result = duplicateSlot(slots, selectedSlot, templateSize);
+            onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+          }}>Duplicate slot</button>
+          <button type="button" className="chip danger" disabled={!selected} onClick={() => setDeleteConfirm(true)}>Delete slot</button>
           <button
             type="button"
             className={clsx("chip", { active: previewMode === "clean" })}
@@ -82,6 +95,14 @@ export function LayoutTab({
           </button>
         </div>
 
+        <ConfirmDialog open={deleteConfirm} title="Delete selected slot?" message="The four regions in this slot will be removed. Other slots keep their order." confirmLabel="Delete slot" destructive
+          onCancel={() => setDeleteConfirm(false)} onConfirm={() => {
+            if (selectedSlot != null) {
+              const result = deleteSlot(slots, selectedSlot);
+              onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+            }
+            setDeleteConfirm(false);
+          }} />
         <ConfirmDialog
           open={Boolean(regroupConfirm)}
           title="Regroup nearby slots?"
