@@ -1,4 +1,5 @@
 import { generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
+import { printSizeDescription } from "../utils/printSize";
 import { InfoPopover } from "../components/InfoPopover";
 import type { PlacementMode } from "../types";
 
@@ -185,6 +186,10 @@ export function FinalizeStep({
               <option value="original">Original{templateSize ? ` (${templateSize.width} × ${templateSize.height})` : ""}</option>
               <option value="custom">Custom resolution…</option>
             </select>
+
+            {templateSize && (
+              <div className="muted small">{printSizeDescription(templateSize, outputSize)}</div>
+            )}
 
             {hasTemplateSize && exportQualityMode === "custom" && outputSize && (
               <div className="grid two" style={{ gap: 10 }}>

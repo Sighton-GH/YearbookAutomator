@@ -15,6 +15,9 @@ from app.services import throttle
 from app.services.fonts import resolve_font_file
 
 
+PRINT_DPI = 300
+
+
 _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
     "png": ".png",
     "pdf": ".pdf",
@@ -859,15 +862,15 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     if output_format == "tiff":
         tick(92, "Saving TIFF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="TIFF", compression="tiff_deflate")
+        base.save(out_path, format="TIFF", compression="tiff_deflate", dpi=(PRINT_DPI, PRINT_DPI))
     elif output_format == "pdf":
         tick(92, "Saving PDF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PDF")
+        base.save(out_path, format="PDF", resolution=PRINT_DPI)
     else:
         tick(92, "Saving PNG")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PNG")
+        base.save(out_path, format="PNG", dpi=(PRINT_DPI, PRINT_DPI))
 
     restrict_file_permissions(out_path)
 
