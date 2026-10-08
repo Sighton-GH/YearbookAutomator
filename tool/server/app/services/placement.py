@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import unicodedata
 from dataclasses import dataclass
 
@@ -18,13 +21,20 @@ def _normalize_name(s: str | None) -> str:
     return (s or "").strip()
 
 
+# Fixed shared Unicode contract, independent of host Python's Unicode version.
+_COMBINING_RANGES = json.loads((Path(__file__).resolve().parents[3] / "shared/name-combining-ranges.json").read_text())["ranges"]
+def _is_accent_mark(ch: str) -> bool:
+    cp = ord(ch)
+    return any(start <= cp <= end for start, end in _COMBINING_RANGES)
+
+
 def fold_name(s: str | None) -> str:
     """Accent-folded, case-insensitive name key (NFKD, combining marks stripped).
 
     Must match `foldName` in tool/web/src/utils/placement.ts.
     """
     decomposed = unicodedata.normalize("NFKD", _normalize_name(s))
-    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    stripped = "".join(ch for ch in decomposed if not _is_accent_mark(ch))
     return stripped.casefold()
 
 

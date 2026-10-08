@@ -6,3 +6,6 @@ test('Indic zero-class vowel marks stay distinct, accents still fold',()=>{
  assert.equal(foldName('José'),foldName('JOSE'));
  assert.equal(foldName('कुमार'),'कुमार');
 });
+test('fixed Unicode contract preserves newer-runtime marks identically',()=>{
+ assert.equal(foldName('A\u1ac1'),'a\u1ac1');
+});
