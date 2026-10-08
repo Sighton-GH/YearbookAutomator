@@ -3,7 +3,7 @@
 
 type ReplayOp = { output_filename: string; input_filename: string; person_index?: number };
 type NamedPerson = { index?: number; first_name?: string; last_name?: string; baby_photo_filename?: string | null };
-type SessionWithBaby<P extends NamedPerson> = { people?: P[]; defaultBabyFilename?: string | null };
+type SessionWithBaby<P extends NamedPerson> = { people?: P[]; defaultBabyFilename?: string | null; babyEditHistory?: ReplayOp[] };
 
 export type ReplayFailure = { op: ReplayOp };
 
@@ -77,5 +77,6 @@ export function applyReplayFallbacks<P extends NamedPerson, S extends SessionWit
   if (session.defaultBabyFilename && remap.has(session.defaultBabyFilename)) {
     next.defaultBabyFilename = resolve(session.defaultBabyFilename);
   }
+  if (session.babyEditHistory) next.babyEditHistory = session.babyEditHistory.filter(op => !remap.has(op.output_filename));
   return next;
 }
