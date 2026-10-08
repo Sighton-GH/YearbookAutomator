@@ -56,6 +56,9 @@ export type RawParseDebug = {
   baby_photos: Box[];
   names: Box[];
   quotes: Box[];
+  dropped?: Record<string, Box[]>;
+  invented?: Record<string, Box[]>;
+  messages?: string[];
 };
 export type TemplateParseResponse = {
   template_id: string;
@@ -169,6 +172,7 @@ export async function parseTemplate(
     disableBabyPhotos?: boolean;
     disableQuotes?: boolean;
     minArea?: number;
+    tolerance?: number;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
   }
@@ -184,6 +188,7 @@ export async function parseTemplate(
   if (opts?.disableBabyPhotos) form.append("disable_baby_photos", "true");
   if (opts?.disableQuotes) form.append("disable_quotes", "true");
   if (opts?.minArea) form.append("min_area", String(opts.minArea));
+  if (opts?.tolerance !== undefined) form.append("tolerance", String(opts.tolerance));
   const { data } = await axios.post<TemplateParseResponse>("/api/templates/parse", form, {
     headers: { "Content-Type": "multipart/form-data" },
     signal: opts?.signal,

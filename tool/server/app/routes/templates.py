@@ -91,6 +91,7 @@ async def parse_template(
             enable_baby_photos=not disable_baby_photos,
             enable_quotes=not disable_quotes,
             min_area=min_area,
+            tolerance=tolerance,
             template_id=workspace_id,
         )
         # Persist templates for later steps and re-processing.

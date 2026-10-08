@@ -13,6 +13,10 @@ class Box(BaseModel):
     height: int = Field(ge=1, le=50_000)
 
 
+class TemplateDetectionOptions(BaseModel):
+    tolerance: int | None = Field(default=None, ge=0, le=64)
+
+
 class TemplateSlots(BaseModel):
     mugshot: Box
     baby_photo: Box
@@ -30,6 +34,10 @@ class RawParseDebug(BaseModel):
     baby_photos: list[Box]
     names: list[Box]
     quotes: list[Box]
+    # Keys match slot fields. Coordinates use the clean-template pixel space.
+    dropped: dict[str, list[Box]] = Field(default_factory=dict)
+    invented: dict[str, list[Box]] = Field(default_factory=dict)
+    messages: list[str] = Field(default_factory=list)
 
 
 class TemplateParseResponse(BaseModel):
