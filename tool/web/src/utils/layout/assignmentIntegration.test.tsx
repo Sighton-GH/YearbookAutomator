@@ -70,6 +70,17 @@ for (const mode of ["simultaneous", "left_then_right"] as PlacementMode[]) {
     click("Regroup nearby slots"); click("Continue"); capture("regroup-deleted-pin", [initial[2], null]);
     click("Undo layout"); capture("regroup-deleted-pin-undo", [initial[2], initial[3]]);
     click("Redo layout"); capture("regroup-deleted-pin-redo", [initial[2], null]);
+    setup(); select(2); click("Duplicate slot");
+    click("Regroup nearby slots"); click("Continue");
+    capture("regroup-overlap", [initial[2], initial[0]]);
+    assert.equal(state.slots.length, 3);
+    assert.equal(state.slots.filter(s => s.mugshot.x < 100 && s.mugshot.y < 100).length, 1);
+    click("Undo layout");
+    assert.equal(state.slots.length, 5);
+    capture("regroup-overlap-undo", [initial[2], initial[0]]);
+    click("Redo layout");
+    assert.equal(state.slots.length, 3);
+    capture("regroup-overlap-redo", [initial[2], initial[0]]);
     setup(); select(2);
     const moved = slot(850, 410);
     act(() => view.root.findByType(SlotInspectorFields).props.onChange(moved));

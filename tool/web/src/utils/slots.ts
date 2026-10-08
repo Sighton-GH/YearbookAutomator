@@ -62,13 +62,27 @@ export function groupSlotsByProximity(slots: TemplateSlots[], maxKeep?: number):
     return ax - bx;
   });
 
-  const orderedIndices = groups.flatMap((group) =>
-    [...group].sort((a, b) => {
+  // Nearby is an ordering hint, not permission to discard distinct slots.
+  // Remove only substantial portrait overlaps before applying the spread cap.
+  // Keep the earliest input slot so a duplicate does not replace the original
+  // physical slot (and its existing pins). Return original objects for remapping.
+  const overlaps = (a: Box, b: Box) => {
+    const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+    const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    const largestArea = Math.max(a.width * a.height, b.width * b.height);
+    return largestArea > 0 && width * height / largestArea >= 0.4;
+  };
+  const orderedIndices = groups.flatMap((group) => {
+    const retained: number[] = [];
+    for (const index of [...group].sort((a, b) => a - b)) {
+      if (!retained.some(kept => overlaps(slots[kept].mugshot, slots[index].mugshot))) retained.push(index);
+    }
+    return retained.sort((a, b) => {
       const ca = centerByIdx.get(a)!;
       const cb = centerByIdx.get(b)!;
       return ca.y === cb.y ? ca.x - cb.x : ca.y - cb.y;
-    })
-  );
+    });
+  });
 
   const ordered = orderedIndices.map((idx) => slots[idx]);
   const cap = typeof maxKeep === "number" ? Math.max(1, maxKeep) : ordered.length;
