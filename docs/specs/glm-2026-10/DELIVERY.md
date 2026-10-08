@@ -75,7 +75,7 @@ Status means implemented and evidence gathered, not that every possible provider
 - Native background inference cannot be stopped mid-call; partial P3-07 stated above.
 - Unicode CBDT/mixed-font RTL limits remain partial F1.7.
 - Full all-control screenshot acceptance incomplete even when focused automated tests exist; UX REPORT names its coverage gaps.
-- Fresh isolated browser batch passed all completed specs except the original F4 harness race; corrected F4, full-flow and 12-view axe reruns pass. Final delta review and F4 worker report remain pending. S9/S11 and S12 F1/F2/F3 evidence is retained. Do not call ready.
+- Fresh isolated browser batch passed all completed specs except the original F4 harness race; corrected F4, full-flow and 12-view axe reruns pass. F4 worker report remains pending. Regroup delta is self-verified with patched-render inspection, not separately audited. S9/S11 and S12 F1/F2/F3 evidence is retained. Do not call ready.
 
 ## Gate record
 Baseline at untouched base: 184 backend, TS clean,lint 0 errors/7 warnings, build passed (baseline recorded separately).
@@ -101,4 +101,4 @@ Known issues and explicit semantics:
 S12 text controls on 3f8fbc69 have retained real-render evidence: hex/swatch colors, real font styles/weights and variable font uploads, alignment, vertical alignment, tracking, effects, quote justification/line spacing, and reset. At name wrap minimum 70, a named overflow warning appears for both students. The second line exceeds the name box and the strip's slot-union-plus-20-pixel crop cuts it. The renderer honors the minimum rather than shrinking below it; enlarge the box or lower the minimum. Minimum-6 wrap versus shrink and name line spacing are not visually established. Some People/Layout bulk and advanced variants remain unverified in the independent report.
 
 ## Post-Regroup gate checkpoint 03cf08a9
-373 backend tests pass with the updated both-mode placement/render/XLSX transactions, 19 warnings, 41.84 seconds. 68 frontend units and three TSX layout integration cases pass. TypeScript clean, lint 0 errors/7 warnings, build 4.00 seconds. Layout browser regression passes in 13.6 seconds. The 12-view axe, F4 and full-flow gates passed immediately before this isolated layout delta. Final S12 F4 worker evidence and independent delta review remain pending.
+373 backend tests pass with the updated both-mode placement/render/XLSX transactions, 19 warnings, 41.84 seconds. 68 frontend units and three TSX layout integration cases pass. TypeScript clean, lint 0 errors/7 warnings, build 4.00 seconds. Layout browser regression passes in 13.6 seconds. The 12-view axe, F4 and full-flow gates passed immediately before this isolated layout delta. Final S12 F4 worker evidence remains pending. Regroup delta is self-verified plus patched-render inspected; no separate final delta auditor.
