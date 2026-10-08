@@ -4,7 +4,7 @@ import { useDialogFocus } from "./utils/dialogFocus";
 import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
+import { ArrowLeft, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
 import { withBase } from "./baseUrl";
 import {
   applyMapping,
@@ -70,6 +70,8 @@ import { NoticeDialog } from "./components/NoticeDialog";
 import { applyReplayFallbacks, replayFailureWarnings, type ReplayFailure } from "./utils/replayFallback";
 import { TipsBox } from "./components/TipsBox";
 import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/RoadmapRail";
+import { StepContinueButton } from "./components/StepContinueButton";
+import { missingStepRequirements } from "./utils/stepRequirements";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { cropToPngBlob } from "./utils/image";
 import { babyBoxesByPerson } from "./utils/babySlot";
@@ -615,20 +617,15 @@ export default function App({
   const templateReady = Boolean(workspaceId && slots.length);
   const rosterReady = Boolean(workspaceId && slots.length && people.length);
 
-  const topStepReady = (step: TopStep): boolean => {
-    if (getLicenseUnlockAllStepsEnabled()) return true;
-    switch (step) {
-      case "template":
-        return true;
-      case "roster":
-        return templateReady;
-      case "people":
-        return rosterReady;
-      case "style":
-      case "generate":
-        return rosterReady;
-    }
-  };
+  const topStepMissing = (step: TopStep): string[] => missingStepRequirements(step, {
+    hasWorkspace: Boolean(workspaceId),
+    slotCount: slots.length,
+    peopleCount: people.length,
+    unlockAllSteps: getLicenseUnlockAllStepsEnabled(),
+  });
+  const topStepReady = (step: TopStep): boolean => topStepMissing(step).length === 0;
+  const topStepBlockedReason = (step: TopStep): string | undefined =>
+    loading ? "Please wait for the current operation to finish." : topStepMissing(step).join(" ") || undefined;
 
   // Per-step completion (for the roadmap rail's done/current markers), independent of gating.
   const topStepComplete = (step: TopStep): boolean => {
@@ -652,7 +649,7 @@ export default function App({
       return;
     }
     if (!topStepReady(target)) {
-      setStatus("Complete the previous steps before jumping ahead");
+      setStatus(topStepMissing(target).join(" "));
       return;
     }
     if (importSections && [importAnnotated, importClean, importSpreadsheet, importMugshotsZip, importBabyZip].some(Boolean) && !window.confirm("You have files selected that have not been uploaded. Leave this step?")) return;
@@ -2606,7 +2603,7 @@ export default function App({
       status,
       optional: s.optional,
       disabled: !ready || loading,
-      disabledReason: !ready ? "Complete the previous step first" : loading ? "Please wait…" : undefined,
+      disabledReason: topStepBlockedReason(s.id),
     };
   });
 
@@ -2677,14 +2674,12 @@ export default function App({
       <button type="button" className="danger ghost" onClick={requestResetAll} disabled={loading}>
         Reset all
       </button>
-      {!isLastStep && (
-        <button
-          className="primary"
-          disabled={loading || !nextStepMeta || !topStepReady(nextStepMeta.id)}
-          onClick={() => goToAdjacentStep(1)}
-        >
-          Continue{nextStepMeta ? ` to ${nextStepMeta.label}` : ""} <ArrowRight size={15} />
-        </button>
+      {!isLastStep && nextStepMeta && (
+        <StepContinueButton
+          label={nextStepMeta.label}
+          reason={topStepBlockedReason(nextStepMeta.id)}
+          onContinue={() => goToAdjacentStep(1)}
+        />
       )}
     </div>
   );

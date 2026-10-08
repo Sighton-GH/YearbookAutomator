@@ -534,7 +534,6 @@ export function PeopleTab({
           defaultBabyFilename={defaultBabyFilename}
           babyMaskBox={babyMaskBox}
           babyBoxByPerson={babyBoxByPerson}
-          babyBoxByPerson={babyBoxByPerson}
           babyBackgroundColor={babyBackgroundColor}
           babyBackgroundMode={babyBackgroundMode}
           allowInsecureUploads={allowInsecureUploads}
