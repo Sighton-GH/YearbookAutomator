@@ -24,7 +24,7 @@ export function PhotoSettingsPanel({ settings, onChange, size, outputFormat }: {
       <label><input type="checkbox" disabled={outputFormat !== "pdf"} checked={settings.crop_marks ?? false}
         onChange={e => onChange({ ...settings, crop_marks: e.target.checked })} /> PDF crop marks (adds 0.25 in on each edge)</label>
     </fieldset>
-    {(["mugshot", "baby"] as const).map(kind => <fieldset key={kind}>
+    {(["mugshot", "baby"] as const).map(kind => <details key={kind}><summary>{kind === "mugshot" ? "Portrait shape, border and shadow" : "Baby shape, border and shadow"}</summary><fieldset>
       <legend>{kind === "mugshot" ? "Portrait shape" : "Baby photo shape (auto rectangle masks only)"}</legend>
       <label className="field"><span>Shape</span><select value={settings[`${kind}_shape`] ?? "rect"}
         onChange={e => onChange({ ...settings, [`${kind}_shape`]: e.target.value })}>
@@ -52,6 +52,6 @@ export function PhotoSettingsPanel({ settings, onChange, size, outputFormat }: {
                 Math.min(field === "opacity" ? 1 : field === "blur" ? 100 : 500, Number(e.target.value))) } })} />
         </label>)}
       </>}
-    </fieldset>)}
+    </fieldset></details>)}
   </section>;
 }

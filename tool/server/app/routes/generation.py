@@ -121,7 +121,7 @@ def _save_generation_request(payload: GenerationRequest) -> None:
     req_dir = root / "generation" / "requests"
     req_dir.mkdir(parents=True, exist_ok=True)
 
-    data = payload.model_dump()
+    data = payload.model_dump(exclude_unset=True)
     data["_saved_at"] = time.time()
     data["_output_filename"] = out_name
 

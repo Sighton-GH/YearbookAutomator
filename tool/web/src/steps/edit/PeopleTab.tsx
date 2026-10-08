@@ -854,7 +854,7 @@ export function PeopleTab({
             defaultQuoteFallback={defaultQuoteFallback}
             babyFilename={selected.hide_baby_photo ? null : selected.baby_photo_filename || defaultBabyFilename}
             babyMaskCssUrl={babyMaskCssFor(babyBoxFor(selected.index))}
-            babyFillColor={babyFillColor}
+            babyFillColor={selected.baby_fill_color === undefined ? babyFillColor : selected.baby_fill_color}
             babyAspect={babyAspectFor(babyBoxFor(selected.index))}
             adjustment={adjustments[selected.index]}
             onShiftEnabled={(enabled) => setShiftEnabled(selected.index, enabled)}
@@ -872,6 +872,12 @@ export function PeopleTab({
             onResetBabyToOriginal={() => clearBabyOverride(selectedIdx)}
             onRemoveBabyFromPerson={() => clearBabyFromPerson(selectedIdx)}
             onAdjustPortrait={() => setPortraitEditorIdx(selectedIdx)}
+            onBabyFillColor={colour => updatePerson(selectedIdx, p => {
+              const next = { ...p };
+              if (colour === undefined) delete next.baby_fill_color;
+              else next.baby_fill_color = colour;
+              return next;
+            })}
             onPreviewPortrait={() => {
               if (!workspaceId) return;
               const filename = selected.mugshot_filename || defaultMugshotAssignments[selected.index];

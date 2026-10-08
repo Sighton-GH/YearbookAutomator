@@ -44,6 +44,7 @@ export function PersonInspector({
   onRemoveBabyFromPerson,
   onPreviewPortrait,
   onAdjustPortrait,
+  onBabyFillColor,
   loading,
 }: {
   person: PersonRecord;
@@ -76,6 +77,7 @@ export function PersonInspector({
   onRemoveBabyFromPerson: () => void;
   onPreviewPortrait: () => void;
   onAdjustPortrait: () => void;
+  onBabyFillColor: (colour: string | null | undefined) => void;
   loading: boolean;
 }) {
   const mugshotFilename = person.mugshot_filename || assignedDefaultMugshot || null;
@@ -160,6 +162,15 @@ export function PersonInspector({
       {!skipBabyPhotos && (
         <section className="pi-section">
           <div className="inspector-section-title">Baby photo</div>
+          <label className="field"><span>Baby background colour</span>
+            <select disabled={isLocked} value={person.baby_fill_color === undefined ? "inherit" : person.baby_fill_color === null ? "transparent" : "fill"}
+              onChange={e => onBabyFillColor(e.target.value === "inherit" ? undefined : e.target.value === "transparent" ? null : "#ffffff")}>
+              <option value="inherit">Use global setting</option><option value="transparent">Keep transparency</option><option value="fill">Fill colour</option>
+            </select>
+          </label>
+          {person.baby_fill_color && <input type="color" aria-label="Baby fill colour" disabled={isLocked}
+            value={person.baby_fill_color} onChange={e => onBabyFillColor(e.target.value)} />}
+
           <div className="pi-row">
             {babyFilename && workspaceId ? (
               <button

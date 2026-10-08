@@ -18,6 +18,7 @@ export function FinalizeStep({
   skipBabyPhotos,
   templateSize,
   outputSize,
+  outputDpi = 300,
   onOutputSize,
   outputFormat,
   onOutputFormat,
@@ -51,6 +52,7 @@ export function FinalizeStep({
   skipQuotes: boolean;
   skipBabyPhotos: boolean;
   templateSize: { width: number; height: number } | null;
+  outputDpi?: number;
   outputSize: { width: number; height: number } | null;
   onOutputSize: (v: { width: number; height: number } | null) => void;
   outputFormat: "png" | "pdf" | "tiff";
@@ -235,7 +237,7 @@ export function FinalizeStep({
             </select>
 
             {templateSize && (
-              <div className="muted small">{printSizeDescription(templateSize, outputSize)}</div>
+              <div className="muted small">{printSizeDescription(templateSize, outputSize, outputDpi)}</div>
             )}
 
             {hasTemplateSize && exportQualityMode === "custom" && outputSize && (

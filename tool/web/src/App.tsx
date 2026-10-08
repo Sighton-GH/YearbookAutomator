@@ -675,6 +675,8 @@ export default function App({
   };
 
   const handleReset = () => {
+    setPhotoSettings(DEFAULT_PHOTO_SETTINGS);
+    setSafeArea({ show: false, bleed_mm: 3, safe_mm: 6 });
     const toDelete = workspaceId;
     if (toDelete) {
       void deleteWorkspace(toDelete).catch(() => {
@@ -855,7 +857,7 @@ export default function App({
       babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
       safeArea,
-    photoSettings,
+      photoSettings,
       babyBackgroundColor,
       centerBabyOnFace,
       defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
@@ -1440,8 +1442,8 @@ export default function App({
           });
           setBabyEditHistory((saved.babyEditHistory ?? []) as any);
           setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
-    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
-    setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+          setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+          setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
           setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
           const savedDefaultMugshots =
             Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
@@ -1681,8 +1683,8 @@ export default function App({
         });
         setBabyEditHistory((saved.babyEditHistory ?? []) as any);
         setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
-    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
-    setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+        setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+        setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         const savedDefaultMugshots =
           Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
@@ -3231,8 +3233,6 @@ export default function App({
               <TipsBox tips={stepTips} />
             </div>
           )}
-          {activeStep === "template" && templateSize && <SafeAreaPreview size={templateSize}
-            src={templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
           {activeStep === "template" && (
             <div className="canvas-subnav">
               <TabBar
@@ -3451,6 +3451,7 @@ export default function App({
                 skipBabyPhotos={skipBabyPhotos}
                 templateSize={templateSize}
                 outputSize={outputSize}
+                outputDpi={photoSettings.output_dpi ?? 300}
                 onOutputSize={setOutputSize}
                 outputFormat={outputFormat}
                 onOutputFormat={setOutputFormat}

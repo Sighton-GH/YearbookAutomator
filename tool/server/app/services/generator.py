@@ -619,14 +619,20 @@ def _paste_image(
     else:
         fitted = _fit_image(overlay, target.width, target.height)
     if kind == "baby" and alpha_mask is not None:
+        if fitted.mode == "RGBA":
+            from PIL import ImageChops
+            alpha_mask = ImageChops.multiply(alpha_mask, fitted.getchannel("A"))
         base.paste(fitted, (target.x, target.y), alpha_mask)
     elif kind == "baby" and mask_shape == "ellipse":
         mask = Image.new("L", (target.width, target.height), 0)
         mdraw = ImageDraw.Draw(mask)
         mdraw.ellipse((0, 0, target.width - 1, target.height - 1), fill=255)
+        if fitted.mode == "RGBA":
+            from PIL import ImageChops
+            mask = ImageChops.multiply(mask, fitted.getchannel("A"))
         base.paste(fitted, (target.x, target.y), mask)
     else:
-        base.paste(fitted, (target.x, target.y))
+        base.paste(fitted, (target.x, target.y), fitted.getchannel("A") if fitted.mode == "RGBA" else None)
 
 
 def _render_name(
@@ -774,14 +780,16 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
-    def _try_open_baby_rgb(path: Path) -> Image.Image | None:
+    def _try_open_baby_rgb(path: Path, fill_rgb, preserve_alpha=False) -> Image.Image | None:
         try:
             with Image.open(path) as img:
                 upright = ImageOps.exif_transpose(img)
-                if baby_bg_rgb is None:
-                    # Preserve historical behavior: convert directly to RGB.
+                if preserve_alpha:
+                    return upright.convert("RGBA")
+                if fill_rgb is None:
+                    # Omitted override keeps historical behavior.
                     return upright.convert("RGB")
-                return _fill_transparency(upright, baby_bg_rgb)
+                return _fill_transparency(upright, fill_rgb)
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
@@ -835,7 +843,9 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 continue
             if not _looks_like_image(baby_path):
                 continue
-            b_img = _try_open_baby_rgb(baby_path)
+            has_fill_override = "baby_fill_color" in person.model_fields_set
+            fill = _parse_hex_rgb(person.baby_fill_color) if has_fill_override else baby_bg_rgb
+            b_img = _try_open_baby_rgb(baby_path, fill, has_fill_override and person.baby_fill_color is None)
             if b_img is None:
                 continue
 
@@ -862,7 +872,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 baby_shape_cache[idx] = shape
 
             # Designer-supplied masks always win; optional framing is for auto rectangles only.
-            if mask is None and shape == "rect" and not baby_style.is_default:
+            if (mask is None or mask.getextrema() == (255, 255)) and shape == "rect" and not baby_style.is_default:
                 b = slot.baby_photo
                 baby_focus = PortraitFocus(focus[0] / b_img.width, focus[1] / b_img.height) if focus else None
                 paste_portrait(base, b_img, (b.x, b.y, b.width, b.height), baby_style, baby_focus)

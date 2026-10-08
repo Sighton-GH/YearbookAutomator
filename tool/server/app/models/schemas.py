@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 
 class Box(BaseModel):
@@ -87,6 +87,17 @@ class PersonRecord(BaseModel):
     hide_baby_photo: bool | None = None
     baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
     baby_background_removal_failed: bool = False
+
+
+    mugshot_focus: Optional[PhotoFocus] = None
+    baby_fill_color: Optional[str] = Field(default=None, pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+    @model_serializer(mode="wrap")
+    def _serialize_fill_override(self, handler):
+        data = handler(self)
+        if "baby_fill_color" not in self.model_fields_set:
+            data.pop("baby_fill_color", None)
+        return data
 
 
 class FilenameColumnCandidate(BaseModel):

@@ -132,7 +132,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     return null;
   };
 
-  const babyFillColor = normalizeHexColor(babyBackgroundColor);
+  const personFill = editingIdx === null ? undefined : people[editingIdx]?.baby_fill_color;
+  const babyFillColor = personFill === undefined ? normalizeHexColor(babyBackgroundColor) : personFill;
 
   useEffect(() => {
     return () => {

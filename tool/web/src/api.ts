@@ -74,6 +74,7 @@ import type { PhotoSettings, PhotoFocus } from "./photoSettings";
 
 export type PersonRecord = {
   mugshot_focus?: PhotoFocus | null;
+  baby_fill_color?: string | null;
   index: number;
   first_name: string;
   last_name: string;

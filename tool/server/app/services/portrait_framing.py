@@ -1,35 +1,8 @@
-"""F4.1 / F4.2 portrait framing, masks, border and shadow helpers.
+"""Portrait and auto-rectangle baby photo framing.
 
-New, self-contained module. Nothing here is wired into the generator yet; see
-"Integration contract" below. Defaults reproduce today's output: a default
-``PortraitStyle`` with no focus and no face box gives exactly what
-``generator._fit_image`` + ``base.paste`` produce today.
-
-Integration contract
---------------------
-In ``generator.py`` the mugshot branch (``_paste_image(..., kind="mugshot")``)
-should call::
-
-    warnings = paste_portrait(base, m_img, (slot.x, slot.y, slot.width, slot.height),
-                              style, focus=person.mugshot_focus,
-                              face_box=face_box_or_None)
-
-* ``style`` is built once per job with ``PortraitStyle.from_request(payload)``
-  (reads mugshot_fit, mugshot_face_aware, mugshot_shape, mugshot_corner_radius,
-  mugshot_border_width, mugshot_border_color, mugshot_shadow,
-  contain_fill_color with getattr defaults, so old payloads work).
-* ``face_box`` is ``(x0, y0, x1, y1)`` in ORIGINAL image pixels. When P3-06's
-  shared ``detect_face`` lands, the integrator passes its box; only call it
-  when ``style.face_aware`` is true and no per-student focus exists.
-* ``focus`` is ``{"x": 0-1, "y": 0-1, "zoom": 1-4}`` (a dict or ``PortraitFocus``)
-  from ``PersonRecord.mugshot_focus``. Priority: focus > face-aware > centre.
-* The returned list of strings is plain English; append it to the job
-  ``warnings`` (P3-03). Duplicates are not removed here.
-* ``mugshot_shadow`` shape: ``{"color": "#rrggbb", "opacity": 0-1,
-  "offset_x": int, "offset_y": int, "blur": int >= 0}`` (the F1 text-shadow
-  shape is not in the base commit; the integrator should align the two).
-* Baby photos with an "auto rectangle" mask can reuse ``paste_portrait`` with
-  ``fit="cover"`` and their own style; template masks stay in generator.py.
+Defaults match the original cover crop. Focus wins over face-aware centring.
+The generator supplies the shared detector's original-image face box and
+forwards returned fallback warnings through the generation warning callback.
 """
 from __future__ import annotations
 
@@ -282,10 +255,10 @@ def paste_portrait(
     if style.shadow is not None:
         layer, (ox, oy) = make_shadow(mask or Image.new("L", (w, h), 255), style.shadow)
         base.paste(layer, (x + ox, y + oy), layer)
-    if mask is None:
-        base.paste(fitted, (x, y))
-    else:
-        base.paste(fitted, (x, y), mask)
+    paste_mask = mask
+    if fitted.mode == "RGBA":
+        paste_mask = fitted.getchannel("A") if mask is None else ImageChops.multiply(mask, fitted.getchannel("A"))
+    base.paste(fitted, (x, y), paste_mask)
     ring = build_border(mask, w, h, style.border_width, style.shape, style.corner_radius)
     if ring is not None:
         base.paste(Image.new("RGB", (w, h), style.border_color), (x, y), ring)
