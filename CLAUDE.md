@@ -43,7 +43,7 @@ New `GenerationRequest` fields, each for the `name_` and `quote_` prefix and eac
 - Rendering: `generator.generate_composite` calls `services/text_layout.render_text` for names and quotes. With every field at its default that call delegates to the original `_render_name` / `_render_wrapped_text`, so legacy output is pixel-identical. Only an explicit italic switches to `font_styling.load_styled_font`; upright text keeps the base `_load_font` (variable fonts keep their historical weight). Warnings (minimum-size overflow with the student's name, missing italic face) go through `warning_cb` to the job `warnings` list.
 - Frontend: one object, `textStyles` (`utils/textStyle.ts`), held in `App.tsx`, saved in `PersistedSessionV1.textStyles` (so config export/import carries it), sent by `runGeneration` through `textStyleRequestFields`. Controls are `components/TextStyleControls.tsx`, shown in the Style step under each `FontPick`.
 - Test strip: `POST /api/generation/preview-strip` renders the first two resolved students with the real renderer (no usage counted), crops to their slots and returns `preview_strip.png`; Style step button "Preview with real rendering".
-- Not wired: glyph fallback / emoji / RTL (`services/glyph_fallback.py` is helper-only), TIFF layers (`tiff_layers.py` still uses the fixed colour and is not called).
+- Glyph fallback and RTL share measuring/drawing runs. Mixed-font complex scripts are best-effort with warnings; colour emoji needs a loadable installed font. The unused TIFF-layer writer was removed; flattened TIFF output is supported.
 
 ### Website (Astro, static, deploys to Cloudflare Workers)
 ```sh

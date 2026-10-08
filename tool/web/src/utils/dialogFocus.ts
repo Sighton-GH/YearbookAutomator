@@ -30,7 +30,7 @@ export function useDialogFocus(
 ): void {
   // Remember and restore the opener.
   useEffect(() => {
-    if (!open) return;
+    if (!open || typeof document === "undefined") return;
     const opener = document.activeElement as HTMLElement | null;
     return () => {
       if (opener && typeof opener.focus === "function" && document.contains(opener)) opener.focus();
@@ -39,7 +39,7 @@ export function useDialogFocus(
 
   // Initial focus.
   useEffect(() => {
-    if (!open) return;
+    if (!open || typeof document === "undefined") return;
     const root = containerRef.current;
     if (!root) return;
     const items = focusables(root);
@@ -48,7 +48,7 @@ export function useDialogFocus(
 
   // Escape + Tab trap.
   useEffect(() => {
-    if (!open) return;
+    if (!open || typeof document === "undefined") return;
     const onKey = (e: KeyboardEvent) => {
       const root = containerRef.current;
       if (!root) return;
