@@ -1,6 +1,6 @@
 # Spec sheet — Plan 3: remaining defects and usability fixes
 
-Read `00-README-handoff.md` first (base commit, setup, data rule, gates, delivery). This sheet lists every defect that a full end-to-end audit found and that is **not** fixed at base commit `170fd1a`. Each item says what is wrong today, what "fixed" means, and the test that proves it. Item IDs (`P3-xx`) go in commit subjects and `DELIVERY.md`.
+Read `00-README-handoff.md` first (base commit, setup, data rule, gates, delivery). This sheet lists every defect that a full end-to-end audit found and that is **not** fixed at the base tag `glm-base-2026-10`. Each item says what is wrong today, what "fixed" means, and the test that proves it. Item IDs (`P3-xx`) go in commit subjects and `DELIVERY.md`.
 
 Priority: **P1** = wrong output or lost work; **P2** = misleading or blocks users; **P3** = polish and accessibility. Do P1 before P2 before P3 if you must cut scope, and say what you cut in `DELIVERY.md`.
 

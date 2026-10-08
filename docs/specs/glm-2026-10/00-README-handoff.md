@@ -1,12 +1,12 @@
 # Handoff: Custom Flow Automator — Plan 3 (bugs), Plan 2 (features), UX review
 
-Read this file first, then the three spec sheets in this folder. You may work on all of them at once; this file says how they fit together and what to hand back.
+Read this file first, then the three spec sheets in this folder (`docs/specs/glm-2026-10/` in the repository). You may work on all of them at once; this file says how they fit together and what to hand back.
 
 | File | What it is | Delivers |
 |---|---|---|
 | `01-plan3-remaining-bugs.md` | 24 remaining defects from a full audit | Code + tests |
 | `02-plan2-customisation-features.md` | 4 feature groups for spread customisation | Code + tests |
-| `03-ux-walkthrough-review.md` | Act as a real teacher using the UI, with screenshots | Report + screenshots |
+| `03-ux-walkthrough-review.md` | Act as a real teacher using the UI, with screenshots | Report + screenshots (branch `glm/ux-review`) |
 
 ## 1. The product in one paragraph
 
@@ -14,8 +14,13 @@ Read this file first, then the three spec sheets in this folder. You may work on
 
 ## 2. Base code
 
-- Base commit: **`170fd1a`** on `main` ("Merge audit bug-fix pass"). Every change must apply on top of it.
-- You receive it as a git bundle, `yearbook-main-170fd1a.bundle`: `git clone yearbook-main-170fd1a.bundle yearbook && cd yearbook && git checkout -b glm/plans-2-3 170fd1a`. (If the owner pushed `main` to GitHub instead, clone that and check out the same commit.)
+- Repository: **https://github.com/Sighton-GH/YearbookAutomator** (private — use the access you were given).
+- Base: the git tag **`glm-base-2026-10`** (on `main`; the audit bug-fix pass plus these spec sheets). Every change must apply on top of it:
+  ```bash
+  git clone https://github.com/Sighton-GH/YearbookAutomator.git yearbook && cd yearbook
+  git checkout -b glm/plans-2-3 glm-base-2026-10
+  ```
+- These spec sheets are in the repo at `docs/specs/glm-2026-10/`.
 - Stack: Python 3.12 (avoid 3.13+) FastAPI backend in `tool/server/`; React 18 + TypeScript + Vite frontend in `tool/web/`. The marketing site in `website/` is out of scope; do not touch it.
 
 ## 3. Data rule (non-negotiable)
@@ -59,7 +64,7 @@ cd tool/server && .venv/bin/python -m pytest -q
 cd tool/web && npx tsc --noEmit -p . && npx eslint . --max-warnings 7 && npm run build
 cd tool/web && npx playwright test          # the e2e suite you add in P3-00
 ```
-- Baseline at `170fd1a`: 184 backend tests pass, `tsc` clean, ESLint 0 errors / 7 warnings. Do not add warnings.
+- Baseline at `glm-base-2026-10`: 184 backend tests pass, `tsc` clean, ESLint 0 errors / 7 warnings. Do not add warnings.
 - Backend tests must never touch real data: monkeypatch `storage.BASE_DATA` to a tmp dir (see `tool/server/tests/test_storage.py`); route tests use `tool/server/live_test_client.py` as in `tool/server/tests/test_generation_outputs.py`.
 - Template-parser tests build synthetic images with OpenCV (see `tests/test_template_parser.py`); no binary fixtures for those.
 - WebP sample templates: the backend's template parser expects PNG/JPEG uploads from the UI; in tests and e2e convert with Pillow (`Image.open(p).save(out, "PNG")`).
@@ -83,11 +88,11 @@ Apply in this order when they touch the same code: **Plan 3 first, then Plan 2.*
 - Slot assignment: Plan 2 F2.5 (move a student to a specific slot) is the only UI that writes `slot_assignments`; placement collision handling already exists in `tool/server/app/services/placement.py` (explicit assignments claim first) — reuse it.
 - People-step state: P3-05 lifts staged People adjustments into `App` state; Plan 2's per-student edits (F2.x) must use that lifted state, not new local state in `PeopleTab.tsx`.
 
-## 8. What to hand back
+## 8. What to hand back (via GitHub — no files to copy)
 
-1. **One patch file** for all code: `git format-patch 170fd1a..HEAD --stdout > glm-plans-2-3.patch` (an mbox series is fine and preferred). One commit per spec item, subject prefixed with its ID, e.g. `P3-07: unify face detection between editor and render`, `F1.2: text colour for names and quotes`.
-2. **`DELIVERY.md`** (inside the patch, at `docs/specs/glm-2026-10/DELIVERY.md`): for every item ID — status (done / partial / skipped), what changed (files), tests added, and anything you decided that the spec left open. List every deviation from a spec with the reason.
-3. **The UX review folder** (separate from the patch, zipped): `ux-review/` as described in `03-ux-walkthrough-review.md`, including screenshots.
-4. Gate output (§5) pasted at the end of `DELIVERY.md`.
+1. **Code:** push branch **`glm/plans-2-3`** (based on `glm-base-2026-10`) to the repository. One commit per spec item, subject prefixed with its ID, e.g. `P3-07: unify face detection between editor and render`, `F1.2: text colour for names and quotes`.
+2. **`DELIVERY.md`** committed on that branch at `docs/specs/glm-2026-10/DELIVERY.md`: for every item ID — status (done / partial / skipped), what changed (files), tests added, and anything you decided that the spec left open. List every deviation from a spec with the reason. Paste the final gate output (§5) at the end.
+3. **Open a draft pull request** from `glm/plans-2-3` into `main` titled "GLM: Plan 3 fixes + Plan 2 customisation features", with `DELIVERY.md`'s summary as the description. **Do not merge it, do not push to `main`, do not force-push or delete any existing branch or tag.**
+4. **UX review:** push the `ux-review/` folder (as described in `03-ux-walkthrough-review.md`, including screenshots) to a separate branch **`glm/ux-review`** created from `glm-base-2026-10`, under `ux-review/`. Keep screenshots out of `glm/plans-2-3`. Link that branch in the pull request description.
 
-Do not commit screenshots, generated data, `node_modules`, `.venv` or `dist` into the patch.
+Do not commit screenshots, generated data, `node_modules`, `.venv` or `dist` to `glm/plans-2-3`.

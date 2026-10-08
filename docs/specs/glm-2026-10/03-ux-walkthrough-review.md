@@ -2,7 +2,7 @@
 
 Read `00-README-handoff.md` first (setup, data rule). This sheet produces a **report and screenshots**, not code. Run it **twice**:
 
-1. **Baseline** — on base commit `170fd1a` before you change anything. Save as `ux-review/baseline/`.
+1. **Baseline** — on the base tag `glm-base-2026-10` before you change anything. Save as `ux-review/baseline/`.
 2. **Final** — on your finished branch with Plan 3 and Plan 2 applied. Save as `ux-review/final/`.
 
 The final report must say, for every baseline finding, whether it is fixed, improved, unchanged or worse.
@@ -57,4 +57,4 @@ Only fictional data (README §3): the bundled sample (Help → "Load a sample pr
 
 ## Deliverable
 
-`ux-review/baseline/` and `ux-review/final/`, each with `REPORT.md`, `screens/`, `renders/`. Zip the `ux-review/` folder and hand it back next to the patch. Do not include any non-fictional data.
+`ux-review/baseline/` and `ux-review/final/`, each with `REPORT.md`, `screens/`, `renders/`. Push the `ux-review/` folder to branch `glm/ux-review` (README §8). Do not include any non-fictional data.
