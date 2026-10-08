@@ -27,7 +27,11 @@ def create(out,students=40,seed=1,messy=False):
   im=Image.new('RGB',(600,800),(r.randrange(40,230),r.randrange(40,230),r.randrange(40,230)));dd=ImageDraw.Draw(im);dd.ellipse((90,90,510,620),fill=(235,185,145));dd.ellipse((190,250,225,285),fill='black');dd.ellipse((375,250,410,285),fill='black');dd.arc((210,340,390,490),0,180,fill='black',width=8);return im
  with zipfile.ZipFile(out/'portraits.zip','w') as z:
   for i in range(students):
-   b=io.BytesIO();exif=Image.Exif();exif[274]=6 if i==1 else 1;face(i).save(b,format='JPEG',exif=exif);write_zip(z,f'{i+1:03}.jpg',b.getvalue())
+   b=io.BytesIO();exif=Image.Exif();exif[274]=6 if i==1 else 1
+   portrait=face(i)
+   # Orientation 6 means stored pixels are rotated counterclockwise from upright.
+   if i==1:portrait=portrait.transpose(Image.Transpose.ROTATE_90)
+   portrait.save(b,format='JPEG',exif=exif);write_zip(z,f'{i+1:03}.jpg',b.getvalue())
   write_zip(z,'__MACOSX/._001.jpg',b'fictional metadata');write_zip(z,'corrupt.jpg',b'not a photo')
  with zipfile.ZipFile(out/'baby.zip','w') as z:
   for i,n in enumerate(names[::2]):
