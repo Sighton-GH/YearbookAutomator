@@ -166,3 +166,19 @@ def test_mask_checks_quota_before_replacing(project, monkeypatch):
     monkeypatch.setattr(baby_masks, 'ensure_workspace_capacity', lambda workspace, count, replacing: called.append((workspace, count, replacing)))
     path = regenerate_baby_mask('mask-test', Box(x=0, y=0, width=20, height=20), 'ellipse')
     assert called[0][0] == 'mask-test' and called[0][1] > 0 and called[0][2] == path
+
+def test_mask_quota_endpoint_returns_413(project, monkeypatch):
+    from fastapi import FastAPI
+    from app.routes import templates
+    from live_test_client import LiveTestClient
+    monkeypatch.setattr(templates, 'enforce_workspace_write', lambda *args: None)
+    def reject(*args):
+        raise storage.UploadTooLarge('Workspace quota reached')
+    monkeypatch.setattr(templates, 'regenerate_baby_mask', reject)
+    app = FastAPI(); app.include_router(templates.router)
+    client = LiveTestClient(app)
+    try:
+        response = client.post('/baby-mask', json={'workspace_id':'mask-test', 'box':{'x':0,'y':0,'width':20,'height':20}})
+        assert response.status_code == 413 and response.json()['detail'] == 'Workspace quota reached'
+    finally:
+        client.close()

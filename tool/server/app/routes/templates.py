@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import FileResponse
 
 from app.models.schemas import BabyMaskRequest, TemplateParseResponse
-from app.services.storage import save_upload, workspace_dir
+from app.services.storage import save_upload, workspace_dir, UploadTooLarge
 from app.services.template_parser import extract_slots
 from app.services.baby_masks import regenerate_baby_mask
 from app.services.upload_security import validate_image_bytes
@@ -38,6 +38,8 @@ async def update_baby_mask(payload: BabyMaskRequest, request: Request):
     enforce_workspace_write(request, payload.workspace_id)
     try:
         path = regenerate_baby_mask(payload.workspace_id, payload.box, payload.baby_shape)
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FileResponse(path, media_type="image/png")
