@@ -46,6 +46,7 @@ class PersonRecord(BaseModel):
     last_name: str = Field(max_length=200)
     mugshot_filename: Optional[str] = Field(default=None, max_length=180)
     quote: Optional[str] = Field(default=None, max_length=2_000)
+    quote_blank: bool = False
     baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
     baby_background_removal_failed: bool = False
 

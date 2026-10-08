@@ -812,6 +812,7 @@ export function PeopleTab({
             onRequestRemovePortrait={() => setConfirmAction({ kind: "remove-portrait", personIndex: selected.index })}
             onRequestRemovePerson={() => setConfirmAction({ kind: "remove-person", personIndex: selected.index })}
             onQuoteChange={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote: value }))}
+            onQuoteBlank={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote_blank: value }))}
             onOpenBabyEditor={() => babyEditorRef.current?.openEditor(selectedIdx)}
             onUploadReplacementBaby={(file) => void handlePerPersonBaby(selectedIdx, file)}
             onResetBabyToOriginal={() => clearBabyOverride(selectedIdx)}

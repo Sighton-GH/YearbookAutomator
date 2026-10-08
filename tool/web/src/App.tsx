@@ -2147,7 +2147,7 @@ export default function App({
       let fallbackIdx = 0;
       const peopleToSend = peopleInput.map((p) => {
         const hasQuote = Boolean((p.quote ?? "").trim());
-        const quoteValue = skipQuotes
+        const quoteValue = (skipQuotes || p.quote_blank)
           ? null
           : (hasQuote ? p.quote : (defaultQuoteAssignments[p.index] ?? defaultQuoteFallback));
         let mugshotValue = p.mugshot_filename ?? null;

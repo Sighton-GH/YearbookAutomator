@@ -71,6 +71,7 @@ export type PersonRecord = {
   last_name: string;
   mugshot_filename?: string | null;
   quote?: string | null;
+  quote_blank?: boolean;
   baby_photo_filename?: string | null;
   baby_background_removal_failed?: boolean;
 };

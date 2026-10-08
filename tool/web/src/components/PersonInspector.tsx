@@ -32,6 +32,7 @@ export function PersonInspector({
   onRequestRemovePortrait,
   onRequestRemovePerson,
   onQuoteChange,
+  onQuoteBlank,
   onOpenBabyEditor,
   onUploadReplacementBaby,
   onResetBabyToOriginal,
@@ -59,6 +60,7 @@ export function PersonInspector({
   onRequestRemovePortrait: () => void;
   onRequestRemovePerson: () => void;
   onQuoteChange: (value: string) => void;
+  onQuoteBlank: (value: boolean) => void;
   onOpenBabyEditor: () => void;
   onUploadReplacementBaby: (file: File | null) => void;
   onResetBabyToOriginal: () => void;
@@ -213,12 +215,14 @@ export function PersonInspector({
       {!skipQuotes && (
         <section className="pi-section pi-quote">
           <div className="inspector-section-title">Quote</div>
+          {!person.quote?.trim() && !person.quote_blank && <p className="muted small">Using the default quote</p>}
+          <ToggleSwitch checked={Boolean(person.quote_blank)} onChange={onQuoteBlank} label="No quote for this student" disabled={isLocked} />
           <textarea
             rows={3}
-            value={displayQuote}
+            value={person.quote ?? ""}
             onChange={(e) => onQuoteChange(e.target.value)}
             disabled={isLocked}
-            placeholder="No quote"
+            placeholder={displayQuote}
           />
         </section>
       )}

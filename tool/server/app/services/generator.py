@@ -788,7 +788,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
             break
 
-        quote = person.quote or payload.default_quote or ""
+        quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
         _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s), name_font_size, name_align, name_all_caps)
         if quote:
             max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
