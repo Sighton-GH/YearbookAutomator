@@ -2593,7 +2593,7 @@ export default function App({
     if (!workspaceId || !templateId) return;
     if (!people.length || !slots.length) return;
     if (loading) return;
-    if (previewPath) return;
+    if (previewPath || loadInflightRender()) return;
     // Auto-render the one-page preview the first time you reach Finalize.
     handleRenderPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps

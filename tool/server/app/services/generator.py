@@ -1,4 +1,5 @@
 from __future__ import annotations
+from uuid import uuid4
 
 import os
 import time
@@ -820,6 +821,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
     out_path = workspace_file(payload.workspace_id, out_name)
+    # Publish only a complete file, never a partially encoded preview.
+    temp_out_path = out_path.with_name(f".{out_path.name}.{uuid4().hex}.tmp")
 
     # Optional export resolution override.
     # Rules:
@@ -871,17 +874,18 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     if output_format == "tiff":
         tick(92, "Saving TIFF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="TIFF", compression="tiff_deflate", dpi=(PRINT_DPI, PRINT_DPI))
+        base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(PRINT_DPI, PRINT_DPI))
     elif output_format == "pdf":
         tick(92, "Saving PDF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PDF", resolution=PRINT_DPI)
+        base.save(temp_out_path, format="PDF", resolution=PRINT_DPI)
     else:
         tick(92, "Saving PNG")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PNG", dpi=(PRINT_DPI, PRINT_DPI))
+        base.save(temp_out_path, format="PNG", dpi=(PRINT_DPI, PRINT_DPI))
 
     restrict_file_permissions(out_path)
 
     tick(100, "Done")
+    temp_out_path.replace(out_path)
     return out_path
