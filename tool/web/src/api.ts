@@ -439,7 +439,7 @@ export async function applyMapping(
   return data;
 }
 
-export async function generateSpread(params: {
+export type GenerateSpreadParams = {
   workspace_id: string;
   template_id: string;
   slots: TemplateSlots[];
@@ -464,20 +464,41 @@ export async function generateSpread(params: {
   name_font_weight?: "normal" | "bold";
   name_font_size?: number;
   name_all_caps?: boolean;
-  name_align?: "left" | "center";
+  name_align?: "left" | "center" | "right";
   quote_font_family?: string;
   quote_font_weight?: "normal" | "bold";
   quote_font_size?: number;
   quote_all_caps?: boolean;
-  quote_align?: "left" | "center";
+  quote_align?: "left" | "center" | "right" | "justify";
   baby_background_color?: string | null;
   center_baby_on_face?: boolean;
-}) {
+  // F1 text styling (name_/quote_ colour, valign, line_spacing, letter_spacing, stroke_width,
+  // stroke_color, shadow, font_style, min_size, plus name_fit). Built by utils/textStyle.ts and
+  // validated field by field by GenerationRequest in schemas.py.
+} & Record<string, unknown>;
+
+export async function generateSpread(params: GenerateSpreadParams) {
   const { data } = await axios.post<{
     job_id: string;
     usage?: { remaining: number; limit: number; period: "month" | "lifetime" };
   }>("/api/generation/generate", params);
   return { jobId: data.job_id, usage: data.usage };
+}
+
+/** Renders the first two students with the real output renderer, scaled down. */
+export async function renderPreviewStrip(params: GenerateSpreadParams) {
+  const { data } = await axios.post<{ output: string; width: number; height: number; warnings: string[] }>(
+    "/api/generation/preview-strip",
+    params,
+  );
+  return data;
+}
+
+/** Fetches a rendered file as an object URL so it can be shown in an <img> (headers carry the licence). */
+export async function fetchGenerationImageObjectUrl(workspaceId: string, filename: string): Promise<string> {
+  const url = generationDownloadUrl(workspaceId, filename, { cache: String(Date.now()) });
+  const { data } = await axios.get<Blob>(url, { responseType: "blob" });
+  return URL.createObjectURL(data);
 }
 
 export async function generationStatus(jobId: string) {

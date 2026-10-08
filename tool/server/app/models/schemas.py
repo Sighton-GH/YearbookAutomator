@@ -89,6 +89,37 @@ class SpreadsheetPreview(BaseModel):
     filename_column_candidates: list[FilenameColumnCandidate] = Field(default_factory=list)
 
 
+_HEX_COLOUR_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
+
+
+def _check_hex_colour(value: Optional[str], label: str) -> Optional[str]:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if _HEX_COLOUR_RE.fullmatch(text):
+        return text
+    raise ValueError(f"{label} must be a hex colour like #141e32")
+
+
+class TextShadowSpec(BaseModel):
+    offset_x: int = Field(default=0, ge=-200, le=200)
+    offset_y: int = Field(default=0, ge=-200, le=200)
+    blur: int = Field(default=0, ge=0, le=20)
+    color: str = "#000000"
+    opacity: float = Field(default=1.0, ge=0, le=1)
+
+    @field_validator("color")
+    @classmethod
+    def _validate_color(cls, value: str) -> str:
+        checked = _check_hex_colour(value, "Shadow colour")
+        if checked is None:
+            raise ValueError("Shadow colour must be a hex colour like #000000")
+        return checked
+
+
+
 class MappingDecision(BaseModel):
     person_index: int
     action: Literal["keep", "replace", "shift", "shift_up", "skip", "remove"]
@@ -147,13 +178,42 @@ class GenerationRequest(BaseModel):
     name_font_weight: Optional[str] = Field(default=None, max_length=30)
     name_font_size: int = Field(40, ge=1, le=500, description="Name font size in points")
     name_all_caps: Optional[bool] = None
-    name_align: Optional[Literal["left", "center"]] = None
+    name_align: Optional[Literal["left", "center", "right"]] = None
+    name_color: Optional[str] = Field(default=None, description="Text colour, hex. Null keeps the built-in #141e32.")
+    name_valign: Optional[Literal["top", "middle", "bottom"]] = None
+    name_line_spacing: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    name_letter_spacing: int = Field(default=0, ge=-5, le=50)
+    name_stroke_width: int = Field(default=0, ge=0, le=20)
+    name_stroke_color: Optional[str] = None
+    name_shadow: Optional[TextShadowSpec] = None
+    name_font_style: Literal["normal", "italic"] = "normal"
+    name_min_size: int = Field(default=8, ge=6, le=200)
+    name_fit: Literal["shrink", "wrap"] = "shrink"
 
     quote_font_family: Optional[str] = Field(default=None, max_length=300)
     quote_font_weight: Optional[str] = Field(default=None, max_length=30)
     quote_font_size: int = Field(40, ge=1, le=500, description="Quote font size in points")
     quote_all_caps: Optional[bool] = None
-    quote_align: Optional[Literal["left", "center"]] = None
+    quote_align: Optional[Literal["left", "center", "right", "justify"]] = None
+    quote_color: Optional[str] = Field(default=None, description="Text colour, hex. Null keeps the built-in #141e32.")
+    quote_valign: Optional[Literal["top", "middle", "bottom"]] = None
+    quote_line_spacing: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    quote_letter_spacing: int = Field(default=0, ge=-5, le=50)
+    quote_stroke_width: int = Field(default=0, ge=0, le=20)
+    quote_stroke_color: Optional[str] = None
+    quote_shadow: Optional[TextShadowSpec] = None
+    quote_font_style: Literal["normal", "italic"] = "normal"
+    quote_min_size: int = Field(default=8, ge=6, le=200)
+
+    @field_validator("name_color", "quote_color")
+    @classmethod
+    def _validate_text_color(cls, value: Optional[str]) -> Optional[str]:
+        return _check_hex_colour(value, "Text colour")
+
+    @field_validator("name_stroke_color", "quote_stroke_color")
+    @classmethod
+    def _validate_stroke_color(cls, value: Optional[str]) -> Optional[str]:
+        return _check_hex_colour(value, "Outline colour")
 
     # Baby photo rendering
     baby_background_color: Optional[str] = Field(

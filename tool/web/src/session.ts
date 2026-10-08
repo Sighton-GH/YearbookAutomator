@@ -86,6 +86,8 @@ export type PersistedSessionV1 = {
   quoteFontSize: number;
   quoteAllCaps: boolean;
   quoteAlign: Align;
+  /** F1 text controls (colour, spacing, outline, shadow, italic, fitting). Missing in old sessions = today's look. */
+  textStyles?: import("./utils/textStyle").TextStylesSetting;
   peoplePerSpread: number;
   outputFormat?: "png" | "pdf" | "tiff";
   outputSize?: { width: number; height: number } | null;

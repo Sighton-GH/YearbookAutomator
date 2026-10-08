@@ -90,6 +90,9 @@ export function EditStep({
   onQuoteFontSize,
   onQuoteAllCaps,
   onQuoteAlign,
+  textStyles,
+  onTextStyles,
+  onRenderStyleStrip,
   availableFonts,
   setAvailableFonts,
   customFontUploadEnabled,
@@ -172,6 +175,9 @@ export function EditStep({
   onQuoteFontSize: (v: number) => void;
   onQuoteAllCaps: (v: boolean) => void;
   onQuoteAlign: (v: Align) => void;
+  textStyles: import("../../utils/textStyle").TextStylesSetting;
+  onTextStyles: (v: import("../../utils/textStyle").TextStylesSetting) => void;
+  onRenderStyleStrip: () => Promise<{ url: string; warnings: string[] }>;
   availableFonts: { name: string; filename: string; source?: string }[];
   setAvailableFonts: (fonts: { name: string; filename: string; source?: string }[]) => void;
   customFontUploadEnabled: boolean;
@@ -275,6 +281,9 @@ export function EditStep({
           onQuoteFontSize={onQuoteFontSize}
           onQuoteAllCaps={onQuoteAllCaps}
           onQuoteAlign={onQuoteAlign}
+          textStyles={textStyles}
+          onTextStyles={onTextStyles}
+          onRenderStyleStrip={onRenderStyleStrip}
           workspaceId={workspaceId}
           availableFonts={availableFonts}
           setAvailableFonts={setAvailableFonts}

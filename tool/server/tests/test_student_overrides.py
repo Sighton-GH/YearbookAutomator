@@ -27,8 +27,11 @@ def test_default_identity_and_per_student_rendering(tmp_path, monkeypatch):
     payload.people = [person.model_copy(update={"name_color": None, "quote_font_size": None, "hide_baby_photo": None})]
     assert Image.open(generator.generate_composite(payload)).tobytes() == baseline.tobytes()
     calls = []
-    monkeypatch.setattr(generator, "_render_name", lambda *args, **kwargs: calls.append((args[4], kwargs["color"])))
-    monkeypatch.setattr(generator, "_render_wrapped_text", lambda **kwargs: calls.append((kwargs["start_size"], kwargs["color"])))
+    actual_renderer = generator.render_text
+    def render_spy(*args, **kwargs):
+        calls.append((kwargs['start_size'], generator._parse_hex_rgb(kwargs['style'].color)))
+        return actual_renderer(*args, **kwargs)
+    monkeypatch.setattr(generator, 'render_text', render_spy)
     payload.people = [person.model_copy(update={"name_font_size": 31, "quote_font_size": 27, "name_color": "#ff0000", "quote_color": "#00ff00", "hide_baby_photo": True})]
     result = Image.open(generator.generate_composite(payload))
     assert calls == [(31, (255, 0, 0)), (27, (0, 255, 0))]

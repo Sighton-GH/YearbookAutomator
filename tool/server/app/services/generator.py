@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace
 from uuid import uuid4
 
 import os
@@ -15,6 +16,9 @@ from app.services.placement import auto_place_slots_for_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
 from app.services.fonts import resolve_font_file
+from app.services.font_styling import load_styled_font
+from app.services.text_effects import TextShadow
+from app.services.text_layout import TextStyle, render_text
 
 
 PRINT_DPI = 300
@@ -652,6 +656,34 @@ def _render_name(
         draw.text((box.x, box.y), content, font=chosen, fill=color, anchor="la")
 
 
+
+
+def _text_style(payload: GenerationRequest, prefix: str, align: str) -> TextStyle:
+    """Build the F1 text style for 'name' or 'quote'. Null/default fields reproduce base output."""
+    shadow = getattr(payload, f"{prefix}_shadow")
+    return TextStyle(
+        align=align,
+        valign=getattr(payload, f"{prefix}_valign") or "top",
+        color=getattr(payload, f"{prefix}_color") or "#141e32",
+        line_spacing=getattr(payload, f"{prefix}_line_spacing"),
+        letter_spacing=int(getattr(payload, f"{prefix}_letter_spacing")),
+        stroke_width=int(getattr(payload, f"{prefix}_stroke_width")),
+        stroke_color=getattr(payload, f"{prefix}_stroke_color") or "#ffffff",
+        shadow=TextShadow(**shadow.model_dump()) if shadow is not None else None,
+        name_fit=payload.name_fit if prefix == "name" else "shrink",
+    )
+
+
+def _styled_loader(payload: GenerationRequest, prefix: str, family: str, weight: str, warnings: list[str]):
+    """Font loader for render_text. Legacy (upright) text keeps the base loader so
+    variable-font pixels do not change; only an explicit italic opts into the styled loader."""
+    if getattr(payload, f"{prefix}_font_style") == "italic":
+        return lambda s: load_styled_font(payload.workspace_id, family, weight, s, "italic", warnings)
+    return lambda s: _load_font(payload.workspace_id, family, weight, size=s)
+
+
+
+
 def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None, warning_cb: Callable[[str], None] | None = None) -> Path:
     active_people = [p for p in payload.people if not p.excluded]
     if len(active_people) > len(payload.slots):
@@ -803,24 +835,41 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             break
 
         quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
-        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s, warning_cb=warning_cb), person.name_font_size or name_font_size, name_align, name_all_caps, color=_parse_hex_rgb(person.name_color) or (20, 30, 50))
+        text_warnings: list[str] = []
+        student_label = f"{person.first_name} {person.last_name}".strip()
+        render_text(
+            base,
+            text=f"{person.first_name} {person.last_name}",
+            box=slot.name,
+            load_font=_styled_loader(payload, "name", name_font_family, name_font_weight, text_warnings),
+            start_size=person.name_font_size or name_font_size,
+            kind="name",
+            style=replace(_text_style(payload, "name", name_align), color=person.name_color or payload.name_color or "#141e32"),
+            all_caps=name_all_caps,
+            min_size=int(payload.name_min_size),
+            warnings=text_warnings,
+            student=student_label,
+        )
         if quote:
-            max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
-            _render_wrapped_text(
-                draw=draw,
-                load_font=lambda s: _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=s, warning_cb=warning_cb),
+            render_text(
+                base,
                 text=quote,
                 box=slot.quote,
-                max_width=max_quote_width,
+                load_font=_styled_loader(payload, "quote", quote_font_family, quote_font_weight, text_warnings),
                 start_size=person.quote_font_size or quote_font_size,
-                color=_parse_hex_rgb(person.quote_color) or (20, 30, 50),
-                align=quote_align,
+                kind="quote",
+                style=replace(_text_style(payload, "quote", quote_align), color=person.quote_color or payload.quote_color or "#141e32"),
                 all_caps=quote_all_caps,
-                # Allow the quote to use the full mugshot height before shrinking.
+                min_size=int(payload.quote_min_size),
+                # Quote geometry: width capped by the portrait, height is the portrait height.
+                max_width=min(int(slot.quote.width), int(slot.mugshot.width * 1.5)),
                 max_height=int(slot.mugshot.height),
-                # Pack lines tighter to maximize usable space; shrink only as a last resort.
-                spacing=0,
+                warnings=text_warnings,
+                student=student_label,
             )
+        if warning_cb:
+            for text_warning in text_warnings:
+                warning_cb(text_warning)
 
         pct = 10 + int((idx + 1) / total * 80)
         tick(pct, f"Rendered {idx + 1}/{total}")

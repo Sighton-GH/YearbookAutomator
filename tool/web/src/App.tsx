@@ -6,10 +6,14 @@ import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
+import { DEFAULT_TEXT_STYLES, parseTextStyles, textStyleRequestFields, type TextStylesSetting } from "./utils/textStyle";
 import { withBase } from "./baseUrl";
 import {
   applyMapping,
   generateSpread,
+  renderPreviewStrip,
+  fetchGenerationImageObjectUrl,
+  type GenerateSpreadParams,
   ingestSpreadsheet,
   parseTemplate,
   uploadImage,
@@ -254,6 +258,7 @@ export default function App({
   const [quoteFontSize, setQuoteFontSize] = useState<number>(40);
   const [quoteAllCaps, setQuoteAllCaps] = useState(false);
   const [quoteAlign, setQuoteAlign] = useState<Align>("left");
+  const [textStyles, setTextStyles] = useState<TextStylesSetting>(DEFAULT_TEXT_STYLES);
   const [availableFonts, setAvailableFonts] = useState<{ name: string; filename: string; source?: string }[]>([]);
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -722,6 +727,7 @@ export default function App({
     setQuoteFontSize(40);
     setQuoteAllCaps(false);
     setQuoteAlign("left");
+    setTextStyles(DEFAULT_TEXT_STYLES);
     setStatus("");
     setLoading(false);
     setOutputPath(null);
@@ -862,6 +868,7 @@ export default function App({
       quoteFontSize,
       quoteAllCaps,
       quoteAlign,
+      textStyles,
       peoplePerSpread,
       outputFormat,
       outputSize,
@@ -997,6 +1004,7 @@ export default function App({
     setQuoteFontSize(typeof session.quoteFontSize === "number" ? session.quoteFontSize : 40);
     setQuoteAllCaps(Boolean(session.quoteAllCaps));
     setQuoteAlign((session.quoteAlign as Align) ?? "left");
+    setTextStyles(parseTextStyles(session.textStyles));
     setPeoplePerSpread(typeof session.peoplePerSpread === "number" ? session.peoplePerSpread : 16);
     if (session.outputFormat === "png" || session.outputFormat === "pdf" || session.outputFormat === "tiff") {
       setOutputFormat(session.outputFormat);
@@ -1447,6 +1455,8 @@ export default function App({
           setQuoteFontSize(typeof saved.quoteFontSize === "number" ? saved.quoteFontSize : 40);
           setQuoteAllCaps(Boolean(saved.quoteAllCaps));
           setQuoteAlign((saved.quoteAlign as Align) ?? "left");
+        setTextStyles(parseTextStyles(saved.textStyles));
+          setTextStyles(parseTextStyles(saved.textStyles));
           setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
           if (saved.outputFormat === "png" || saved.outputFormat === "pdf" || saved.outputFormat === "tiff") {
             setOutputFormat(saved.outputFormat);
@@ -1887,6 +1897,7 @@ export default function App({
     quoteFontSize,
     quoteAllCaps,
     quoteAlign,
+    textStyles,
     peoplePerSpread,
     outputFormat,
     outputSize,
@@ -1989,6 +2000,7 @@ export default function App({
     quoteFontSize,
     quoteAllCaps,
     quoteAlign,
+    textStyles,
     peoplePerSpread,
     outputFormat,
     outputSize,
@@ -2202,6 +2214,16 @@ export default function App({
     });
   };
 
+  const stripWarningsRef = useRef<string[]>([]);
+  const renderStyleStrip = async (): Promise<{ url: string; warnings: string[] }> => {
+    if (!workspaceId) throw new Error("Upload your files first, then try again.");
+    stripWarningsRef.current = [];
+    const output = await runGeneration({ outputFilename: "preview_strip.png", stripOnly: true, suppressStatus: true, manageLoading: false });
+    if (!output) throw new Error("The test render could not start. Check your template and roster, then try again.");
+    const url = await fetchGenerationImageObjectUrl(workspaceId, output);
+    return { url, warnings: stripWarningsRef.current };
+  };
+
   const runGeneration = async (opts: {
     outputFilename?: string;
     peopleOverride?: PersonRecord[];
@@ -2213,6 +2235,7 @@ export default function App({
     countUsage?: boolean;
     suppressStatus?: boolean;
     manageLoading?: boolean;
+    stripOnly?: boolean;
     onError?: (message: string) => void;
     onJobStarted?: (jobId: string) => void;
   }): Promise<string | null> => {
@@ -2256,7 +2279,7 @@ export default function App({
           baby_photo_filename: skipBabyPhotos ? null : p.baby_photo_filename,
         };
       });
-      const gen = await generateSpread({
+      const genParams: GenerateSpreadParams = {
         workspace_id: workspaceId,
         template_id: templateId,
         slots,
@@ -2293,7 +2316,14 @@ export default function App({
         quote_align: quoteAlign,
         baby_background_color: skipBabyPhotos ? undefined : (babyBackgroundColor.trim() ? babyBackgroundColor.trim() : undefined),
         center_baby_on_face: skipBabyPhotos ? undefined : centerBabyOnFace,
-      });
+        ...textStyleRequestFields(textStyles, nameAlign, quoteAlign),
+      };
+      if (opts.stripOnly) {
+        const strip = await renderPreviewStrip({ ...genParams, count_usage: false });
+        stripWarningsRef.current = strip.warnings ?? [];
+        return strip.output;
+      }
+      const gen = await generateSpread(genParams);
 
       const jobId = gen.jobId;
       activeJobIdRef.current = jobId;
@@ -3372,6 +3402,9 @@ export default function App({
               onQuoteFontSize={setQuoteFontSize}
               onQuoteAllCaps={setQuoteAllCaps}
               onQuoteAlign={setQuoteAlign}
+              textStyles={textStyles}
+              onTextStyles={setTextStyles}
+              onRenderStyleStrip={renderStyleStrip}
               availableFonts={availableFonts}
               setAvailableFonts={setAvailableFonts}
               customFontUploadEnabled={customFontUploadEnabled}

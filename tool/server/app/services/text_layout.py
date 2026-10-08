@@ -168,7 +168,7 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
             and style.name_fit == 'shrink' and min_size == 8):
         from app.services.generator import _render_name, _render_wrapped_text
         if kind == 'name':
-            _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size)
+            _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size, color=parse_text_color(style.color))
         else:
             _render_wrapped_text(draw=draw, text=text, box=box, load_font=load_font,
                                  start_size=start_size, align=style.align,

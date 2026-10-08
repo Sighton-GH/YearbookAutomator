@@ -38,6 +38,13 @@ npm run e2e        # isolated fictional-data Playwright suite
 bash start-dev.sh
 ```
 
+### Text styling (F1)
+New `GenerationRequest` fields, each for the `name_` and `quote_` prefix and each defaulting to today's look: `_color` (hex, default `#141e32`), `_valign` (top/middle/bottom), `_line_spacing` (0.5-3.0 or null), `_letter_spacing` (-5..50 px), `_stroke_width` (0-20) / `_stroke_color`, `_shadow` (`TextShadowSpec`: offset_x/offset_y/blur 0-20/color/opacity or null), `_font_style` (normal/italic), `_min_size` (6-200, default 8). Also `name_align` accepts `right`, `quote_align` accepts `right` and `justify`, and `name_fit` is `shrink` or `wrap`. The legacy `align` field stays left/center.
+- Rendering: `generator.generate_composite` calls `services/text_layout.render_text` for names and quotes. With every field at its default that call delegates to the original `_render_name` / `_render_wrapped_text`, so legacy output is pixel-identical. Only an explicit italic switches to `font_styling.load_styled_font`; upright text keeps the base `_load_font` (variable fonts keep their historical weight). Warnings (minimum-size overflow with the student's name, missing italic face) go through `warning_cb` to the job `warnings` list.
+- Frontend: one object, `textStyles` (`utils/textStyle.ts`), held in `App.tsx`, saved in `PersistedSessionV1.textStyles` (so config export/import carries it), sent by `runGeneration` through `textStyleRequestFields`. Controls are `components/TextStyleControls.tsx`, shown in the Style step under each `FontPick`.
+- Test strip: `POST /api/generation/preview-strip` renders the first two resolved students with the real renderer (no usage counted), crops to their slots and returns `preview_strip.png`; Style step button "Preview with real rendering".
+- Not wired: glyph fallback / emoji / RTL (`services/glyph_fallback.py` is helper-only), TIFF layers (`tiff_layers.py` still uses the fixed colour and is not called).
+
 ### Website (Astro, static, deploys to Cloudflare Workers)
 ```sh
 cd website
