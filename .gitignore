@@ -42,3 +42,5 @@ server/app/data/**
 
 # --- Optional: logs ---
 *.log
+.oc-worktrees/
+.oc-runs/
