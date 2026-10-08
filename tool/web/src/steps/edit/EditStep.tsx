@@ -35,6 +35,8 @@ export function EditStep({
   workspaceId,
   people,
   setPeople,
+  pendingPeopleAdjustments,
+  onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
   originalBabyPeople,
@@ -110,6 +112,8 @@ export function EditStep({
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
+  onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
   setOriginalPeople: (p: PersonRecord[] | null) => void;
   originalBabyPeople: PersonRecord[] | null;
@@ -197,6 +201,8 @@ export function EditStep({
           skipBabyPhotos={skipBabyPhotos}
           people={people}
           setPeople={setPeople}
+          pendingPeopleAdjustments={pendingPeopleAdjustments}
+          onPendingPeopleAdjustments={onPendingPeopleAdjustments}
           originalPeople={originalPeople}
           setOriginalPeople={setOriginalPeople}
           originalBabyPeople={originalBabyPeople}

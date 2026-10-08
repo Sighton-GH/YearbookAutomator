@@ -192,6 +192,7 @@ export default function App({
   const [slots, setSlots] = useState<TemplateSlots[]>([]);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
+  const [pendingPeopleAdjustments, setPendingPeopleAdjustments] = useState<Record<number, import("./components/PersonInspector").PersonAdjustment>>({});
   const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
 
@@ -729,6 +730,7 @@ export default function App({
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     setOriginalPeople(null);
+    setPendingPeopleAdjustments({});
     setOriginalBabyPeople(null);
     setRawDebug(null);
     setAllowInsecureReviewResults(false);
@@ -807,6 +809,7 @@ export default function App({
         allowInsecureUploads,
       },
       people,
+      pendingPeopleAdjustments,
       originalPeople: originalPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
       originalBabyPeople: originalBabyPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
       slotAssignments,
@@ -921,6 +924,7 @@ export default function App({
     setParsedSlots(session.parsedSlots ?? []);
     setTemplateSize(session.templateSize ?? null);
     setPeople(session.people ?? []);
+    setPendingPeopleAdjustments(session.pendingPeopleAdjustments ?? {});
     restoreOriginals(session);
     setSlotAssignments(session.slotAssignments ?? {});
     setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
@@ -1357,6 +1361,7 @@ export default function App({
           setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
           setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
           setPeople(saved.people ?? []);
+        setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
           restoreOriginals(saved);
           setSlotAssignments(saved.slotAssignments ?? {});
           setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
@@ -1581,6 +1586,7 @@ export default function App({
         setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
         setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
         setPeople(saved.people ?? []);
+        setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
         restoreOriginals(saved);
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
@@ -3161,6 +3167,8 @@ export default function App({
               workspaceId={workspaceId}
               people={people}
               setPeople={setPeople}
+              pendingPeopleAdjustments={pendingPeopleAdjustments}
+              onPendingPeopleAdjustments={setPendingPeopleAdjustments}
               originalPeople={originalPeople}
               setOriginalPeople={setOriginalPeople}
               originalBabyPeople={originalBabyPeople}

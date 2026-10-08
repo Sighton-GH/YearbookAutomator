@@ -33,6 +33,8 @@ export function PeopleTab({
   skipBabyPhotos,
   people,
   setPeople,
+  pendingPeopleAdjustments,
+  onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
   originalBabyPeople,
@@ -65,6 +67,8 @@ export function PeopleTab({
   skipBabyPhotos: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
+  onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
   setOriginalPeople: (p: PersonRecord[] | null) => void;
   originalBabyPeople: PersonRecord[] | null;
@@ -97,7 +101,8 @@ export function PeopleTab({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [swapsPerformed, setSwapsPerformed] = useState(false);
-  const [adjustments, setAdjustments] = useState<Record<number, PersonAdjustment>>({});
+  const adjustments = pendingPeopleAdjustments;
+  const setAdjustments = onPendingPeopleAdjustments;
   const [defaultDragIdx, setDefaultDragIdx] = useState<number | null>(null);
   const [newQuoteDraft, setNewQuoteDraft] = useState("");
   const [confirmAction, setConfirmAction] = useState<
