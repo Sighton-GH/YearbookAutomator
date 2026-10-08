@@ -266,7 +266,7 @@ async def download(workspace_id: str, request: Request, filename: str = "output.
         raise HTTPException(status_code=400, detail="Invalid output filename")
     path = workspace_file(workspace_id, safe_name)
     if not path.exists():
-        return {"error": "file not found"}
+        raise HTTPException(status_code=404, detail="This rendered file is no longer available. Render it again, then download it.")
     return FileResponse(path)
 
 
@@ -437,6 +437,6 @@ async def download_spreadsheet(workspace_id: str, request: Request):
 async def status(job_id: str, request: Request):
     job = get_job(job_id)
     if not job:
-        return {"error": "not found"}
+        raise HTTPException(status_code=404, detail="This render job is no longer available. Check your results or start a new render.")
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return job

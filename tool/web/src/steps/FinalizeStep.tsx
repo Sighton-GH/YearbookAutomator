@@ -1,4 +1,6 @@
-import { generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
+import { useState } from "react";
+import { describeApiError } from "../configFile";
+import { generationDownloadFile, generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
 import { printSizeDescription } from "../utils/printSize";
 import { InfoPopover } from "../components/InfoPopover";
 import type { PlacementMode } from "../types";
@@ -62,6 +64,20 @@ export function FinalizeStep({
   outputNonce: number;
   usageInfo?: { remaining: number; limit: number; period: "month" | "lifetime" } | null;
 }) {
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const download = async (url: string, filename: string) => {
+    setDownloading(true);
+    setDownloadStatus("Preparing download...");
+    try {
+      await generationDownloadFile(url, filename);
+      setDownloadStatus("Download started.");
+    } catch (error) {
+      setDownloadStatus(describeApiError(error, "Could not download this file. Please try again."));
+    } finally {
+      setDownloading(false);
+    }
+  };
   const previewIsPng = outputFormat === "png";
   const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
   const hasTemplateSize = Boolean(templateSize && templateSize.width > 0 && templateSize.height > 0);
@@ -98,6 +114,7 @@ export function FinalizeStep({
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      {downloadStatus && <div role="status" aria-live="polite" className="callout">{downloadStatus}</div>}
       <div className="callout">
         <div className="stack" style={{ gap: 6 }}>
           <strong>Stats</strong>
@@ -227,9 +244,10 @@ export function FinalizeStep({
             )}
             {previewPath && workspaceId && (
               <button
+                disabled={downloading}
                 onClick={() => {
                   const fname = previewPath.split(/[\\/]/).pop() || previewPath;
-                  window.open(generationDownloadUrl(workspaceId, fname), "_blank");
+                  void download(generationDownloadUrl(workspaceId, fname), fname);
                 }}
               >
                 Download preview
@@ -275,10 +293,10 @@ export function FinalizeStep({
                 <span className="muted small">(chronological order)</span>
               </div>
               <div className="inline" style={{ gap: 10, flexWrap: "wrap" }}>
-                <button className="primary" onClick={() => window.open(generationDownloadAllUrl(workspaceId), "_blank")}>
+                <button className="primary" disabled={downloading} onClick={() => void download(generationDownloadAllUrl(workspaceId), "spreads.zip")}>
                   Download all spreads
                 </button>
-                <button onClick={() => window.open(generationDownloadSpreadsheetUrl(workspaceId), "_blank")}>
+                <button disabled={downloading} onClick={() => void download(generationDownloadSpreadsheetUrl(workspaceId), `spread_data_${workspaceId}.xlsx`)}>
                   Download spreadsheet
                 </button>
               </div>
@@ -295,7 +313,7 @@ export function FinalizeStep({
                     <strong>Spread {spreadNumber}</strong>
                     <span className="muted">{fname}</span>
                   </div>
-                  <button onClick={() => window.open(generationDownloadUrl(workspaceId, fname), "_blank")}>Download</button>
+                  <button disabled={downloading} onClick={() => void download(generationDownloadUrl(workspaceId, fname), fname)}>Download</button>
                 </div>
                 {isPng ? (
                   <img

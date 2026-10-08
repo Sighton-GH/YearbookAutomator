@@ -666,3 +666,11 @@ export function generationDownloadSpreadsheetUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
   return `/api/generation/download-spreadsheet?${params.toString()}`;
 }
+
+export async function generationDownloadFile(url: string, filename: string): Promise<void> {
+  const { downloadBlobFile } = await import("./utils/downloadFile");
+  await downloadBlobFile(url, filename, async (downloadUrl) => {
+    const { data } = await axios.get<Blob>(downloadUrl, { responseType: "blob" });
+    return data;
+  });
+}
