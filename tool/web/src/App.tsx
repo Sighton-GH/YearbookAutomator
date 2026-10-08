@@ -3240,6 +3240,7 @@ export default function App({
               onPortraitCompletedErrorCount={setPortraitCompletedErrorCount}
               people={people}
               setPeople={setPeople}
+              positionSettings={{slots, slotNumberToIndex, assignments: slotAssignments, perSpread: peoplePerSpread, forceAlphabetical, onAssignments: setSlotAssignments}}
               setOriginalPeople={setOriginalPeople}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}
@@ -3295,6 +3296,7 @@ export default function App({
               workspaceId={workspaceId}
               people={people}
               setPeople={setPeople}
+              positionSettings={{slots, slotNumberToIndex, assignments: slotAssignments, perSpread: peoplePerSpread, forceAlphabetical, onAssignments: setSlotAssignments}}
               pendingPeopleAdjustments={pendingPeopleAdjustments}
               peopleSwapMode={peopleSwapMode}
               onPeopleSwapMode={setPeopleSwapMode}

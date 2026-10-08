@@ -37,6 +37,7 @@ export function EditStep({
   workspaceId,
   people,
   setPeople,
+  positionSettings,
   pendingPeopleAdjustments,
   peopleSwapMode,
   onPeopleSwapMode,
@@ -119,6 +120,7 @@ export function EditStep({
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  positionSettings: import("../../components/StudentPosition").PositionSettings;
   peopleSwapMode: "off" | "card" | "portrait";
   onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
   pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
@@ -215,6 +217,7 @@ export function EditStep({
           skipBabyPhotos={skipBabyPhotos}
           people={people}
           setPeople={setPeople}
+          positionSettings={positionSettings}
           pendingPeopleAdjustments={pendingPeopleAdjustments}
           peopleSwapMode={peopleSwapMode}
           onPeopleSwapMode={onPeopleSwapMode}

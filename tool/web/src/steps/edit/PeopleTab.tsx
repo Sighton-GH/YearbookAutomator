@@ -1,3 +1,4 @@
+import { StudentPosition } from "../../components/StudentPosition";
 import { AddStudent } from "../../components/AddStudent";
 import { editPersonName } from "../../utils/personEdits";
 import type React from "react";
@@ -35,6 +36,7 @@ export function PeopleTab({
   skipBabyPhotos,
   people,
   setPeople,
+  positionSettings,
   pendingPeopleAdjustments,
   peopleSwapMode,
   onPeopleSwapMode,
@@ -72,6 +74,7 @@ export function PeopleTab({
   skipBabyPhotos: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  positionSettings: import("../../components/StudentPosition").PositionSettings;
   peopleSwapMode: "off" | "card" | "portrait";
   onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
   pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
@@ -822,6 +825,8 @@ export function PeopleTab({
         emptyHint="Click a card to edit their portrait, baby photo, and quote."
       >
         {selected && selectedIdx != null && (
+          <>
+          <StudentPosition key={`${selected.index}-${Boolean(selected.excluded)}`} person={selected} people={people} settings={positionSettings} disabled={loading || Boolean(lockedPeople[selected.index])} onPeople={setPeople} />
           <PersonInspector
             person={selected}
             workspaceId={workspaceId}
@@ -862,6 +867,7 @@ export function PeopleTab({
             }}
             loading={loading}
           />
+          </>
         )}
       </Inspector>
     </div>
