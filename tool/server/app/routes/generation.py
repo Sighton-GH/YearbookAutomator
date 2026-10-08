@@ -393,7 +393,7 @@ async def download_spreadsheet(workspace_id: str, request: Request):
         for person, slot_number in placed:
 
             portrait_filename = person.mugshot_filename or payload.default_mugshot_filename or ""
-            baby_filename = person.baby_photo_filename or payload.default_baby_photo_filename or ""
+            baby_filename = "" if person.hide_baby_photo else (person.baby_photo_filename or payload.default_baby_photo_filename or "")
             quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
             name = (f"{person.first_name} {person.last_name}").strip()
 

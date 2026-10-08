@@ -66,6 +66,11 @@ class PersonRecord(BaseModel):
     quote_blank: bool = False
     added_manually: bool = False
     excluded: bool = False
+    name_font_size: int | None = Field(default=None, ge=1, le=500)
+    quote_font_size: int | None = Field(default=None, ge=1, le=500)
+    name_color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    quote_color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    hide_baby_photo: bool | None = None
     baby_photo_filename: Optional[str] = Field(default=None, max_length=180)
     baby_background_removal_failed: bool = False
 

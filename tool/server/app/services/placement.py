@@ -121,6 +121,7 @@ def assign_logical_slots(
     verification spreadsheet both use it. Logical slot number = idx + 1.
     """
 
+    people = [p for p in people if not p.excluded]
     if force_alphabetical:
         people = sort_people_alphabetical(people)
 

@@ -1,3 +1,4 @@
+import { StudentOverrides } from "./StudentOverrides";
 import type React from "react";
 import { Lock, Unlock, Trash2, ImageOff, RotateCcw, Pencil } from "lucide-react";
 import { assetUrl, type PersonRecord } from "../api";
@@ -31,6 +32,7 @@ export function PersonInspector({
   onUploadReplacementPortrait,
   onRequestRemovePortrait,
   onRequestRemovePerson,
+  onPersonPatch,
   onRestorePerson,
   onNameChange,
   onQuoteChange,
@@ -61,6 +63,7 @@ export function PersonInspector({
   onUploadReplacementPortrait: (file: File | null) => void;
   onRequestRemovePortrait: () => void;
   onRequestRemovePerson: () => void;
+  onPersonPatch: (patch: Partial<PersonRecord>) => void;
   onRestorePerson: () => void;
   onNameChange: (field: "first_name" | "last_name", value: string) => void;
   onQuoteChange: (value: string) => void;
@@ -222,6 +225,8 @@ export function PersonInspector({
           </label>
         </div>
       </section>
+
+      <StudentOverrides person={person} disabled={loading || isLocked} onPatch={onPersonPatch} />
 
       {!skipQuotes && (
         <section className="pi-section pi-quote">

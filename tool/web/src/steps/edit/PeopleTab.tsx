@@ -721,7 +721,7 @@ export function PeopleTab({
               const mugshotFilename = p.mugshot_filename || assignedDefaultMugshot || null;
               const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
               const displayQuote = (p.quote ?? "").trim() ? p.quote ?? "" : assignedDefaultQuote || defaultQuoteFallback;
-              const babyFilename = p.baby_photo_filename || defaultBabyFilename;
+              const babyFilename = p.hide_baby_photo ? null : p.baby_photo_filename || defaultBabyFilename;
               const rowBabyBox = babyBoxFor(p.index);
               const rowMaskCss = babyMaskCssFor(rowBabyBox);
               const rowBabyAspect = babyAspectFor(rowBabyBox);
@@ -832,7 +832,7 @@ export function PeopleTab({
             assignedDefaultMugshot={defaultMugshotAssignments[selected.index] ?? null}
             assignedDefaultQuote={defaultQuoteAssignments[selected.index] ?? ""}
             defaultQuoteFallback={defaultQuoteFallback}
-            babyFilename={selected.baby_photo_filename || defaultBabyFilename}
+            babyFilename={selected.hide_baby_photo ? null : selected.baby_photo_filename || defaultBabyFilename}
             babyMaskCssUrl={babyMaskCssFor(babyBoxFor(selected.index))}
             babyFillColor={babyFillColor}
             babyAspect={babyAspectFor(babyBoxFor(selected.index))}
@@ -842,6 +842,7 @@ export function PeopleTab({
             onUploadReplacementPortrait={(file) => void uploadReplacementPortrait(selected.index, file)}
             onRequestRemovePortrait={() => setConfirmAction({ kind: "remove-portrait", personIndex: selected.index })}
             onRequestRemovePerson={() => setConfirmAction({ kind: "remove-person", personIndex: selected.index })}
+            onPersonPatch={patch => updatePerson(selectedIdx, prev => ({...prev, ...patch}))}
             onRestorePerson={() => updatePerson(selectedIdx, prev => ({...prev, excluded: false}))}
             onNameChange={(field, value) => updatePerson(selectedIdx, prev => editPersonName(prev, field, value))}
             onQuoteChange={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote: value }))}

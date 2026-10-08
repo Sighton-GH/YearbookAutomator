@@ -79,6 +79,11 @@ export type PersonRecord = {
   quote_blank?: boolean;
   added_manually?: boolean;
   excluded?: boolean;
+  name_font_size?: number | null;
+  quote_font_size?: number | null;
+  name_color?: string | null;
+  quote_color?: string | null;
+  hide_baby_photo?: boolean | null;
   original_first_name?: string;
   original_last_name?: string;
   baby_photo_filename?: string | null;

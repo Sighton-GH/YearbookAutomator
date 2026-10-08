@@ -290,6 +290,7 @@ def _render_wrapped_text(
     min_size: int = 8,
     max_height: int | None = None,
     spacing: int = 0,
+    color: tuple[int, int, int] = (20, 30, 50),
 ) -> None:
     content = (text.upper() if all_caps else text).strip()
     if not content:
@@ -317,14 +318,14 @@ def _render_wrapped_text(
         height = bbox[3] - bbox[1]
         width = bbox[2] - bbox[0]
         if height <= allowed_height and width <= max_width:
-            draw.multiline_text((x, y), "\n".join(lines), font=font, fill=(20, 30, 50), align=align, anchor=anchor, spacing=spacing)
+            draw.multiline_text((x, y), "\n".join(lines), font=font, fill=color, align=align, anchor=anchor, spacing=spacing)
             return
 
     # If we can't fit even at min_size, draw anyway (wrapped) at min_size.
     font = load_font(int(min_size))
     lines = _wrap_text(draw, content, font, max_width=max_width)
     if lines:
-        draw.multiline_text((x, y), "\n".join(lines), font=font, fill=(20, 30, 50), align=align, anchor=anchor, spacing=spacing)
+        draw.multiline_text((x, y), "\n".join(lines), font=font, fill=color, align=align, anchor=anchor, spacing=spacing)
 
 
 def _fit_image(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
@@ -631,6 +632,7 @@ def _render_name(
     align: str,
     all_caps: bool,
     min_size: int = 8,
+    color: tuple[int, int, int] = (20, 30, 50),
 ) -> None:
     content = (text.upper() if all_caps else text).strip()
     if not content:
@@ -645,9 +647,9 @@ def _render_name(
     else:
         chosen = load_font(int(min_size))
     if align == "center":
-        draw.text((box.x + box.width / 2, box.y), content, font=chosen, fill=(20, 30, 50), anchor="ma")
+        draw.text((box.x + box.width / 2, box.y), content, font=chosen, fill=color, anchor="ma")
     else:
-        draw.text((box.x, box.y), content, font=chosen, fill=(20, 30, 50), anchor="la")
+        draw.text((box.x, box.y), content, font=chosen, fill=color, anchor="la")
 
 
 def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None, warning_cb: Callable[[str], None] | None = None) -> Path:
@@ -762,7 +764,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         if default_baby and default_baby not in baby_to_try:
             baby_to_try.append(default_baby)
 
-        for baby_filename in baby_to_try:
+        for baby_filename in ([] if person.hide_baby_photo else baby_to_try):
             try:
                 baby_path = workspace_file(payload.workspace_id, "baby", safe_filename(baby_filename))
             except InvalidWorkspacePath:
@@ -801,7 +803,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             break
 
         quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
-        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s, warning_cb=warning_cb), name_font_size, name_align, name_all_caps)
+        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s, warning_cb=warning_cb), person.name_font_size or name_font_size, name_align, name_all_caps, color=_parse_hex_rgb(person.name_color) or (20, 30, 50))
         if quote:
             max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
             _render_wrapped_text(
@@ -810,7 +812,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 text=quote,
                 box=slot.quote,
                 max_width=max_quote_width,
-                start_size=quote_font_size,
+                start_size=person.quote_font_size or quote_font_size,
+                color=_parse_hex_rgb(person.quote_color) or (20, 30, 50),
                 align=quote_align,
                 all_caps=quote_all_caps,
                 # Allow the quote to use the full mugshot height before shrinking.
