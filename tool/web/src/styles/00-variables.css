@@ -77,14 +77,14 @@
   --border: #d4e1de;
   --border-strong: #b9cbc7;
 
-  --accent: #0d9488;
+  --accent: #0f766e;
   --accent-strong: #0f766e;
   --accent-hover: #0b7d73;
   --accent-contrast: #ffffff;
   --accent-soft: rgba(13, 148, 136, 0.12);
   --accent-line: rgba(13, 148, 136, 0.4);
 
-  --danger: #dc2626;
+  --danger: #b91c1c;
   --danger-strong: #b91c1c;
   --danger-soft: rgba(220, 38, 38, 0.1);
   --danger-contrast: #ffffff;
