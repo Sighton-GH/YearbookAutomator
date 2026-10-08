@@ -50,14 +50,14 @@ export function LockConflictScreen({
         <button type="button" className="primary" onClick={onRetry} disabled={busy}>
           {busy ? "Trying\u2026" : "Try again"}
         </button>
-        <button type="button" onClick={() => setConfirmOpen(true)} disabled={busy}>
+        <button type="button" onClick={() => setConfirmOpen(true)} disabled={busy || !expired}>
           Take over this session
         </button>
       </div>
       <ConfirmDialog
         open={confirmOpen}
         title="Take over this session?"
-        message="The other device will be disconnected and any unsaved work there will be lost."
+        message="Takeover is available only after the other device stops sending updates, and when your administrator enables recovery."
         confirmLabel="Take over"
         destructive
         onCancel={() => setConfirmOpen(false)}

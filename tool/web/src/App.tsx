@@ -1867,6 +1867,7 @@ export default function App({
       window.clearTimeout(timer);
     };
   }, [
+    pendingPeopleAdjustments, peopleSwapMode, renderConfirmed, originalPeople, originalBabyPeople,
     didRestoreSession,
     activeStep,
     editTab,
@@ -1971,6 +1972,7 @@ export default function App({
       window.removeEventListener("ymga:flush-workspace-state", onFlush as EventListener);
     };
   }, [
+    pendingPeopleAdjustments, peopleSwapMode, renderConfirmed, originalPeople, originalBabyPeople,
     didRestoreSession,
     workspaceId,
     workspaceDefaultsHydrated,

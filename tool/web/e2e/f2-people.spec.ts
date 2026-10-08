@@ -2,7 +2,7 @@ import {test, expect} from '@playwright/test';
 import {activate, uploadProject} from './helpers';
 test('student editing, uploaded assets, exclusion, overrides and bulk persist', async ({page}) => {
   await activate(page); await uploadProject(page);
-  await page.getByText('José García', {exact:true}).first().click();
+  await page.locator('.people-card-selectable').first().click();
   await page.getByLabel('First name', {exact:true}).last().fill('Joseph');
   await page.getByLabel('Name font size (blank uses global)').fill('31');
   await page.getByRole('button', {name:'Choose from uploaded portraits', exact:true}).click();

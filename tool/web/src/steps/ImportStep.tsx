@@ -347,7 +347,7 @@ export function ImportStep({
   // --- Baby photos card state ---
   const [babyZip, setBabyZip] = useState<File | null>(null);
   const [babyFile, setBabyFile] = useState<File | null>(null);
-  const processedFiles = useRef<Array<File | null>>([]);
+  const processedFiles = useRef<Array<File | null>>([workspaceId ? annotated : null, workspaceId ? clean : null]);
   useEffect(() => {
     onPendingUploads([annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile].some((file, i) => Boolean(file) && file !== processedFiles.current[i]));
   }, [annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile, loading, onPendingUploads]);

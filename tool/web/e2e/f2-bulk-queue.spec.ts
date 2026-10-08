@@ -33,11 +33,11 @@ test('leaving the People tab mid-queue cancels the job and starts no further stu
   await page.getByRole('button', {name: 'Select all', exact: true}).click();
   await page.getByRole('button', {name: 'Remove baby photo backgrounds', exact: true}).click();
   await expect.poll(() => seen.started).toBe(1);
-  await page.getByRole('tab', {name: 'Layout', exact: true}).or(page.getByRole('button', {name: 'Layout', exact: true})).first().click();
+  await page.getByRole('button', {name:'Style',exact:true}).click();
   await expect.poll(() => seen.cancelled.length).toBeGreaterThan(0);
   await page.waitForTimeout(2500);
   expect(seen.started).toBe(1);
-  await page.getByRole('tab', {name: 'People', exact: true}).or(page.getByRole('button', {name: 'People', exact: true})).first().click();
+  await page.getByRole('button', {name:'People',exact:true}).click();
   await expect(page.getByRole('button', {name: 'Stop queue', exact: true})).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'Remove baby photo backgrounds', exact: true})).toBeEnabled();
   expect(await babyNames(page)).toEqual(before);
