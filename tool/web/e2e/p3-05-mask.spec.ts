@@ -10,7 +10,7 @@ test('editor uses each students ellipse or rectangle mask',async({page})=>{
  for(let i=0;i<2;i++){
    await page.locator('.people-card-selectable').nth(i).click();
    await page.locator('.pi-section').filter({has:page.getByText('Baby photo',{exact:true})}).locator('input[type=file]').setInputFiles(path.resolve('.e2e-data/baby.png'));
-   await page.getByRole('button',{name:'Edit',exact:true}).click();
+   await page.getByTestId('baby-editor-clip').waitFor({state:'visible'});
    const clip=page.getByTestId('baby-editor-clip');
    await expect(clip).toHaveCSS('mask-image',/url\(.+baby-mask.+\)/);
    await page.screenshot({path:`test-results/p3-05-mask-${i}.png`});
