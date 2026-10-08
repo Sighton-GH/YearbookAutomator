@@ -12,7 +12,7 @@ from PIL import UnidentifiedImageError
 
 from app.models.schemas import GenerationRequest, TemplateSlots
 from app.services.baby_masks import shape_mask
-from app.services.placement import auto_place_slots_for_people
+from app.services.placement import place_generation_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
 from app.services.fonts import resolve_font_file
@@ -742,17 +742,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     baby_mask_cache: dict[str, Image.Image | None] = {}
     baby_face_center_cache: dict[str, tuple[float, float] | None] = {}
 
-    effective_people = active_people
-    effective_slots = payload.slots
-
-    if getattr(payload, "auto_place", False):
-        effective_people, effective_slots = auto_place_slots_for_people(
-            people=active_people,
-            slots=payload.slots,
-            placement_mode=getattr(payload, "placement_mode", "left_then_right"),
-            slot_assignments=getattr(payload, "slot_assignments", None),
-            force_alphabetical=getattr(payload, "force_alphabetical", False),
-        )
+    effective_people, logical_indices, number_to_index = place_generation_people(payload)
+    effective_slots = [payload.slots[number_to_index[l]] for l in logical_indices]
 
     total = max(len(effective_people), 1)
     allowed_image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 
-from app.models.schemas import PersonRecord, TemplateSlots
+from app.models.schemas import GenerationRequest, PersonRecord, TemplateSlots
 
 
 @dataclass(frozen=True)
@@ -200,3 +200,13 @@ def auto_place_slots_for_people(
         force_alphabetical=force_alphabetical,
     )
     return people, [slots[slot_number_to_index[l]] for l in logical]
+
+
+def place_generation_people(payload: GenerationRequest) -> tuple[list[PersonRecord], list[int], list[int]]:
+    """Resolve assignments for both generation modes without changing default raw order."""
+    return assign_logical_slots(
+        people=payload.people, slots=payload.slots,
+        placement_mode=payload.placement_mode if payload.auto_place else "simultaneous",
+        slot_assignments=payload.slot_assignments,
+        force_alphabetical=payload.force_alphabetical if payload.auto_place else False,
+    )
