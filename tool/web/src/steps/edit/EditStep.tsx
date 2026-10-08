@@ -102,7 +102,7 @@ export function EditStep({
   skipBabyPhotos: boolean;
   slots: TemplateSlots[];
   templateSize: { width: number; height: number } | null;
-  onSlots: (slots: TemplateSlots[]) => void;
+  onSlots: (slots: TemplateSlots[], gestureKey?: string) => void;
   previewMode: "clean" | "annotated";
   onPreviewMode: (mode: "clean" | "annotated") => void;
   annotatedPreviewUrl: string | null;
