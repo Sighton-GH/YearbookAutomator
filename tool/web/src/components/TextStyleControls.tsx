@@ -96,7 +96,7 @@ export function TextStyleControls({
           <ColourField label="Text colour" value={value.color} onChange={(color) => set({ color })} />
           <label className="field">
             <span>Font style</span>
-            <select value={value.fontStyle} onChange={(e) => set({ fontStyle: e.target.value as "normal" | "italic" })}>
+            <select aria-label="Font style" value={value.fontStyle} onChange={(e) => set({ fontStyle: e.target.value as "normal" | "italic" })}>
               <option value="normal">Upright</option>
               <option value="italic">Italic</option>
             </select>

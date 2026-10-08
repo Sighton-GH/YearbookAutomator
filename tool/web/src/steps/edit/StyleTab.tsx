@@ -220,7 +220,7 @@ function StylePreview({
         <span className="eyebrow">Live preview</span>
         <span className="muted small">Approximate. Use “Preview with real rendering” below to see the exact result.</span>
       </div>
-      <div className="style-preview-card">
+      <div className="style-preview-card" style={{ background: "#ffffff", color: "#141e32" }}>
         <div className="style-preview-portrait" aria-hidden="true">
           <span>Portrait</span>
         </div>

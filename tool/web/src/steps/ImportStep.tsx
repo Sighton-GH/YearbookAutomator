@@ -1352,7 +1352,7 @@ export function ImportStep({
                   setPortraitsStage("pending");
                 }}
               >
-                <input
+                <input aria-label="Roster spreadsheet"
                   type="file"
                   accept=".xlsx,.csv"
                   onChange={(e) => {
@@ -1375,7 +1375,7 @@ export function ImportStep({
                   setPortraitsStage("pending");
                 }}
               >
-                <input
+                <input aria-label="Portraits ZIP"
                   type="file"
                   accept=".zip"
                   onChange={(e) => {
@@ -1486,7 +1486,7 @@ export function ImportStep({
               setQuotesStage("pending");
             }}
           >
-            <input
+            <input aria-label="Quotes spreadsheet"
               type="file"
               accept=".xlsx,.csv"
               onChange={(e) => {
@@ -1569,7 +1569,7 @@ export function ImportStep({
                 setBabyStage("pending");
               }}
             >
-              <input
+              <input aria-label="Baby photo ZIP"
                 type="file"
                 accept=".zip"
                 onChange={(e) => {
