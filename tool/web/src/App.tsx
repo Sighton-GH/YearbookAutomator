@@ -807,6 +807,8 @@ export default function App({
         allowInsecureUploads,
       },
       people,
+      originalPeople: originalPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
+      originalBabyPeople: originalBabyPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
       slotAssignments,
       placementMode,
       forceAlphabetical,
@@ -888,6 +890,18 @@ export default function App({
     setShowConfigModal(true);
   };
 
+  const restoreOriginals = (session: PersistedSessionV1) => {
+    const restore = (records: PersistedSessionV1["originalPeople"]) => records?.map((record) => ({ ...record, first_name: "", last_name: "" })) ?? null;
+    setOriginalPeople(restore(session.originalPeople));
+    const baby = restore(session.originalBabyPeople);
+    if (baby) setOriginalBabyPeople(baby);
+    else {
+      const originals = new Map<number, string>();
+      for (const entry of session.babyEditHistory ?? []) if (!originals.has(entry.person_index)) originals.set(entry.person_index, entry.input_filename);
+      setOriginalBabyPeople(originals.size ? [...originals].map(([index, baby_photo_filename]) => ({index, first_name: "", last_name: "", baby_photo_filename})) : null);
+    }
+  };
+
   const applyImportedSession = (session: PersistedSessionV1, newWorkspaceId: string) => {
     // Restore the saved state, but always bind it to the newly created workspace.
     setWorkspaceId(newWorkspaceId);
@@ -907,6 +921,7 @@ export default function App({
     setParsedSlots(session.parsedSlots ?? []);
     setTemplateSize(session.templateSize ?? null);
     setPeople(session.people ?? []);
+    restoreOriginals(session);
     setSlotAssignments(session.slotAssignments ?? {});
     setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
     setForceAlphabetical(Boolean(session.forceAlphabetical));
@@ -1342,6 +1357,7 @@ export default function App({
           setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
           setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
           setPeople(saved.people ?? []);
+          restoreOriginals(saved);
           setSlotAssignments(saved.slotAssignments ?? {});
           setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
           setForceAlphabetical(Boolean(saved.forceAlphabetical));
@@ -1565,6 +1581,7 @@ export default function App({
         setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
         setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
         setPeople(saved.people ?? []);
+        restoreOriginals(saved);
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
         setForceAlphabetical(Boolean(saved.forceAlphabetical));

@@ -34,6 +34,8 @@ export type PersistedSessionV1 = {
     allowInsecureUploads?: boolean;
   };
   people: PersonRecord[];
+  originalPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
+  originalBabyPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
   slotAssignments: Record<number, number>;
   placementMode?: PlacementMode;
   forceAlphabetical?: boolean;
