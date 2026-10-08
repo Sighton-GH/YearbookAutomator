@@ -198,6 +198,7 @@ export default function App({
   const [parseBabyColor, setParseBabyColor] = useState<string>("");
   const [parseNameColor, setParseNameColor] = useState<string>("");
   const [parseQuoteColor, setParseQuoteColor] = useState<string>("");
+  const [parseTolerance, setParseTolerance] = useState<number | undefined>(undefined);
   const [parseMinArea, setParseMinArea] = useState<number>(800);
 
   const { slots, setSlots, resetSlots, layoutHistory, templateSize, setTemplateSize, parsedSlots, setParsedSlots } = useLayoutHistory();
@@ -679,6 +680,7 @@ export default function App({
     setParseNameColor("");
     setParseQuoteColor("");
     setParseMinArea(800);
+    setParseTolerance(undefined);
     resetSlots([]);
     setParsedSlots([]);
     setTemplateSize(null);
@@ -810,6 +812,7 @@ export default function App({
         nameColor: parseNameColor,
         quoteColor: parseQuoteColor,
         minArea: parseMinArea,
+        tolerance: parseTolerance,
       },
       slots,
       parsedSlots,
@@ -928,6 +931,7 @@ export default function App({
     setParseNameColor(session.templateParse?.nameColor ?? "");
     setParseQuoteColor(session.templateParse?.quoteColor ?? "");
     setParseMinArea(typeof session.templateParse?.minArea === "number" ? Math.max(400, session.templateParse!.minArea) : 800);
+    setParseTolerance(session.templateParse?.tolerance);
     setNamingPattern(session.portraitsIngest?.namingPattern ?? defaultNamingPattern);
     setAdvancedNameMatch(Boolean(session.portraitsIngest?.advancedNameMatch ?? true));
     setAllowInsecureUploads(Boolean(session.portraitsIngest?.allowInsecureUploads));
@@ -1376,6 +1380,7 @@ export default function App({
           setParseNameColor(saved.templateParse?.nameColor ?? "");
           setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
           setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
+    setParseTolerance(saved.templateParse?.tolerance);
           resetSlots(saved.slots ?? []);
           setParsedSlots(saved.parsedSlots ?? []);
           setTemplateSize(saved.templateSize ?? null);
@@ -1610,6 +1615,7 @@ export default function App({
         setParseNameColor(saved.templateParse?.nameColor ?? "");
         setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
         setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
+    setParseTolerance(saved.templateParse?.tolerance);
         resetSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
@@ -1834,6 +1840,7 @@ export default function App({
     parseNameColor,
     parseQuoteColor,
     parseMinArea,
+    parseTolerance,
     slots,
     parsedSlots,
     templateSize,
@@ -1935,6 +1942,7 @@ export default function App({
     parseNameColor,
     parseQuoteColor,
     parseMinArea,
+    parseTolerance,
     slots,
     parsedSlots,
     templateSize,
@@ -2775,7 +2783,7 @@ export default function App({
         updateAnnotatedFile(annotated);
         updateCleanFile(clean);
         setStatus("Loading sample project — detecting layout…");
-        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, workspaceId: workspaceId || undefined });
+        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, tolerance: parseTolerance, workspaceId: workspaceId || undefined });
         setTemplateId(parsed.template_id);
         setSlots(parsed.slots);
         setParsedSlots(parsed.slots.map((s) => ({ ...s })));
@@ -3208,6 +3216,8 @@ export default function App({
               setNameColor={setParseNameColor}
               quoteColor={parseQuoteColor}
               setQuoteColor={setParseQuoteColor}
+              tolerance={parseTolerance}
+              setTolerance={setParseTolerance}
               minArea={parseMinArea}
               setMinArea={setParseMinArea}
               onPreviewChange={({ annotated, clean }) => {

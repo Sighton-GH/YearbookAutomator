@@ -25,6 +25,7 @@ export type PersistedSessionV1 = {
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
   };
   slots: TemplateSlots[];
   parsedSlots: TemplateSlots[];

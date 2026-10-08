@@ -25,6 +25,7 @@ export type SessionLike = {
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
   };
   portraitsIngest?: {
     namingPattern?: string;
@@ -95,6 +96,7 @@ type ParseTemplateFn = (
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
     workspaceId?: string;
   },
 ) => Promise<{ template_id: string; width: number; height: number; slots: TemplateSlots[] }>;
@@ -155,6 +157,7 @@ export async function importTemplate<S extends SessionLike>(args: {
     nameColor: session.templateParse?.nameColor || undefined,
     quoteColor: session.templateParse?.quoteColor || undefined,
     minArea: typeof session.templateParse?.minArea === "number" ? session.templateParse.minArea : undefined,
+    tolerance: session.templateParse?.tolerance,
     workspaceId: args.workspaceId,
   });
 

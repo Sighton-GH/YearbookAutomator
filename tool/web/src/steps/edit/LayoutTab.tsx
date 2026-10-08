@@ -9,7 +9,7 @@ import { SlotInspectorFields } from "../../components/SlotInspectorFields";
 import { historyShortcut } from "../../utils/layout/history";
 import type { PlacementMode } from "../../types";
 import { applyRenumberSequence, effectiveSlotNumbers } from "../../utils/layout/slotNumbering";
-import { addSlot, duplicateSlot, deleteSlot, type SlotKey } from "../../utils/layout/slotOps";
+import { addSlot, duplicateSlot, deleteSlot } from "../../utils/layout/slotOps";
 import { groupSlotsByProximity } from "../../utils/slots";
 
 export function LayoutTab({
@@ -45,6 +45,7 @@ export function LayoutTab({
   placementMode?: PlacementMode;
   layoutHistory?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }) {
+  const [showDetected, setShowDetected] = useState(false);
   const [renumberClicks, setRenumberClicks] = useState<number[] | null>(null);
   const numbers = effectiveSlotNumbers(slots, placementMode, null);
   const selected = selectedSlot != null ? slots[selectedSlot] : null;
@@ -139,8 +140,14 @@ export function LayoutTab({
         />
 
         {renumberClicks != null && <p className="muted small">Click slots in the desired order ({renumberClicks.length} chosen). Unchosen slots follow. Left-then-right placement still sorts by page and position.</p>}
+        {rawDebug && <label className="inline"><input type="checkbox" checked={showDetected} onChange={event => setShowDetected(event.target.checked)} /> Show what was detected</label>}
+        {showDetected && rawDebug && <div className="muted small" role="status">
+          {rawDebug.mugshot_count} portraits, {rawDebug.baby_count} baby, {rawDebug.name_count} names, {rawDebug.quote_count} quotes
+          {rawDebug.messages?.map((message, i) => <div key={i}>{message}</div>)}
+        </div>}
         <TemplatePreview
           slots={slots}
+          rawDebug={showDetected ? rawDebug : null}
           slotNumbers={numbers}
           renumbering={renumberClicks != null}
           renumberClicks={renumberClicks ?? []}

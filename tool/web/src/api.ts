@@ -167,6 +167,11 @@ export async function regenerateBabyMask(workspace_id: string, box: Box, baby_sh
   return data;
 }
 
+export async function regenerateBabyMask(workspace_id: string, box: Box, baby_shape: BabyShape = "auto") {
+  const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
+  return data;
+}
+
 export async function parseTemplate(
   annotated: File | null,
   clean: File | null,

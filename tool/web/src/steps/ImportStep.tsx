@@ -181,6 +181,8 @@ export function ImportStep({
   quoteColor,
   setQuoteColor,
   minArea,
+  tolerance,
+  setTolerance,
   setMinArea,
   onRawDebug,
   namingPattern,
@@ -256,6 +258,8 @@ export function ImportStep({
   quoteColor: string;
   setQuoteColor: (v: string) => void;
   minArea: number;
+  tolerance?: number;
+  setTolerance: (value: number | undefined) => void;
   setMinArea: (n: number) => void;
   onRawDebug?: (debug: RawParseDebug | null) => void;
   namingPattern: string;
@@ -506,6 +510,7 @@ export function ImportStep({
         disableBabyPhotos: skipBabyPhotos,
         disableQuotes: skipQuotes,
         minArea,
+        tolerance,
         onProgress: (pct) => {
           const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
           const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
@@ -1169,6 +1174,12 @@ export function ImportStep({
           />
         </label>
 
+        <label className="field">
+          <span>Detection sensitivity: {tolerance == null ? "Automatic (default)" : tolerance}</span>
+          <input aria-label="Detection sensitivity" type="range" min={0} max={64} step={1} value={tolerance ?? 24} onChange={event => setTolerance(Number(event.target.value))} />
+          <span className="muted small">Higher values include a wider range of guide colours. Re-parse to apply.</span>
+          <button type="button" className="chip small" onClick={() => setTolerance(undefined)}>Use automatic sensitivity</button>
+        </label>
         <div className="stack" style={{ gap: 8 }}>
           <div className="inline" style={{ alignItems: "center", gap: 6 }}>
             <button type="button" onClick={() => setShowCustomOptions((v) => !v)}>
