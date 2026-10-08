@@ -637,6 +637,7 @@ export function ImportStep({
       const nextPeople = keepEditedNames ? keepNameEdits(resp.people, people) : resp.people;
       setPeople(nextPeople);
       setOriginalPeople(resp.people.map((p) => ({ ...p })));
+      setOriginalBabyPeople(null);
       const nextWarnings = resp.warnings ?? [];
       onPortraitWarnings(nextWarnings);
       onPortraitCompletedErrorCount(nextWarnings.length);

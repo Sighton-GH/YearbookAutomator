@@ -40,8 +40,8 @@ export type PersistedSessionV1 = {
   people: PersonRecord[];
   peopleSwapMode?: "off" | "card" | "portrait";
   pendingPeopleAdjustments?: Record<number, import("./components/PersonInspector").PersonAdjustment>;
-  originalPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
-  originalBabyPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
+  originalPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename" | "baby_background_removal_failed">>;
+  originalBabyPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename" | "baby_background_removal_failed">>;
   slotAssignments: Record<number, number>;
   placementMode?: PlacementMode;
   forceAlphabetical?: boolean;
