@@ -52,3 +52,10 @@ test("no slots gives an empty map", async () => {
   const { babyBoxesByPerson } = await load();
   assert.deepEqual(babyBoxesByPerson({ people: [person(1)], slots: [], slotNumberToIndex: [], slotAssignments: {}, peoplePerSpread: 16 }), {});
 });
+
+test("explicit claim displaces another person's default slot", async () => {
+  const { babyBoxesByPerson } = await load();
+  const out = babyBoxesByPerson({people: [person(1), person(2)], slots, slotNumberToIndex: [0,1], slotAssignments: {1:2}, peoplePerSpread: 2});
+  assert.equal(out[1], slots[1].baby_photo);
+  assert.equal(out[2], slots[0].baby_photo);
+});

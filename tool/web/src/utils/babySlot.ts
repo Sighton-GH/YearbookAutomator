@@ -1,5 +1,7 @@
 import type { PersonRecord, TemplateSlots } from "../api";
 
+import { resolvePersonSlots } from "./personPosition";
+
 type Box = TemplateSlots["baby_photo"];
 
 /**
@@ -19,12 +21,14 @@ export function babyBoxesByPerson(opts: {
   const out: Record<number, Box | null> = {};
   if (!slots.length) return out;
   const perSpread = Math.max(1, Math.min(peoplePerSpread || 1, slots.length));
-  people.forEach((p, i) => {
-    const defaultSlotNumber = (i % perSpread) + 1;
-    const assigned = slotAssignments[p.index] ?? defaultSlotNumber;
-    const actualIdx = slotNumberToIndex[assigned - 1] ?? slotNumberToIndex[0] ?? 0;
-    const slot = slots[actualIdx] ?? slots[0];
-    out[p.index] = slot?.baby_photo ?? null;
-  });
+  const active = people.filter(p => !p.excluded);
+  for (let start = 0; start < active.length; start += perSpread) {
+    const chunk = active.slice(start, start + perSpread);
+    const assigned = resolvePersonSlots(chunk, slots.length, slotAssignments);
+    chunk.forEach((p, i) => {
+      const slot = slots[slotNumberToIndex[assigned[i] - 1] ?? 0];
+      out[p.index] = slot?.baby_photo ?? null;
+    });
+  }
   return out;
 }

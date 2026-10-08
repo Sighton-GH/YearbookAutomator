@@ -67,6 +67,7 @@ export function PeopleTab({
   babyEditorProtectedFilenames,
   babyMaskBox,
   portraitBox,
+  portraitBoxByPerson,
   babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
@@ -106,6 +107,7 @@ export function PeopleTab({
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
   portraitBox: Box | null;
+  portraitBoxByPerson?: Record<number, Box | null>;
   babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
@@ -540,7 +542,7 @@ export function PeopleTab({
 
         {portraitEditorIdx !== null && workspaceId && <PortraitEditor
           src={assetUrl(workspaceId, "mugshot", people[portraitEditorIdx].mugshot_filename || defaultMugshotAssignments[people[portraitEditorIdx].index])}
-          aspect={portraitBox ? portraitBox.width / portraitBox.height : 1}
+          aspect={(portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)?.width ? (portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)!.width / (portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)!.height : 1}
           focus={people[portraitEditorIdx].mugshot_focus}
           onApply={focus => { updatePerson(portraitEditorIdx, p => ({ ...p, mugshot_focus: focus })); setPortraitEditorIdx(null); }}
           onClose={() => setPortraitEditorIdx(null)} />}
