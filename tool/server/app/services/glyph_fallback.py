@@ -50,13 +50,19 @@ def fallback_path(codepoint: int, paths: tuple[str, ...], prefer_color: bool = F
     return next((path for path in paths if codepoint in font_coverage(path)), None)
 
 
+@lru_cache(maxsize=512)
+def covering_paths(codepoint: int, paths: tuple[str, ...], prefer_color: bool = False) -> tuple[str, ...]:
+    """Retain tiny path results, not whole cmaps, across all fitting sizes."""
+    covered = [path for path in paths if codepoint in font_coverage(path)]
+    if prefer_color:
+        covered.sort(key=lambda path: not color_font(path))
+    return tuple(covered)
+
+
 @lru_cache(maxsize=128)
 def usable_fallback(codepoint: int, size: int, paths: tuple[str, ...], prefer_color: bool = False):
     """Cache success and failure so unsupported bitmap strikes are not rescanned."""
-    first = fallback_path(codepoint, paths, prefer_color)
-    for path in ([first] if first else []) + list(paths):
-        if codepoint not in font_coverage(path):
-            continue
+    for path in covering_paths(codepoint, paths, prefer_color):
         try:
             return ImageFont.truetype(path, size), color_font(path)
         except (OSError, ValueError):
@@ -70,6 +76,7 @@ def clear_glyph_caches():
     color_font.cache_clear()
     fallback_path.cache_clear()
     usable_fallback.cache_clear()
+    covering_paths.cache_clear()
 
 
 def script_kwargs(text: str, language: str | None = None,

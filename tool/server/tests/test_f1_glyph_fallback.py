@@ -241,3 +241,4 @@ def test_unusable_bitmap_fallback_is_cached_per_size(monkeypatch):
     assert len(loads) == count
     gf.fallback_path.cache_clear()
     gf.usable_fallback.cache_clear()
+    gf.covering_paths.cache_clear()
