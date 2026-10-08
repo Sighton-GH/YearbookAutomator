@@ -17,6 +17,7 @@ import {
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
 import { cropToPngBlob } from "../utils/image";
+import { rotatedSize, rotateFocusPoint } from "../utils/rotation";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -344,8 +345,16 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       const detectH = Math.max(1, Number(fc.height || imgH));
       const mapX = imgW / detectW;
       const mapY = imgH / detectH;
-      const fx = Math.max(0, Math.min(imgW, fc.center_x * mapX));
-      const fy = Math.max(0, Math.min(imgH, fc.center_y * mapY));
+      const imageSize = { width: imgW, height: imgH };
+      const bounds = rotatedSize(imageSize, rotation);
+      const { x: fx, y: fy } = rotateFocusPoint(
+        {
+          x: Math.max(0, Math.min(imgW, fc.center_x * mapX)),
+          y: Math.max(0, Math.min(imgH, fc.center_y * mapY)),
+        },
+        imageSize,
+        rotation
+      );
 
       const currentW = Math.max(1, Math.round(croppedAreaPixels.width));
       const currentH = Math.max(1, Math.round(croppedAreaPixels.height));
@@ -371,8 +380,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         scale = boundedDesiredMin / currentMin;
       }
 
-      const maxCenterableW = Math.max(1, Math.floor(2 * Math.min(fx, imgW - fx)));
-      const maxCenterableH = Math.max(1, Math.floor(2 * Math.min(fy, imgH - fy)));
+      const maxCenterableW = Math.max(1, Math.floor(2 * Math.min(fx, bounds.width - fx)));
+      const maxCenterableH = Math.max(1, Math.floor(2 * Math.min(fy, bounds.height - fy)));
       const centerableScaleUpper = Math.min(maxCenterableW / currentW, maxCenterableH / currentH);
 
       let minScaleAllowed = MIN_SCALE_FACTOR;
@@ -386,8 +395,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
       const w = Math.max(1, Math.round(currentW * scale));
       const h = Math.max(1, Math.round(currentH * scale));
-      const maxX = Math.max(0, imgW - w);
-      const maxY = Math.max(0, imgH - h);
+      const maxX = Math.max(0, bounds.width - w);
+      const maxY = Math.max(0, bounds.height - h);
       const desiredArea: Area = {
         width: w,
         height: h,
@@ -398,7 +407,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       const { crop: nextCrop, zoom: nextZoom } = getInitialCropFromCroppedAreaPixels(
         desiredArea,
         editorMediaSize,
-        0,
+        rotation,
         editorCropSize,
         0.5,
         3
@@ -429,8 +438,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
           return;
         }
 
-        const imgW2 = editorMediaSize.naturalWidth;
-        const imgH2 = editorMediaSize.naturalHeight;
+        const imgW2 = bounds.width;
+        const imgH2 = bounds.height;
         const w2 = Math.max(1, Math.round(areaNow.width));
         const h2 = Math.max(1, Math.round(areaNow.height));
         const maxX2 = Math.max(0, imgW2 - w2);
@@ -445,7 +454,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         const refined = getInitialCropFromCroppedAreaPixels(
           corrected,
           editorMediaSize,
-          0,
+          rotation,
           editorCropSize,
           0.5,
           3
