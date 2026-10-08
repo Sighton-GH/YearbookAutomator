@@ -9,6 +9,7 @@ export const TOP_STEP_ORDER: TopStep[] = ["template", "roster", "people", "style
 
 export type PersistedSessionV1 = {
   v: 1;
+  renderConfirmed?: boolean;
   sessionId?: string;
   startedAtMs?: number;
   expiresAtMs?: number;

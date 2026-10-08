@@ -663,7 +663,7 @@ export function PeopleTab({
               {!skipQuotes && (
                 <div className="stack" style={{ gap: 6 }}>
                   <div className="inline" style={{ alignItems: "center", gap: 6 }}>
-                    <strong>Default quotes</strong>
+                    <strong>Default quotes ({people.filter(p => !p.quote_blank && !p.quote?.trim()).length} students)</strong>
                     <InfoPopover content="Used when a student has no quote. Reorder to define the pattern." ariaLabel="Default quotes description" />
                   </div>
                   {defaultQuotes.map((q, idx) => (

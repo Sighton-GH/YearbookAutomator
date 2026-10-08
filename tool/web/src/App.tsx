@@ -249,6 +249,7 @@ export default function App({
   const [showSaveConfigReminder, setShowSaveConfigReminder] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [outputPaths, setOutputPaths] = useState<string[]>([]);
+  const [renderConfirmed, setRenderConfirmed] = useState(false);
   const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
   const [outputNonce, setOutputNonce] = useState(0);
   const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
@@ -730,6 +731,7 @@ export default function App({
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     setOriginalPeople(null);
+    setRenderConfirmed(false);
     setPendingPeopleAdjustments({});
     setOriginalBabyPeople(null);
     setRawDebug(null);
@@ -784,6 +786,7 @@ export default function App({
   const buildSessionPayload = (): PersistedSessionV1 => {
     return {
       v: 1,
+      renderConfirmed,
       sessionId: sessionIdentity.sessionId,
       startedAtMs: sessionIdentity.startedAtMs,
       expiresAtMs: sessionIdentity.expiresAtMs,
@@ -924,6 +927,7 @@ export default function App({
     setParsedSlots(session.parsedSlots ?? []);
     setTemplateSize(session.templateSize ?? null);
     setPeople(session.people ?? []);
+    setRenderConfirmed(Boolean(session.renderConfirmed));
     setPendingPeopleAdjustments(session.pendingPeopleAdjustments ?? {});
     restoreOriginals(session);
     setSlotAssignments(session.slotAssignments ?? {});
@@ -1361,6 +1365,7 @@ export default function App({
           setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
           setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
           setPeople(saved.people ?? []);
+        setRenderConfirmed(Boolean(saved.renderConfirmed));
         setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
           restoreOriginals(saved);
           setSlotAssignments(saved.slotAssignments ?? {});
@@ -1586,6 +1591,7 @@ export default function App({
         setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
         setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
         setPeople(saved.people ?? []);
+        setRenderConfirmed(Boolean(saved.renderConfirmed));
         setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
         restoreOriginals(saved);
         setSlotAssignments(saved.slotAssignments ?? {});
@@ -3231,6 +3237,10 @@ export default function App({
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
             ) : (
               <FinalizeStep
+                defaultQuote={defaultQuoteFallback}
+                quoteImportWarnings={quotesWarnings.filter(w => /placeholder|link|rejected|url/i.test(w))}
+                renderConfirmed={renderConfirmed}
+                onRenderConfirmed={setRenderConfirmed}
                 warnings={generationWarnings}
                 people={people}
                 peoplePerSpread={peoplePerSpread}

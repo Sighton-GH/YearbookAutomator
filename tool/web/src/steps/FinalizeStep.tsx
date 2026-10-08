@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { describeApiError } from "../configFile";
 import { generationDownloadFile, generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
 import { printSizeDescription } from "../utils/printSize";
@@ -6,6 +7,10 @@ import { InfoPopover } from "../components/InfoPopover";
 import type { PlacementMode } from "../types";
 
 export function FinalizeStep({
+  defaultQuote,
+  quoteImportWarnings,
+  renderConfirmed,
+  onRenderConfirmed,
   warnings = [],
   people,
   peoplePerSpread,
@@ -36,6 +41,10 @@ export function FinalizeStep({
   outputNonce,
   usageInfo,
 }: {
+  defaultQuote: string;
+  quoteImportWarnings: string[];
+  renderConfirmed: boolean;
+  onRenderConfirmed: (value: boolean) => void;
   warnings?: string[];
   people: PersonRecord[];
   peoplePerSpread: number;
@@ -80,6 +89,19 @@ export function FinalizeStep({
       setDownloading(false);
     }
   };
+  const [confirmRender, setConfirmRender] = useState(false);
+  const defaultQuotePeople = skipQuotes ? [] : people.filter(p => !p.quote_blank && !p.quote?.trim());
+  const missingPortraits = people.filter(p => !p.mugshot_filename);
+  const missingBabies = skipBabyPhotos ? [] : people.filter(p => !p.baby_photo_filename);
+  const groups = [
+    {label: `Default quote: "${defaultQuote}"`, people: defaultQuotePeople},
+    {label: "No portrait: default portrait or blank will print", people: missingPortraits},
+    {label: "No baby photo: default baby photo or blank will print", people: missingBabies},
+  ];
+  const requestRender = () => {
+    if (!renderConfirmed && (groups.some(g => g.people.length) || quoteImportWarnings.length)) setConfirmRender(true);
+    else handleRenderAll();
+  };
   const previewIsPng = outputFormat === "png";
   const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
   const hasTemplateSize = Boolean(templateSize && templateSize.width > 0 && templateSize.height > 0);
@@ -116,6 +138,11 @@ export function FinalizeStep({
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <div className="callout"><strong>Before you render</strong>
+        {groups.map(g => <details key={g.label}><summary>{g.label} ({g.people.length})</summary><ul>{g.people.map(p => <li key={p.index}>{p.first_name} {p.last_name}</li>)}</ul></details>)}
+        {quoteImportWarnings.length > 0 && <details><summary>Quotes skipped during import ({quoteImportWarnings.length})</summary><ul>{quoteImportWarnings.map((warning,i) => <li key={i}>{warning}</li>)}</ul></details>}
+      </div>
+      <ConfirmDialog open={confirmRender} title="Render with missing content?" confirmLabel="Render anyway" cancelLabel="Go back" onCancel={() => setConfirmRender(false)} onConfirm={() => {setConfirmRender(false);handleRenderAll();}} message={<div>{groups.filter(g => g.people.length).map(g => <p key={g.label}>{g.people.length} students: {g.label}. {g.people.map(p => `${p.first_name} ${p.last_name}`).join(", ")}</p>)}<label><input type="checkbox" checked={renderConfirmed} onChange={e => onRenderConfirmed(e.target.checked)} />Don't ask again for this project</label></div>} />
       {warnings.length > 0 && <details className="callout"><summary>Render warnings ({warnings.length})</summary><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
       {downloadStatus && <div role="status" aria-live="polite" className="callout">{downloadStatus}</div>}
       <div className="callout">
@@ -237,7 +264,7 @@ export function FinalizeStep({
             <button disabled={loading || !canContinue} onClick={handleRenderPreview}>
               {previewPath ? "Re-render preview" : "Render preview"}
             </button>
-            <button className="primary" disabled={loading || !canContinue} onClick={handleRenderAll}>
+            <button className="primary" disabled={loading || !canContinue} onClick={requestRender}>
               {loading ? "Rendering..." : "Render all"}
             </button>
             {loading && onCancelRender && (
@@ -277,6 +304,11 @@ export function FinalizeStep({
 
       {workspaceId && files.length > 0 && (
         <div className="stack" style={{ gap: 16 }}>
+      <div className="callout"><strong>Before you render</strong>
+        {groups.map(g => <details key={g.label}><summary>{g.label} ({g.people.length})</summary><ul>{g.people.map(p => <li key={p.index}>{p.first_name} {p.last_name}</li>)}</ul></details>)}
+        {quoteImportWarnings.length > 0 && <details><summary>Quotes skipped during import ({quoteImportWarnings.length})</summary><ul>{quoteImportWarnings.map((warning,i) => <li key={i}>{warning}</li>)}</ul></details>}
+      </div>
+      <ConfirmDialog open={confirmRender} title="Render with missing content?" confirmLabel="Render anyway" cancelLabel="Go back" onCancel={() => setConfirmRender(false)} onConfirm={() => {setConfirmRender(false);handleRenderAll();}} message={<div>{groups.filter(g => g.people.length).map(g => <p key={g.label}>{g.people.length} students: {g.label}. {g.people.map(p => `${p.first_name} ${p.last_name}`).join(", ")}</p>)}<label><input type="checkbox" checked={renderConfirmed} onChange={e => onRenderConfirmed(e.target.checked)} />Don't ask again for this project</label></div>} />
       {warnings.length > 0 && <details className="callout"><summary>Render warnings ({warnings.length})</summary><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
           <h3>Results</h3>
           {usageInfo && typeof usageInfo.remaining === "number" && typeof usageInfo.limit === "number" && (
