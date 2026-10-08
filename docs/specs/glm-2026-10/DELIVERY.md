@@ -96,3 +96,5 @@ Known issues and explicit semantics:
 
 ## Latest stable gate checkpoint 8c43cee0
 373backendtestspassed,19warnings,44.15s.68frontendunitspass;TypeScriptclean;ESLint0errors/7warnings;build4.17s. FreshF4requestassertions and40personthree-spreadrender/downloadpass. Final12-viewaxeinitial+populatedboththemes rerunpendingafterlastone-nodefix. S12Regroupdefectstillblocking.
+
+S12textcontrolsevidence on3f8fbc69retainedunderUXbranch: hex/swatch,fontstyles/realweights/variablefont,align,valign,tracking,effects,quotejustification/line-spacing/resetworked. Atnamewrapmin70, overflowwarningnamedbothstudents; secondlineextendsbeyondnameboxandstrip'sslotunion+20pxcropcutsit. Rendererhonorsminimum,notshrinkbelow; enlargeboxorlowerminimum. Min6wrap-versus-shrinkandnameline-spacingnotvisuallyestablished.
