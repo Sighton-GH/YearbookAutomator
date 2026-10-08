@@ -37,3 +37,11 @@ def test_resolve_lock_conflict_includes_workspace_id_for_takeover(tmp_path, monk
     detail = second.json()["detail"]
     assert detail["code"] == "workspace_locked"
     assert detail["workspace_id"] == first.json()["workspace_id"]
+    other_key = licensing.create_license(license_type='commercial', note='other')
+    denied = client.post('/api/workspaces/takeover', json={'workspace_id': detail['workspace_id'], 'session_id':'s2'}, headers={'X-License-Key':other_key,'X-Device-Id':'dev2'})
+    assert denied.status_code == 403
+    taken = client.post('/api/workspaces/takeover', json={'workspace_id': detail['workspace_id'], 'session_id':'s2'}, headers={'X-License-Key':key,'X-Device-Id':'dev2'})
+    assert taken.status_code == 200
+    from app.services.workspace_registry import ensure_workspace_write_access
+    assert ensure_workspace_write_access(workspace_id=detail['workspace_id'], license_key=key,license_type='commercial', device_id='dev1',session_id='s1') == (False,'workspace_locked')
+    assert ensure_workspace_write_access(workspace_id=detail['workspace_id'], license_key=key,license_type='commercial', device_id='dev2',session_id='s2') == (True,None)
