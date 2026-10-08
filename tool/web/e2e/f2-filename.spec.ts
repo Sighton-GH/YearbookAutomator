@@ -1,0 +1,25 @@
+import {test, expect} from '@playwright/test';
+import {activate} from './helpers';
+import path from 'node:path';
+import fs from 'node:fs';
+test('suggested filename matching defaults on, can be disabled, and persists', async ({page}) => {
+  await activate(page);
+  const project = path.resolve('.e2e-data/project');
+  await page.locator('input[type=file]').nth(0).setInputFiles(path.join(project, 'annotated.png'));
+  await page.locator('input[type=file]').nth(1).setInputFiles(path.join(project, 'clean.png'));
+  await page.getByRole('button', {name:'Parse template', exact:true}).click();
+  await page.getByRole('button', {name:'Continue to Uploads'}).first().click();
+  const lines = fs.readFileSync(path.join(project,'roster.csv'),'utf8').trim().split('\n');
+  const csv = lines.map((line,i) => `${line.replace(/\r$/, "")},${i === 0 ? 'SelectedImage' : `${String(i).padStart(3,"0")}.jpg`}`).join('\n');
+  await page.locator('input[type=file]').nth(0).setInputFiles({name:'roster-with-filenames.csv', mimeType:'text/csv', buffer:Buffer.from(csv)});
+  await page.locator('input[type=file]').nth(1).setInputFiles(path.join(project,'portraits.zip'));
+  await page.getByRole('button', {name:'Ingest roster', exact:true}).click();
+  const match = page.getByLabel("Match portraits using the 'SelectedImage' column");
+  await expect(match).toBeChecked();
+  await match.uncheck();
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByLabel("Match portraits using the 'SelectedImage' column")).not.toBeChecked();
+  const session = await page.evaluate(() => JSON.parse(localStorage.getItem("ymga.session.v1") || "null"));
+  expect(JSON.stringify(session)).toContain("\"filenameColumn\":null");
+});

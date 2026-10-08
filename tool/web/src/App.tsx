@@ -397,6 +397,8 @@ export default function App({
 
   // Persisted options for spreadsheet+portrait ingest.
   const defaultNamingPattern = "\\d{1,4}";
+  const [filenameCandidates, setFilenameCandidates] = useState<import("./api").FilenameColumnCandidate[]>([]);
+  const [filenameColumn, setFilenameColumn] = useState<string | null | undefined>(undefined);
   const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
@@ -684,6 +686,8 @@ export default function App({
     resetSlots([]);
     setParsedSlots([]);
     setTemplateSize(null);
+    setFilenameCandidates([]);
+    setFilenameColumn(undefined);
     setNamingPattern(defaultNamingPattern);
     setAdvancedNameMatch(true);
     setAllowInsecureUploads(false);
@@ -818,6 +822,8 @@ export default function App({
       parsedSlots,
       templateSize,
       portraitsIngest: {
+        filenameColumn,
+        filenameCandidates,
         namingPattern,
         advancedNameMatch,
         allowInsecureUploads,
@@ -932,6 +938,8 @@ export default function App({
     setParseQuoteColor(session.templateParse?.quoteColor ?? "");
     setParseMinArea(typeof session.templateParse?.minArea === "number" ? Math.max(400, session.templateParse!.minArea) : 800);
     setParseTolerance(session.templateParse?.tolerance);
+    setFilenameCandidates(session.portraitsIngest?.filenameCandidates ?? []);
+    setFilenameColumn(session.portraitsIngest?.filenameColumn);
     setNamingPattern(session.portraitsIngest?.namingPattern ?? defaultNamingPattern);
     setAdvancedNameMatch(Boolean(session.portraitsIngest?.advancedNameMatch ?? true));
     setAllowInsecureUploads(Boolean(session.portraitsIngest?.allowInsecureUploads));
@@ -1384,7 +1392,9 @@ export default function App({
           resetSlots(saved.slots ?? []);
           setParsedSlots(saved.parsedSlots ?? []);
           setTemplateSize(saved.templateSize ?? null);
-          setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
+          setFilenameCandidates(saved.portraitsIngest?.filenameCandidates ?? []);
+        setFilenameColumn(saved.portraitsIngest?.filenameColumn);
+        setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
           setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
           setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
           setPeople(saved.people ?? []);
@@ -1619,6 +1629,8 @@ export default function App({
         resetSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
+        setFilenameCandidates(saved.portraitsIngest?.filenameCandidates ?? []);
+        setFilenameColumn(saved.portraitsIngest?.filenameColumn);
         setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
         setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
         setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
@@ -1845,6 +1857,8 @@ export default function App({
     parsedSlots,
     templateSize,
     namingPattern,
+    filenameColumn,
+    filenameCandidates,
     advancedNameMatch,
     allowInsecureUploads,
     people,
@@ -1947,6 +1961,8 @@ export default function App({
     parsedSlots,
     templateSize,
     namingPattern,
+    filenameColumn,
+    filenameCandidates,
     advancedNameMatch,
     allowInsecureUploads,
     people,
@@ -3227,6 +3243,10 @@ export default function App({
                 setTemplatePreviewUrl(clean ?? annotated ?? null);
               }}
               onRawDebug={setRawDebug}
+              filenameCandidates={filenameCandidates}
+              onFilenameCandidates={setFilenameCandidates}
+              filenameColumn={filenameColumn}
+              onFilenameColumn={setFilenameColumn}
               namingPattern={namingPattern}
               setNamingPattern={setNamingPattern}
               advancedNameMatch={advancedNameMatch}
@@ -3240,7 +3260,6 @@ export default function App({
               onPortraitCompletedErrorCount={setPortraitCompletedErrorCount}
               people={people}
               setPeople={setPeople}
-              positionSettings={{slots, slotNumberToIndex, assignments: slotAssignments, perSpread: peoplePerSpread, forceAlphabetical, onAssignments: setSlotAssignments}}
               setOriginalPeople={setOriginalPeople}
               quotesWarnings={quotesWarnings}
               onQuotesWarnings={setQuotesWarnings}

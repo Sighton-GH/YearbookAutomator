@@ -32,6 +32,8 @@ export type PersistedSessionV1 = {
   templateSize: { width: number; height: number } | null;
   portraitsIngest?: {
     namingPattern?: string;
+    filenameColumn?: string | null;
+    filenameCandidates?: import("./api").FilenameColumnCandidate[];
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
   };

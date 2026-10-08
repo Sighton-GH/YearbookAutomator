@@ -1,3 +1,4 @@
+import { FilenameColumnControl } from "../components/FilenameColumnControl";
 import { hasNameEdit, keepNameEdits } from "../utils/personEdits";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -186,6 +187,10 @@ export function ImportStep({
   setTolerance,
   setMinArea,
   onRawDebug,
+  filenameCandidates,
+  onFilenameCandidates,
+  filenameColumn,
+  onFilenameColumn,
   namingPattern,
   setNamingPattern,
   advancedNameMatch,
@@ -263,6 +268,10 @@ export function ImportStep({
   setTolerance: (value: number | undefined) => void;
   setMinArea: (n: number) => void;
   onRawDebug?: (debug: RawParseDebug | null) => void;
+  filenameCandidates: import("../api").FilenameColumnCandidate[];
+  onFilenameCandidates: (value: import("../api").FilenameColumnCandidate[]) => void;
+  filenameColumn: string | null | undefined;
+  onFilenameColumn: (value: string | null | undefined) => void;
   namingPattern: string;
   setNamingPattern: (v: string) => void;
   advancedNameMatch: boolean;
@@ -589,7 +598,8 @@ export function ImportStep({
     });
     const opStartMs = performance.now();
     try {
-      const resp = await ingestSpreadsheet(workspaceId, sheet, zip, {
+      let resp = await ingestSpreadsheet(workspaceId, sheet, zip, {
+        filenameColumn,
         namingPattern: namingPattern || undefined,
         advancedNameMatch,
         onProgress: (pct) => {
@@ -608,6 +618,13 @@ export function ImportStep({
           setStatus(`Uploading portraits… ${clamped}%${etaPart}`);
         },
       });
+      const candidates = resp.filename_column_candidates ?? [];
+      onFilenameCandidates(candidates);
+      if (filenameColumn === undefined) {
+        const suggested = candidates.find(candidate => candidate.suggested)?.column ?? null;
+        onFilenameColumn(suggested);
+        if (suggested) resp = await ingestSpreadsheet(workspaceId, sheet, zip, {filenameColumn: suggested, namingPattern: namingPattern || undefined, advancedNameMatch});
+      }
       ticker.finish(opStartMs);
       const nextPeople = keepEditedNames ? keepNameEdits(resp.people, people) : resp.people;
       setPeople(nextPeople);
@@ -1388,6 +1405,7 @@ export function ImportStep({
             <ToggleSwitch checked={allowInsecureUploads} onChange={() => undefined} label="Uploads over HTTP" description="Contact an admin to allow insecure uploads." disabled />
           )}
 
+          <FilenameColumnControl candidates={filenameCandidates} value={filenameColumn} onChange={onFilenameColumn} disabled={loading} />
           {editedNameCount > 0 && <div className="panel">
             <p>{editedNameCount} edited names will be {keepEditedNames ? "kept when their original roster row still matches" : "overwritten"} when re-ingesting.</p>
             <ToggleSwitch checked={keepEditedNames} onChange={setKeepEditedNames} label="Keep my name edits" disabled={loading} />

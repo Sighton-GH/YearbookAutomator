@@ -28,6 +28,7 @@ export type SessionLike = {
     tolerance?: number;
   };
   portraitsIngest?: {
+    filenameColumn?: string | null;
     namingPattern?: string;
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
@@ -107,6 +108,7 @@ type IngestSpreadsheetFn = (
   portraitsZip: File,
   opts?: {
     namingPattern?: string;
+    filenameColumn?: string | null;
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
     onProgress?: (pct: number) => void;
@@ -177,6 +179,7 @@ export async function importPortraits<S extends SessionLike>(args: {
   setStatus?.("Uploading spreadsheet and portraits zip…");
 
   await ingestSpreadsheet(workspaceId, spreadsheet, portraitsZip, {
+    filenameColumn: session.portraitsIngest?.filenameColumn,
     namingPattern: session.portraitsIngest?.namingPattern || undefined,
     advancedNameMatch: Boolean(session.portraitsIngest?.advancedNameMatch),
     allowInsecureUploads: Boolean(session.portraitsIngest?.allowInsecureUploads),
