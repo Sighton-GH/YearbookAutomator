@@ -66,22 +66,26 @@ export function computeSlotNumberToIndex(
   return [...orderSide(left), ...orderSide(right)];
 }
 
-export function comparePeopleByLastName(a: PersonRecord, b: PersonRecord): number {
-  const normalize = (s: string | null | undefined) => (s ?? "").trim();
+// Accent-folded, case-insensitive name key (NFKD, combining marks stripped).
+// Must match `fold_name` in tool/server/app/services/placement.py.
+export function foldName(s: string | null | undefined): string {
+  return (s ?? "").trim().normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
-  const aLast = normalize(a.last_name);
-  const bLast = normalize(b.last_name);
+// Plain code-unit comparison so the order is identical to the backend's string sort.
+const cmpFolded = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+export function comparePeopleByLastName(a: PersonRecord, b: PersonRecord): number {
+  const aLast = foldName(a.last_name);
+  const bLast = foldName(b.last_name);
   const aLastEmpty = !aLast;
   const bLastEmpty = !bLast;
   if (aLastEmpty !== bLastEmpty) return aLastEmpty ? 1 : -1;
 
-  // Full lexicographic compare (not first-letter only)
-  const lastCmp = aLast.localeCompare(bLast, undefined, { sensitivity: "base" });
+  const lastCmp = cmpFolded(aLast, bLast);
   if (lastCmp) return lastCmp;
 
-  const aFirst = normalize(a.first_name);
-  const bFirst = normalize(b.first_name);
-  const firstCmp = aFirst.localeCompare(bFirst, undefined, { sensitivity: "base" });
+  const firstCmp = cmpFolded(foldName(a.first_name), foldName(b.first_name));
   if (firstCmp) return firstCmp;
 
   // Stable fallback: spreadsheet row index

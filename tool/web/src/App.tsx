@@ -2165,7 +2165,9 @@ export default function App({
         count_usage: Boolean(opts.countUsage),
         auto_place: true,
         placement_mode: placementMode,
-        force_alphabetical: forceAlphabetical,
+        // Callers pass people already sorted and chunked (getPeopleForGeneration), so the
+        // server must not re-sort a chunk.
+        force_alphabetical: opts.peopleOverride ? false : forceAlphabetical,
         slot_assignments: slotAssignments,
         output_filename: opts.outputFilename,
         default_quote: skipQuotes ? undefined : defaultQuoteFallback,

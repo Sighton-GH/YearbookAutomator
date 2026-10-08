@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 
 from app.models.schemas import PersonRecord, TemplateSlots
@@ -17,13 +18,24 @@ def _normalize_name(s: str | None) -> str:
     return (s or "").strip()
 
 
+def fold_name(s: str | None) -> str:
+    """Accent-folded, case-insensitive name key (NFKD, combining marks stripped).
+
+    Must match `foldName` in tool/web/src/utils/placement.ts.
+    """
+    decomposed = unicodedata.normalize("NFKD", _normalize_name(s))
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return stripped.casefold()
+
+
 def sort_people_alphabetical(people: list[PersonRecord]) -> list[PersonRecord]:
-    # Matches the frontend comparePeopleByLastName behavior.
+    # Same rule as the frontend comparePeopleByLastName: last name, then first
+    # name, accents folded, case-insensitive; blank last names go last.
     def key(p: PersonRecord):
-        last = _normalize_name(p.last_name)
-        first = _normalize_name(p.first_name)
+        last = fold_name(p.last_name)
+        first = fold_name(p.first_name)
         last_empty = 1 if not last else 0
-        return (last_empty, last.casefold(), first.casefold(), int(p.index or 0))
+        return (last_empty, last, first, int(p.index or 0))
 
     return sorted(list(people), key=key)
 
