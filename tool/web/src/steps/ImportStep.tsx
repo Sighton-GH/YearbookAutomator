@@ -1,3 +1,4 @@
+import { hasNameEdit, keepNameEdits } from "../utils/personEdits";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -551,6 +552,8 @@ export function ImportStep({
   // Returns the freshly-ingested people list (or null on failure) rather than a bare boolean
   // so the cascade below can hand the *current* roster to quotes/baby instead of relying on
   // the `people` prop, which won't reflect this stage's setPeople() call until the next render.
+  const [keepEditedNames, setKeepEditedNames] = useState(false);
+  const editedNameCount = people.filter(hasNameEdit).length;
   const runPortraitsStage = async (): Promise<PersonRecord[] | null> => {
     if (!workspaceId) {
       setStatus("Parse the template first");
@@ -606,7 +609,8 @@ export function ImportStep({
         },
       });
       ticker.finish(opStartMs);
-      setPeople(resp.people);
+      const nextPeople = keepEditedNames ? keepNameEdits(resp.people, people) : resp.people;
+      setPeople(nextPeople);
       setOriginalPeople(resp.people.map((p) => ({ ...p })));
       const nextWarnings = resp.warnings ?? [];
       onPortraitWarnings(nextWarnings);
@@ -618,7 +622,7 @@ export function ImportStep({
       }
       setProgress(100);
       setPortraitsStage("done");
-      return resp.people;
+      return nextPeople;
     } catch (err) {
       ticker.finish(opStartMs);
       console.error(err);
@@ -1384,6 +1388,10 @@ export function ImportStep({
             <ToggleSwitch checked={allowInsecureUploads} onChange={() => undefined} label="Uploads over HTTP" description="Contact an admin to allow insecure uploads." disabled />
           )}
 
+          {editedNameCount > 0 && <div className="panel">
+            <p>{editedNameCount} edited names will be {keepEditedNames ? "kept when their original roster row still matches" : "overwritten"} when re-ingesting.</p>
+            <ToggleSwitch checked={keepEditedNames} onChange={setKeepEditedNames} label="Keep my name edits" disabled={loading} />
+          </div>}
           <div className="import-card-actions">
             <ProcessButton
               status={portraitsStage}

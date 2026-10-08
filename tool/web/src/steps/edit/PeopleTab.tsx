@@ -1,3 +1,4 @@
+import { editPersonName } from "../../utils/personEdits";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -831,6 +832,7 @@ export function PeopleTab({
             onUploadReplacementPortrait={(file) => void uploadReplacementPortrait(selected.index, file)}
             onRequestRemovePortrait={() => setConfirmAction({ kind: "remove-portrait", personIndex: selected.index })}
             onRequestRemovePerson={() => setConfirmAction({ kind: "remove-person", personIndex: selected.index })}
+            onNameChange={(field, value) => updatePerson(selectedIdx, prev => editPersonName(prev, field, value))}
             onQuoteChange={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote: value }))}
             onQuoteBlank={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote_blank: value }))}
             onOpenBabyEditor={() => babyEditorRef.current?.openEditor(selectedIdx)}

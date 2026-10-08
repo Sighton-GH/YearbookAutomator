@@ -31,6 +31,7 @@ export function PersonInspector({
   onUploadReplacementPortrait,
   onRequestRemovePortrait,
   onRequestRemovePerson,
+  onNameChange,
   onQuoteChange,
   onQuoteBlank,
   onOpenBabyEditor,
@@ -59,6 +60,7 @@ export function PersonInspector({
   onUploadReplacementPortrait: (file: File | null) => void;
   onRequestRemovePortrait: () => void;
   onRequestRemovePerson: () => void;
+  onNameChange: (field: "first_name" | "last_name", value: string) => void;
   onQuoteChange: (value: string) => void;
   onQuoteBlank: (value: boolean) => void;
   onOpenBabyEditor: () => void;
@@ -109,6 +111,12 @@ export function PersonInspector({
           </button>
         </div>
       </div>
+
+      <section className="pi-section">
+        <div className="inspector-section-title">Name</div>
+        <label className="field"><span>First name</span><input maxLength={200} value={person.first_name} disabled={loading || isLocked} onChange={e => onNameChange("first_name", e.target.value)} /></label>
+        <label className="field"><span>Last name</span><input maxLength={200} value={person.last_name} disabled={loading || isLocked} onChange={e => onNameChange("last_name", e.target.value)} /></label>
+      </section>
 
       <section className="pi-section">
         <div className="inspector-section-title">Portrait</div>
