@@ -23,7 +23,13 @@ export async function uploadProject(page: Page) {
   await page.locator('input[type=file]').nth(1).setInputFiles(path.join(project, 'portraits.zip'));
   await page.locator('input[type=file]').nth(2).setInputFiles(path.join(project, 'quotes.csv'));
   await page.locator('input[type=file]').nth(3).setInputFiles(path.join(project, 'baby.zip'));
+  const quotes = page.waitForResponse(r => r.url().includes('/mapping/upload-quotes-spreadsheet') && r.status() === 200);
+  const babies = page.waitForResponse(r => r.url().includes('/mapping/upload-baby-zip') && r.status() === 200);
   await page.getByRole('button', { name: 'Process all uploads', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Roster ingested' })).toBeVisible();
+  const quoteData = await (await quotes).json();
+  const babyData = await (await babies).json();
+  expect(quoteData.people.filter((p: any) => p.quote).length).toBeGreaterThan(30);
+  expect(babyData.people.filter((p: any) => p.baby_photo_filename).length).toBe(20);
+  await expect(page.locator('.people-card-selectable').first()).toBeVisible({timeout: 60000});
   await page.getByRole('button', { name: 'People', exact: true }).click();
 }

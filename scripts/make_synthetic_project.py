@@ -17,7 +17,7 @@ def create(out,students=40,seed=1,messy=False):
   d.rectangle((x,y+340,x+440,y+405),fill='#ff751f');d.rectangle((x+470,y,x+800,y+320),fill='#ff3131')
  clean.save(out/'clean.png');ann.save(out/'annotated.png')
  first=['José','Ana','Émile','Riley','Morgan','Casey','Quinn','Alex'];last=['García',"O'Brien",'Durand','Smith-Jones','Longfictionalfamilynamefortesting','Duran','Dupont','Rivera']
- names=[(first[i%8]+('' if i<8 else f' {chr(65+i//8)}' + chr(65+i%8)),last[i%8]) for i in range(students)]
+ names=[(first[i%8]+chr(65+i//26)+chr(65+i%26),last[i%8]+chr(65+i//26)+chr(65+i%26)) for i in range(students)]
  with open(out/'roster.csv','w',newline='',encoding='cp1252' if messy else 'utf8') as f:
   w=csv.writer(f);w.writerow(['first_name','last_name'] if messy else ['First Name','Last Name']);w.writerows(names[:10]+[('','')]+names[10:])
  with open(out/'quotes.csv','w',newline='',encoding='utf8') as f:
