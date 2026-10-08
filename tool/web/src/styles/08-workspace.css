@@ -879,3 +879,6 @@
 [data-theme="light"] .tips-box strong,
 [data-theme="light"] .tips-box-close,
 [data-theme="light"] .tips-box-body { color: #34434c; }
+
+/* Stronger specificity than generic dark button ink. */
+[data-theme="dark"] button.process-btn, [data-theme="dark"] button.process-btn span { color: var(--accent-contrast); }
