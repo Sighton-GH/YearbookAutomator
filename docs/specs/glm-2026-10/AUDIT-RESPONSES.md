@@ -32,3 +32,10 @@ Audits reviewed: frontend/backend/Plan 3 acceptance at96d772c0, later F1 typogra
 |Final visualF4 missing request settings|Fixed photoSettings spread into every render request; browser request assertions added.|actual4000x2600 ellipse/border/shadow150dpi downloads inspected|
 |Final performanceF1 fallback cmap thrash|Early-stop coverage selection, bounded cmap cache, cached success/failure font strikes.|unit regressions; full browser rerun in progress|
 |Final mask atomic/quota|Atomic temporary replacement and quota checks, readable413.|failure/quota/HTTP regression tests|
+
+## Final independent audit checkpoint d048fb65
+- Bulk face-centre same-name overwrite: per-person UUID editor-owned upload, plus server collision-safe ordinary uploads. Real HTTP red/blue same-basename regression preserves first image.
+- Style strip double-applied slot pins: clear assignments after resolving full-project placement; route test asserts ordered positions420,20 and emptypins.
+- Editor cleanup namespace: explicit editor_owned preview/edit Form field allocates UUID server filenames; ordinary prefix names remain renamed/protected. HTTP cleanup test deletes two editor images while preserving the ordinary original.
+- Focused regression:5backendHTTP pass;66frontendunitpass;TypeScriptclean;lint0errors/7warnings;build6.46s. Full final gates/re-audit remain pending.
+- Independent Regroup bug after overlapping duplication is awaiting a worker patch and retest; do not treat F3 acceptance as closed.
