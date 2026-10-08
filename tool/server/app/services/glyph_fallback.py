@@ -17,7 +17,7 @@ from app.services import fonts
 from app.services.name_fitting import append_once
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=32)
 def font_coverage(path: str) -> frozenset[int]:
     try:
         with TTFont(path, lazy=True) as font:
@@ -50,7 +50,7 @@ def fallback_path(codepoint: int, paths: tuple[str, ...], prefer_color: bool = F
     return next((path for path in paths if codepoint in font_coverage(path)), None)
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=128)
 def usable_fallback(codepoint: int, size: int, paths: tuple[str, ...], prefer_color: bool = False):
     """Cache success and failure so unsupported bitmap strikes are not rescanned."""
     first = fallback_path(codepoint, paths, prefer_color)
