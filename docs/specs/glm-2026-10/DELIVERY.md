@@ -79,8 +79,6 @@ Status means implemented and evidence gathered, not that every possible provider
 
 ## Gate record
 Baseline at untouchedbase:184backend,TS clean,lint0errors/7warnings,buildpassed (baseline recorded separately).
-Latest all-backendbeforebounded-cachefollowup:362passed,19warnings,38.46s.
-Aftercachefollowup:363passed,1failed onlynewtestcleanup(mockedcache_clear);test corrected,fullrerunpending.
-Frontendunits65passed,0failed;TS clean;ESLint0errors/7warnings;buildpassed4.83s at0b62ed2d.
-Latestfocusedmask12passed;glyph17passedbeforeaddedcachetest.
-Full22browser suite currentlyrunning; firstattemptabortedmemorypressure,no passclaim.
+Exact code checkpoint c891eb81: 364 backend tests passed, 19 dependency/deprecation warnings, 34.94s.
+Frontend units: 65 passed, 0 failed. TypeScript clean. ESLint: 0 errors, 7 warnings. Build passed in 3.72s.
+Full 22-test browser run was aborted under 2GB memory pressure; no pass claim. Fresh-server batches of every spec are running to avoid cumulative font/image process memory. Initial axe scan found six measured contrast nodes; corrected in 8df1e19e, fresh all-step/light+dark scan pending. Final browser results must replace this pending record before ready.
