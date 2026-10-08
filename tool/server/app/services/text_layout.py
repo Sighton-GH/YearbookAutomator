@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.services.text_color import parse_text_color
 from app.services.text_spacing import draw_tracked, tracked_bounds
 from app.services.text_effects import TextShadow, composite_text
+from app.services.name_fitting import append_once, fitting_warning
 
 FontLoader = Callable[[int], ImageFont.ImageFont]
 
@@ -27,6 +28,7 @@ class TextStyle:
     stroke_width: int = 0
     stroke_color: str = '#ffffff'
     shadow: TextShadow | None = None
+    name_fit: Literal['shrink', 'wrap'] = 'shrink'
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,12 @@ def _line_step(draw, font, size, style):
 def _fit(draw, text, load_font, start_size, min_size, width, height, kind, style):
     for size in range(max(start_size, min_size), min_size - 1, -1):
         font = load_font(size)
-        lines = [text] if kind == 'name' else _wrap(draw, text, font, width, style)
+        lines = ([text] if kind == 'name' and style.name_fit == 'shrink'
+                 else _wrap(draw, text, font, width, style))
+        too_many_lines = kind == 'name' and len(lines) > 2
+        if too_many_lines:
+            # Keep all content, even when the minimum cannot fit two lines.
+            lines = [lines[0], ' '.join(lines[1:])]
         step = _line_step(draw, font, size, style)
         bounds = []
         for i, line in enumerate(lines):
@@ -87,8 +94,10 @@ def _fit(draw, text, load_font, start_size, min_size, width, height, kind, style
                  if style.letter_spacing else draw.textbbox((0, 0), line, font=font))
             bounds.append((b[0], b[1] + i * step, b[2], b[3] + i * step))
         ink_height = max(b[3] for b in bounds) - min(b[1] for b in bounds)
-        fits = (all(_width(draw, line, font, style) <= width for line in lines)
-                and ink_height <= height)
+        fits = (not too_many_lines
+                and all(_width(draw, line, font, style) <= width for line in lines)
+                and (ink_height <= height or (kind == 'name' and style.name_fit == 'shrink'
+                                              and style.valign == 'top')))
         if fits or size == min_size:
             return font, size, lines, step, bounds, not fits
     raise AssertionError('unreachable')
@@ -127,6 +136,10 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     For quotes pass min(quote.width, mugshot.width*1.5) and mugshot.height.
     warnings is reserved for announced fallbacks in later feature helpers.
     """
+    if style.name_fit not in {'shrink', 'wrap'}:
+        raise ValueError('Name fit must be shrink or wrap')
+    if not 6 <= min_size <= 200:
+        raise ValueError('Minimum size must be 6-200')
     if not 0 <= style.stroke_width <= 20:
         raise ValueError('Stroke width must be 0-20 pixels')
     parse_text_color(style.stroke_color)
@@ -151,7 +164,8 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     if (style.valign == 'top' and style.align in {'left', 'center'}
             and parse_text_color(style.color) == (20, 30, 50)
             and style.letter_spacing == 0 and style.line_spacing is None
-            and style.stroke_width == 0 and style.shadow is None):
+            and style.stroke_width == 0 and style.shadow is None
+            and style.name_fit == 'shrink' and min_size == 8):
         from app.services.generator import _render_name, _render_wrapped_text
         if kind == 'name':
             _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size)
@@ -160,6 +174,12 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
                                  start_size=start_size, align=style.align,
                                  all_caps=all_caps, min_size=min_size,
                                  max_width=width, max_height=height, spacing=0)
+        if warnings is not None:
+            _, fitted_size, fitted_lines, _, _, overflow = _fit(
+                draw, content, load_font, start_size, min_size, width, height, kind, style)
+            if overflow:
+                append_once(warnings, fitting_warning(student, kind))
+            return TextResult(fitted_size, tuple(fitted_lines), overflow)
         return TextResult(None, ())  # Legacy path does not expose fit metadata.
     font, size, lines, step, bounds, overflow = _fit(
         draw, content, load_font, start_size, min_size, width, height, kind, style)
@@ -170,6 +190,8 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
         y += (height - ink_height) / 2 - top
     elif style.valign == 'bottom':
         y += height - ink_height - top
+    if overflow:
+        append_once(warnings, fitting_warning(student, kind))
     def paint(layer):
         layer_draw = ImageDraw.Draw(layer)
         for i, line in enumerate(lines):
