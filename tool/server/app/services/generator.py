@@ -755,6 +755,9 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     center_baby_on_face = bool(getattr(payload, "center_baby_on_face", False))
     portrait_style = PortraitStyle.from_request(payload)
     portrait_face_cache = {}
+    low_resolution_portraits = 0
+    output_scale = min(1, (payload.output_width / template_w) if payload.output_width else
+                       (payload.output_height / template_h) if payload.output_height else 1)
     baby_style = PortraitStyle(shape=payload.baby_shape, corner_radius=payload.baby_corner_radius,
                                border_width=payload.baby_border_width,
                                border_color=_parse_hex_rgb(payload.baby_border_color) or (255, 255, 255),
@@ -793,6 +796,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             if mug_path.exists() and _looks_like_image(mug_path):
                 m_img = _try_open_rgb(mug_path)
                 if m_img is not None:
+                    from app.services.print_output import portrait_upscale
+                    if portrait_upscale(m_img.size, (slot.mugshot.width, slot.mugshot.height),
+                                        portrait_style.fit, person.mugshot_focus) * output_scale > 1.5:
+                        low_resolution_portraits += 1
                     if portrait_style.is_default and person.mugshot_focus is None:
                         _paste_image(base, m_img, slot, kind="mugshot")
                     else:
@@ -956,18 +963,26 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             except Exception:
                 base = base.resize((w, h), resample=resampling)
 
+    if low_resolution_portraits and warning_cb:
+        noun = "portrait is" if low_resolution_portraits == 1 else "portraits are"
+        warning_cb(f"{low_resolution_portraits} {noun} lower resolution than this print size needs.")
+
     if output_format == "tiff":
         tick(92, "Saving TIFF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(PRINT_DPI, PRINT_DPI))
+        base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(payload.output_dpi, payload.output_dpi))
     elif output_format == "pdf":
         tick(92, "Saving PDF")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(temp_out_path, format="PDF", resolution=PRINT_DPI)
+        if payload.crop_marks:
+            from app.services.print_output import save_pdf_with_crop_marks
+            save_pdf_with_crop_marks(base, temp_out_path, payload.output_dpi)
+        else:
+            base.save(temp_out_path, format="PDF", resolution=payload.output_dpi)
     else:
         tick(92, "Saving PNG")
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(temp_out_path, format="PNG", dpi=(PRINT_DPI, PRINT_DPI))
+        base.save(temp_out_path, format="PNG", dpi=(payload.output_dpi, payload.output_dpi))
 
     restrict_file_permissions(out_path)
 

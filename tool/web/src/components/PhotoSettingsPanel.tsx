@@ -1,5 +1,6 @@
 import type { PhotoSettings } from "../photoSettings";
-export function PhotoSettingsPanel({ settings, onChange }: {
+export function PhotoSettingsPanel({ settings, onChange, size, outputFormat }: {
+  size?: { width: number; height: number } | null; outputFormat?: string;
   settings: PhotoSettings; onChange: (settings: PhotoSettings) => void;
 }) {
   return <section className="panel"><h3>Portrait framing</h3>
@@ -12,6 +13,17 @@ export function PhotoSettingsPanel({ settings, onChange }: {
     {settings.mugshot_fit === "contain" && <label className="field"><span>Fill colour</span>
       <input type="color" value={settings.contain_fill_color ?? "#ffffff"}
         onChange={e => onChange({ ...settings, contain_fill_color: e.target.value })} /></label>}
+    <fieldset><legend>Print</legend>
+      <label className="field"><span>DPI (72 to 1200)</span><input type="number" min={72} max={1200} list="print-dpi-options"
+        value={settings.output_dpi ?? 300} onChange={e => onChange({ ...settings,
+          output_dpi: Math.max(72, Math.min(1200, Math.round(Number(e.target.value)))) })} />
+        <datalist id="print-dpi-options">{[72, 150, 300, 600].map(v => <option value={v} key={v} />)}</datalist></label>
+      {size && <p>Physical size per spread: {(size.width / (settings.output_dpi ?? 300) * 25.4).toFixed(1)} ×
+        {(size.height / (settings.output_dpi ?? 300) * 25.4).toFixed(1)} mm</p>}
+      <p className="muted small">DPI changes physical print size, not pixels. Portrait resolution warnings appear after rendering.</p>
+      <label><input type="checkbox" disabled={outputFormat !== "pdf"} checked={settings.crop_marks ?? false}
+        onChange={e => onChange({ ...settings, crop_marks: e.target.checked })} /> PDF crop marks (adds 0.25 in on each edge)</label>
+    </fieldset>
     {(["mugshot", "baby"] as const).map(kind => <fieldset key={kind}>
       <legend>{kind === "mugshot" ? "Portrait shape" : "Baby photo shape (auto rectangle masks only)"}</legend>
       <label className="field"><span>Shape</span><select value={settings[`${kind}_shape`] ?? "rect"}

@@ -165,6 +165,9 @@ class GenerationRequest(BaseModel):
         description="Optional output filename (e.g. preview.png). Defaults to output.png",
     )
 
+    output_dpi: int = Field(default=300, ge=72, le=1200)
+    crop_marks: bool = False
+
     output_width: Optional[int] = Field(
         default=None,
         ge=1,

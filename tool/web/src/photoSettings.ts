@@ -4,6 +4,8 @@ export type PhotoSettings = {
   mugshot_fit?: "cover" | "contain";
   mugshot_face_aware?: boolean;
   contain_fill_color?: string;
+  output_dpi?: number;
+  crop_marks?: boolean;
   mugshot_shape?: "rect" | "rounded" | "ellipse";
   mugshot_corner_radius?: number;
   mugshot_border_width?: number;

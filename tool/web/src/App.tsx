@@ -1,3 +1,4 @@
+import { SafeAreaPreview } from "./components/SafeAreaPreview";
 import { DEFAULT_PHOTO_SETTINGS, type PhotoSettings } from "./photoSettings";
 import { PhotoSettingsPanel } from "./components/PhotoSettingsPanel";
 import type React from "react";
@@ -243,6 +244,7 @@ export default function App({
     allowInsecureUploads: false,
   });
   const [babyEditHistory, setBabyEditHistory] = useState<NonNullable<PersistedSessionV1["babyEditHistory"]>>([]);
+  const [safeArea, setSafeArea] = useState({ show: false, bleed_mm: 3, safe_mm: 6 });
   const [photoSettings, setPhotoSettings] = useState<PhotoSettings>(DEFAULT_PHOTO_SETTINGS);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
   const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
@@ -852,7 +854,8 @@ export default function App({
       defaultBabyFilename,
       babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
-      photoSettings,
+      safeArea,
+    photoSettings,
       babyBackgroundColor,
       centerBabyOnFace,
       defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
@@ -983,6 +986,7 @@ export default function App({
       allowInsecureUploads: Boolean(session.babyIngest?.allowInsecureUploads ?? false),
     });
     setBabyEditHistory((session.babyEditHistory ?? []) as any);
+    setSafeArea(session.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
     setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...session.photoSettings });
     setBabyBackgroundColor(session.babyBackgroundColor ?? "");
     setCenterBabyOnFace(Boolean(session.centerBabyOnFace));
@@ -1435,7 +1439,8 @@ export default function App({
             allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
           });
           setBabyEditHistory((saved.babyEditHistory ?? []) as any);
-          setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+          setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
+    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
     setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
           setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
           const savedDefaultMugshots =
@@ -1675,7 +1680,8 @@ export default function App({
           allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
         });
         setBabyEditHistory((saved.babyEditHistory ?? []) as any);
-        setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+        setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
+    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
     setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         const savedDefaultMugshots =
@@ -1888,6 +1894,7 @@ export default function App({
     defaultBabyFilename,
     babyIngest,
     babyEditHistory,
+    safeArea,
     photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
@@ -1993,6 +2000,7 @@ export default function App({
     defaultQuotesSeed,
     babyIngest,
     babyEditHistory,
+    safeArea,
     photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
@@ -3216,11 +3224,15 @@ export default function App({
             <p className="canvas-sub">{activeStepMeta.description}</p>
             <div className="canvas-subheader-wing canvas-subheader-wing-right">{resetContinueButtons}</div>
           </div>
+          {activeStep === "template" && templateSize && <SafeAreaPreview size={templateSize}
+            src={templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
           {activeStep === "template" && (
             <div className="tool-tips-center tool-tips-top">
               <TipsBox tips={stepTips} />
             </div>
           )}
+          {activeStep === "template" && templateSize && <SafeAreaPreview size={templateSize}
+            src={templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
           {activeStep === "template" && (
             <div className="canvas-subnav">
               <TabBar
@@ -3426,7 +3438,7 @@ export default function App({
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
             ) : (
               <>
-              <PhotoSettingsPanel settings={photoSettings} onChange={setPhotoSettings} />
+              <PhotoSettingsPanel settings={photoSettings} onChange={setPhotoSettings} size={outputSize ?? templateSize} outputFormat={outputFormat} />
               <FinalizeStep
                 defaultQuote={defaultQuoteFallback}
                 quoteImportWarnings={quotesWarnings.filter(w => /placeholder|link|rejected|url/i.test(w))}
