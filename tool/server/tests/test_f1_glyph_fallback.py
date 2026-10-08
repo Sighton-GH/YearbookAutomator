@@ -226,3 +226,17 @@ def test_regular_fallback_stops_before_unneeded_font_files(monkeypatch):
     assert gf.fallback_path(ord('中'), ('first.ttf', 'unused.ttf')) == 'first.ttf'
     assert inspected == ['first.ttf']
     gf.fallback_path.cache_clear()
+
+def test_unusable_bitmap_fallback_is_cached_per_size(monkeypatch):
+    gf.clear_glyph_caches()
+    monkeypatch.setattr(gf, 'font_coverage', lambda _: frozenset({ord('😀')}))
+    monkeypatch.setattr(gf, 'color_font', lambda _: True)
+    loads = []
+    def unavailable(path, size):
+        loads.append((path, size)); raise OSError('unsupported bitmap strike')
+    monkeypatch.setattr(gf.ImageFont, 'truetype', unavailable)
+    assert gf.usable_fallback(ord('😀'), 24, ('bitmap.ttf',), True) is None
+    count = len(loads)
+    assert gf.usable_fallback(ord('😀'), 24, ('bitmap.ttf',), True) is None
+    assert len(loads) == count
+    gf.clear_glyph_caches()

@@ -17,7 +17,7 @@ from app.services import fonts
 from app.services.name_fitting import append_once
 
 
-@lru_cache(maxsize=4096)
+@lru_cache(maxsize=256)
 def font_coverage(path: str) -> frozenset[int]:
     try:
         with TTFont(path, lazy=True) as font:
@@ -50,11 +50,26 @@ def fallback_path(codepoint: int, paths: tuple[str, ...], prefer_color: bool = F
     return next((path for path in paths if codepoint in font_coverage(path)), None)
 
 
+@lru_cache(maxsize=256)
+def usable_fallback(codepoint: int, size: int, paths: tuple[str, ...], prefer_color: bool = False):
+    """Cache success and failure so unsupported bitmap strikes are not rescanned."""
+    first = fallback_path(codepoint, paths, prefer_color)
+    for path in ([first] if first else []) + list(paths):
+        if codepoint not in font_coverage(path):
+            continue
+        try:
+            return ImageFont.truetype(path, size), color_font(path)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def clear_glyph_caches():
     """Call after font uploads/removals or changes to installed fonts."""
     font_coverage.cache_clear()
     color_font.cache_clear()
     fallback_path.cache_clear()
+    usable_fallback.cache_clear()
 
 
 def script_kwargs(text: str, language: str | None = None,
@@ -94,7 +109,6 @@ def glyph_runs(text: str, primary, size: int, *, paths: tuple[str, ...] | None =
     paths = system_font_paths() if paths is None else paths
     coverage = font_coverage(str(primary.path)) if hasattr(primary, 'path') else frozenset()
     runs = []
-    loaded = {}
     for char in text:
         chosen, embedded, shown = primary, color_font(str(primary.path)) if hasattr(primary, 'path') else False, char
         # Formatting controls and variation selectors must stay with shaped runs.
@@ -102,19 +116,10 @@ def glyph_runs(text: str, primary, size: int, *, paths: tuple[str, ...] | None =
         wants_color = _emoji(char) and not embedded and any(
             color_font(p) and ord(char) in font_coverage(p) for p in paths)
         if (ord(char) not in coverage or wants_color) and not char.isspace() and not invisible:
-            path = fallback_path(ord(char), paths, _emoji(char))
-            ordered = iter(([path] if path else []) + list(paths))
+            fallback = usable_fallback(ord(char), size, paths, _emoji(char))
             chosen = None
-            for p in ordered:
-                if ord(char) not in font_coverage(p):
-                    continue
-                try:
-                    if p not in loaded:
-                        loaded[p] = ImageFont.truetype(p, size)
-                    chosen, embedded = loaded[p], color_font(p)
-                    break
-                except (OSError, ValueError):
-                    continue
+            if fallback is not None:
+                chosen, embedded = fallback
             if chosen is None and ord(char) in coverage:
                 chosen = primary
             if chosen is None:
