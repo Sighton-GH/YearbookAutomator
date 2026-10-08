@@ -75,7 +75,7 @@ Status means implemented and evidence gathered, not that every possible provider
 - Native background inference cannot be stopped mid-call; partial P3-07 stated above.
 - Unicode CBDT/mixed-font RTL limits remain partial F1.7.
 - Full all-control screenshot acceptance incomplete even when focused automated tests exist; UX REPORT names its coverage gaps.
-- Fresh isolated browser suite passed17specs exceptthepre-racefixF4attempt; correctedF4andfullflowrerunpass. FinalaxeandRegroupdelta/reviewremainpending. S9/S11evidenceisretained;S12workerspending. Do notcallready.
+- Fresh isolated browser suite passed17specs exceptthepre-racefixF4attempt; correctedF4andfullflowrerunpass. Final axe and Regroup delta regressions pass; final delta review and F4 worker report remain pending. S9/S11evidenceisretained;S12workerspending. Do notcallready.
 
 ## Gate record
 Baseline at untouched base: 184 backend, TS clean,lint 0 errors/7 warnings, build passed (baseline recorded separately).
@@ -92,10 +92,13 @@ Known issues and explicit semantics:
 - Excluded students are omitted from placement. Their baby editor falls back to slot 1 rather than the saved pin. This affects editing consistency, not printed placement.
 - Config import explicitly requests restore_exact. It may intentionally replace same-named source files in that workspace. Ordinary uploads without this option remain collision-safe. Editor replay validates reserved names and checks the returned name. HTTP regressions cover chained replay and explicit source replacement.
 - The independent audit examined substantial normalized diffs and fix deltas, but was not a literal every-line certification of all 202 files. Production, GPU and native provider execution remain unverified.
-- Regroup after overlapping duplication is defective on the reviewed checkpoint. Its patch and real-render retest are pending.
-- The independent cutout report describes overprinting, but the retained UI shows the baby box and portrait box at the same 80,60,241x321 coordinates. This points to detection/pairing geometry, not a demonstrated mask-resize error. Investigation remains open.
+- Regroup after overlapping duplication was defective on the reviewed checkpoint. Fixed in 03cf08a9: remove substantial duplicate overlaps before applying the cap, retain original objects for physical-pin remapping. Both-mode pin/history fixtures, backend render/XLSX comparisons and actual UI duplicate/regroup/undo/redo/render pass.
+- The cutout overprinting claim was retracted: the fictional muted-green portrait at sensitivity 30 was also detected as blue. The retained UI had equal baby/portrait coordinates, and rendering followed that geometry. Automatic sensitivity returns a separate baby ellipse. High sensitivity may create false positives; inspect the raw overlay and boxes before rendering.
 
 ## Latest stable gate checkpoint 8c43cee0
 373 backend tests pass, 19 warnings, 44.15 seconds. 68 frontend units pass. TypeScript is clean. ESLint has 0 errors and 7 warnings. Build passes in 4.17 seconds. The fresh accessibility run passes all 12 views: empty Template and the five populated steps in both themes, with no serious or critical findings. Moderate landmarks/H1/region findings remain outside this gate. Corrected F4 request assertions and a fresh 40-person, three-spread render/download pass. The other isolated browser specs pass; the earlier F4 harness race failed before the corrected rerun.
 
 S12 text controls on 3f8fbc69 have retained real-render evidence: hex/swatch colors, real font styles/weights and variable font uploads, alignment, vertical alignment, tracking, effects, quote justification/line spacing, and reset. At name wrap minimum 70, a named overflow warning appears for both students. The second line exceeds the name box and the strip's slot-union-plus-20-pixel crop cuts it. The renderer honors the minimum rather than shrinking below it; enlarge the box or lower the minimum. Minimum-6 wrap versus shrink and name line spacing are not visually established. Some People/Layout bulk and advanced variants remain unverified in the independent report.
+
+## Post-Regroup gate checkpoint 03cf08a9
+373 backend tests pass with the updated both-mode placement/render/XLSX transactions, 19 warnings, 41.84 seconds. 68 frontend units and three TSX layout integration cases pass. TypeScript clean, lint 0 errors/7 warnings, build 4.00 seconds. Layout browser regression passes in 13.6 seconds. The 12-view axe, F4 and full-flow gates passed immediately before this isolated layout delta. Final S12 F4 worker evidence and independent delta review remain pending.
