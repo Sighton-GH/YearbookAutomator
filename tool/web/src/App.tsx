@@ -2449,6 +2449,8 @@ export default function App({
     setProgress(0);
     setStatus("Picking up your render where it left off...");
     activeJobIdRef.current = saved.jobIds[saved.jobIds.length - 1] ?? null;
+    let resumedOutputs: string[] = [];
+    let resumeFailed = false;
     void resumeInflightRender(saved, {
       getStatus: generationStatus,
       listOutputs: generationListOutputs,
@@ -2459,6 +2461,8 @@ export default function App({
         setStatus(message);
       },
       onFinished: (outs, message) => {
+        resumedOutputs = outs;
+        resumeFailed = message.startsWith("Rendering stopped");
         if (outs.length > 0) {
           setOutputPaths(outs);
           setOutputPath(outs[0] || null);
@@ -2467,6 +2471,10 @@ export default function App({
         setProgress(outs.length >= saved.totalSpreads ? 100 : 0);
         setStatus(message);
       },
+    }).then(async result => {
+      if (result === "resumed" && !resumeFailed && !cancelRequestedRef.current && saved.jobIds.length < saved.totalSpreads) {
+        await handleRenderAll(saved.jobIds.length, resumedOutputs, saved.jobIds);
+      }
     }).finally(() => {
       activeJobIdRef.current = null;
       clearInflightRender();
@@ -2475,7 +2483,7 @@ export default function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  const handleRenderAll = async () => {
+  const handleRenderAll = async (resumeFrom = 0, previousOutputs: string[] = [], priorJobIds: string[] = []) => {
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
 
@@ -2490,18 +2498,18 @@ export default function App({
     const perSpread = Math.max(1, Math.min(peoplePerSpread || 1, slots.length));
     const totalSpreads = Math.max(1, Math.ceil(peopleForAll.length / perSpread));
     const outputs: string[] = [];
-    setOutputPaths([]);
-    setOutputPath(null);
+    setOutputPaths(previousOutputs);
+    setOutputPath(previousOutputs[0] ?? null);
 
     const overallStartMs = performance.now();
     const maxParallel = 1;
     const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
-    const results: (string | null)[] = Array.from({ length: totalSpreads }, () => null);
-    let completed = 0;
-    let nextIndex = 0;
+    const results: (string | null)[] = Array.from({ length: totalSpreads }, (_, i) => i < resumeFrom ? previousOutputs[i] ?? null : null);
+    let completed = resumeFrom;
+    let nextIndex = resumeFrom;
     let failed = false;
     let lastError: string | null = null;
-    const startedJobIds: string[] = [];
+    const startedJobIds: string[] = [...priorJobIds];
     const renderStartedAt = Date.now();
 
     setLoading(true);
