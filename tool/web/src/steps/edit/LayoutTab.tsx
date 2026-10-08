@@ -36,7 +36,7 @@ export function LayoutTab({
   workspaceId?: string | null;
   skipBabyPhotos?: boolean;
   templateSize: { width: number; height: number } | null;
-  onSlots: (slots: TemplateSlots[], gestureKey?: string) => void;
+  onSlots: (slots: TemplateSlots[], gestureKey?: string, order?: number[]) => void;
   previewMode: "clean" | "annotated";
   onPreviewMode: (mode: "clean" | "annotated") => void;
   annotatedPreviewUrl: string | null;
@@ -93,13 +93,14 @@ export function LayoutTab({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [regroupConfirm, setRegroupConfirm] = useState<TemplateSlots[] | null>(null);
 
+  const commitRegroup = (next: TemplateSlots[]) => onSlots(next, undefined, next.map(slot => slots.indexOf(slot)));
   const requestRegroup = () => {
     const regrouped = groupSlotsByProximity(slots, peoplePerSpread);
     if (regrouped.length < slots.length) {
       setRegroupConfirm(regrouped);
       return;
     }
-    onSlots(regrouped);
+    commitRegroup(regrouped);
     onSelectedSlot(null);
   };
   const regroupMessage = regroupConfirm
@@ -127,17 +128,17 @@ export function LayoutTab({
           <button type="button" className="chip" disabled={!slots.length} onClick={() => setRenumberClicks(renumberClicks == null ? [] : null)}>{renumberClicks == null ? "Renumber slots" : "Cancel renumber"}</button>
           {renumberClicks != null && <button type="button" className="chip" disabled={!renumberClicks.length} onClick={() => {
             const result = applyRenumberSequence(slots, renumberClicks);
-            onSlots(result.slots); onSelectedSlot(null); setRenumberClicks(null);
+            onSlots(result.slots, undefined, result.order); onSelectedSlot(null); setRenumberClicks(null);
           }}>Apply order</button>}
           <button type="button" className="chip" disabled={!templateSize || renumberClicks != null} onClick={() => {
             if (!templateSize) return;
             const result = addSlot(slots, templateSize);
-            onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+            onSlots(result.slots, undefined, result.slots.map(slot => slots.indexOf(slot))); onSelectedSlot(result.selectedIndex);
           }}>Add slot</button>
           <button type="button" className="chip" disabled={!selected || !templateSize || renumberClicks != null} onClick={() => {
             if (!templateSize || selectedSlot == null) return;
             const result = duplicateSlot(slots, selectedSlot, templateSize);
-            onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+            onSlots(result.slots, undefined, result.slots.map(slot => slots.indexOf(slot))); onSelectedSlot(result.selectedIndex);
           }}>Duplicate slot</button>
           <button type="button" className="chip danger" disabled={!selected || renumberClicks != null} onClick={() => setDeleteConfirm(true)}>Delete slot</button>
           <button
@@ -170,7 +171,7 @@ export function LayoutTab({
           onCancel={() => setDeleteConfirm(false)} onConfirm={() => {
             if (selectedSlot != null) {
               const result = deleteSlot(slots, selectedSlot);
-              onSlots(result.slots); onSelectedSlot(result.selectedIndex);
+              onSlots(result.slots, undefined, result.slots.map(slot => slots.indexOf(slot))); onSelectedSlot(result.selectedIndex);
             }
             setDeleteConfirm(false);
           }} />
@@ -182,7 +183,7 @@ export function LayoutTab({
           cancelLabel="Cancel"
           onCancel={() => setRegroupConfirm(null)}
           onConfirm={() => {
-            if (regroupConfirm) { onSlots(regroupConfirm); onSelectedSlot(null); }
+            if (regroupConfirm) { commitRegroup(regroupConfirm); onSelectedSlot(null); }
             setRegroupConfirm(null);
           }}
         />

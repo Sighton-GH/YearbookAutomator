@@ -208,7 +208,8 @@ export default function App({
   const [parseTolerance, setParseTolerance] = useState<number | undefined>(undefined);
   const [parseMinArea, setParseMinArea] = useState<number>(800);
 
-  const { slots, setSlots, resetSlots, layoutHistory, templateSize, setTemplateSize, parsedSlots, setParsedSlots } = useLayoutHistory();
+  const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
+  const { slots, setSlots, resetSlots, layoutHistory, templateSize, setTemplateSize, parsedSlots, setParsedSlots, slotAssignments, setSlotAssignments } = useLayoutHistory(placementMode);
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [peopleSwapMode, setPeopleSwapMode] = useState<"off" | "card" | "portrait">("off");
   const [pendingPeopleAdjustments, setPendingPeopleAdjustments] = useState<Record<number, import("./components/PersonInspector").PersonAdjustment>>({});
@@ -221,7 +222,6 @@ export default function App({
     setPeople(next);
   };
 
-  const [slotAssignments, setSlotAssignments] = useState<Record<number, number>>({});
   const [defaultQuotes, setDefaultQuotes] = useState<string[]>(["404 quote not found"]);
   const [defaultQuotesRandomize, setDefaultQuotesRandomize] = useState(false);
   const [defaultQuotesSeed, setDefaultQuotesSeed] = useState(0);
@@ -289,7 +289,6 @@ export default function App({
   const [peoplePerSpread, setPeoplePerSpread] = useState<number>(16);
   const [outputFormat, setOutputFormat] = useState<"png" | "pdf" | "tiff">("png");
   const [outputSize, setOutputSize] = useState<{ width: number; height: number } | null>(null);
-  const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
   const [backgroundRemovalOpsEnabled, setBackgroundRemovalOpsEnabled] = useState(false);
@@ -2158,7 +2157,7 @@ export default function App({
   ]);
 
   const slotNumberToIndex = useMemo(() => {
-    return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);
+    return computeSlotNumberToIndex(slots, placementMode, null);
   }, [slots, placementMode, templateSize?.width]);
 
   const babyBoxByPerson = useMemo(

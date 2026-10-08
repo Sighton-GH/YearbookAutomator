@@ -61,3 +61,22 @@ export function remapSlotAssignmentsAfterReorder(
   }
   return out;
 }
+
+/** Translate 1-based logical assignments via physical array identities.
+ * order[newIndex] = oldIndex; -1 denotes a newly added slot. Removed pins are dropped.
+ * Use the renderer's inferred spread width, not the image width (which may include margins).
+ */
+export function remapLogicalAssignments(
+  assignments: Record<number, number>, before: TemplateSlots[], after: TemplateSlots[],
+  mode: PlacementMode, order: number[],
+): Record<number, number> {
+  const oldIndices = computeSlotNumberToIndex(before, mode, null);
+  const newNumbers = effectiveSlotNumbers(after, mode, null);
+  const physical: Record<number, number> = {};
+  for (const [person, number] of Object.entries(assignments)) {
+    if (Number.isInteger(number) && number >= 1 && number <= oldIndices.length)
+      physical[Number(person)] = oldIndices[number - 1];
+  }
+  const remapped = remapSlotAssignmentsAfterReorder(physical, order);
+  return Object.fromEntries(Object.entries(remapped).map(([person, index]) => [person, newNumbers[index]]));
+}
