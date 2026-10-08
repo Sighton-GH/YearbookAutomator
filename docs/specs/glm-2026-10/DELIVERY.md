@@ -82,3 +82,14 @@ Baseline at untouched base: 184 backend, TS clean,lint 0 errors/7 warnings, buil
 Exact code checkpoint c891eb81: 364 backend tests passed, 19 dependency/deprecation warnings, 34.94s.
 Frontend units: 65 passed, 0 failed. TypeScript clean. ESLint: 0 errors, 7 warnings. Build passed in 3.72s.
 Full 22-test browser run was aborted under 2GB memory pressure; no pass claim. Fresh-server batches of every spec are running to avoid cumulative font/image process memory. Initial axe scan found six measured contrast nodes; corrected in 8df1e19e, fresh all-step/light+dark scan pending. Final browser results must replace this pending record before ready.
+
+## Final independent audit follow-up (7e5532ea)
+Reverified: strip pins only once, portrait detector exception fallback, ordinary same-basename protection, cleanup-owned editor names and exact replay destinations. The original normal bulk-UI overwrite claim was retracted because uploadImage already randomizes names; direct API basename collision was real and hardened.
+
+Known issues and explicit semantics:
+- Unicode coverage is bounded to32full cmaps. On the auditor's1985fonts,5distinct missingcharacters cost11.24s and9925cmap parses. Path-list caching prevents repeat scans at different fitting sizes but firstdistinctglyph latency remains. No arbitrarycacheincrease due2GBmemorybudget.
+- Name folding uses a shared, fixed Unicode13combining-range table rather than the hostPython's Unicodeversion. Later-addedmarks such asU+1AC1 stay inbothruntimes; Indiczero-classvowelsstaydistinct. NFKD/casefold relies onruntimeUnicode tables outside that explicitmarkcontract.
+- Excluded students are omitted from placement; their babyeditor falls back toslot1instead ofsavedpin, an editingconsistency limitation, not printedoutputplacement.
+- uploadImageAs config-import explicitly requests restore_exact. It may deliberately overwrite same-named source assets inthatworkspace. Normal uploads withoutrestore_exact remain collision-safe; editor replay validates reservednames and exact returnedname.
+- Independent audit examined substantial normalizeddiffs and fixdeltas but was not a literal every-linecertification ofall202files. No production/GPU/fullproviderproof.
+- Regroup overlappingduplicate defect is still awaitingworkerpatch/retest.
