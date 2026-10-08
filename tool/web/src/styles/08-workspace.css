@@ -861,3 +861,5 @@
 .roadmap-missing-reason { max-width: 90ch; margin: var(--space-3) auto 0; text-align: center; }
 
 .style-preview-card .style-preview-tag { color: #52616b; }
+
+[data-theme="dark"] button.tab-bar-item.active { color: var(--accent-contrast); }
