@@ -5,10 +5,14 @@ import {activate,uploadProject} from './helpers';
 test('no serious or critical accessibility issues across populated steps', async({page}) => {
  await activate(page); await uploadProject(page);
  const results=[];
- for(const step of ['People','Style','Generate']) {
+ for(const theme of ['light','dark']) {
+ if(theme === 'dark') await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
+ for(const step of ['Template','Uploads','People','Style','Generate']) {
   await page.getByRole('button',{name:step,exact:true}).click();
+  if(step === 'Generate') { const cancel=page.getByRole('button',{name:'Cancel',exact:true}); if(await cancel.isVisible()) await cancel.click(); }
   const scan=await new AxeBuilder({page}).analyze();
-  results.push({step,violations:scan.violations.filter(v => ['serious','critical'].includes(v.impact ?? ''))});
+  results.push({step: `${theme}-${step}`,violations:scan.violations.filter(v => ['serious','critical'].includes(v.impact ?? ''))});
+ }
  }
  fs.writeFileSync('/tmp/yearbook-axe.json', JSON.stringify(results,null,2));
  expect(results.flatMap(r => r.violations.map(v => `${r.step}: ${v.id} ${v.nodes.map(n => n.target).join(';')}`))).toEqual([]);

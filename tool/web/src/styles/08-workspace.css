@@ -859,3 +859,5 @@
 .step-continue button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .step-missing-reason { margin: 0; max-width: 48ch; color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--lh-snug); }
 .roadmap-missing-reason { max-width: 90ch; margin: var(--space-3) auto 0; text-align: center; }
+
+.style-preview-card .style-preview-tag { color: #52616b; }
