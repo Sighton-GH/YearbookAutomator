@@ -1020,7 +1020,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Apply changes?</strong>
-                <div className="muted small">Undo is not supported, but you can reset to original.</div>
+                <div className="muted small">{originalBabyPeople ? "Undo is not supported, but you can reset to original." : "Undo is not supported and no original photo is available for reset."}</div>
               </div>
               <button type="button" onClick={() => setShowApplyWarning(false)} disabled={editingBusy}>
                 Cancel

@@ -8,6 +8,7 @@ test('forty fictional students render three downloadable spreads', async ({ page
   await page.getByRole('button', { name: 'Style', exact: true }).click();
   await page.getByRole('button', { name: 'Generate', exact: true }).click();
   await page.getByRole('button', { name: 'Render all', exact: true }).click();
+  if (await page.getByRole('button', { name: 'Render anyway', exact: true }).isVisible()) await page.getByRole('button', { name: 'Render anyway', exact: true }).click();
   await expect(page.getByText('Rendered spreads: 3', { exact: true })).toBeVisible({ timeout: 60_000 });
   for (const name of ['output_01.png', 'output_02.png', 'output_03.png']) await expect(page.getByText(name, { exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
