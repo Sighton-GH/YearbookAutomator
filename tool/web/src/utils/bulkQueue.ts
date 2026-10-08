@@ -8,7 +8,7 @@ export interface QueueDeps {
   cancelJob(jobId: string): Promise<unknown>;
   fetchPhoto(filename: string): Promise<Blob>;
   centre(blob: Blob, aspect: number): Promise<Blob | null>;
-  upload(blob: Blob): Promise<string>;
+  upload(blob: Blob, index: number): Promise<string>;
   sleep(ms: number): Promise<void>;
   now(): number;
 }
@@ -63,7 +63,7 @@ export async function runBulkQueue(run: QueueRun): Promise<QueueResult> {
         if (signal.stopped) break;
         const centred = await deps.centre(blob, run.aspectFor(item.index));
         if (signal.stopped) break;
-        if (centred) output = await deps.upload(centred); else result.skipped++;
+        if (centred) output = await deps.upload(centred, item.index); else result.skipped++;
       }
       if (signal.stopped) break; // the in-flight person is not counted or applied
       if (output) {

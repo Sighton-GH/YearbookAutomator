@@ -283,6 +283,7 @@ export async function uploadImage(
   file: File,
   opts?: {
     removeBackground?: boolean;
+    editorOwned?: "preview" | "edit";
     backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
@@ -291,6 +292,7 @@ export async function uploadImage(
   const form = new FormData();
   form.append("workspace_id", workspaceId);
   form.append("kind", kind);
+  if (opts?.editorOwned) form.append("editor_owned", opts.editorOwned);
   // Ensure every upload gets a unique filename to avoid overwriting server-side
   // and to defeat browser caching for <img src> previews.
   const uniqueFileName = (() => {

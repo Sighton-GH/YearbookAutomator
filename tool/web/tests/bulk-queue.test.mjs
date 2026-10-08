@@ -55,3 +55,9 @@ test("error job status cancels nothing extra but fails once", async () => {
   const {run, calls} = base({mode: "background"}); run.deps.jobStatus = async () => ({status: "error", progress: 0, error: "bad"});
   const r = await runBulkQueue(run); assert.equal(r.failures, 1); assert.deepEqual(calls.cancel, ["j1"]);
 });
+
+test("face upload receives distinct person indices", async () => {
+  const {run} = base(); const indices=[];
+  run.deps.upload=async (_blob,index)=>{indices.push(index);return `face-${index}.png`;};
+  await runBulkQueue(run); assert.deepEqual(indices,[0,1]);
+});

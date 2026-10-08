@@ -531,7 +531,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       const blob = await cropToPngBlob(srcForCrop, croppedAreaPixels, exportSize, rotation);
       const file = new File([blob], `baby_edit_${personIndex}_${Date.now()}.png`, { type: "image/png" });
 
-      const uploadedFilename = await uploadImage(workspaceId, "baby", file);
+      const uploadedFilename = await uploadImage(workspaceId, "baby", file, {editorOwned: "edit"});
       updatePerson(editingIdx, (p) => ({ ...p, baby_photo_filename: uploadedFilename, baby_background_removal_failed: hasPreview ? false : p.baby_background_removal_failed }));
 
       try {
@@ -623,7 +623,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
         const blob = await cropToPngBlob(editingSrc, croppedAreaPixels, previewSize, rotation);
         const tmpFile = new File([blob], `baby_preview_${Date.now()}.png`, { type: "image/png" });
-        sourceFilename = await uploadImage(workspaceId, "baby", tmpFile);
+        sourceFilename = await uploadImage(workspaceId, "baby", tmpFile, {editorOwned: "preview"});
         tempFilesRef.current.push({ workspaceId, filename: sourceFilename });
       }
 

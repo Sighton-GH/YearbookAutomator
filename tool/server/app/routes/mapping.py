@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Literal
 import io
 import logging
+import uuid
+from PIL import Image
 import zipfile
 import re
 from difflib import SequenceMatcher
@@ -440,6 +442,7 @@ async def upload_image(
     file: UploadFile = File(...),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
+    editor_owned: Literal["preview", "edit"] | None = Form(None),
 ) -> dict[str, str]:
     enforce_workspace_write(request, workspace_id)
 
@@ -449,7 +452,11 @@ async def upload_image(
         remove_background = False
 
     filename = safe_filename(Path(file.filename or "").name)
-    if kind == "baby" and filename.startswith(("baby_preview_", "baby_edit_")):
+    if editor_owned is not None:
+        if kind != "baby":
+            raise HTTPException(status_code=400, detail="Editor images must be baby photos")
+        filename = f"baby_{editor_owned}_{uuid.uuid4().hex}.png"
+    elif kind == "baby" and filename.startswith(("baby_preview_", "baby_edit_")):
         filename = "uploaded_" + filename
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
@@ -459,6 +466,16 @@ async def upload_image(
 
     raw = await file.read()
     validate_image_bytes(raw, label="Uploaded image")
+    if editor_owned is not None:
+        with Image.open(io.BytesIO(raw)) as image:
+            encoded = io.BytesIO()
+            image.convert("RGBA").save(encoded, "PNG")
+            raw = encoded.getvalue()
+    else:
+        # Source uploads never replace an existing student asset by basename.
+        target = workspace_dir(workspace_id) / subdir / filename
+        if target.exists():
+            filename = f"{Path(filename).stem}_{uuid.uuid4().hex}{Path(filename).suffix}"
 
     if kind == "baby" and remove_background:
         reserved, reason = try_reserve_bg_job(workspace_id)

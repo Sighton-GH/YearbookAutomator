@@ -45,7 +45,7 @@ export function BulkPeopleToolbar({people, selected, onSelection, locked, worksp
           jobStatus: removeBackgroundStatus, cancelJob: cancelRemoveBackgroundJob,
           fetchPhoto: async filename => {const r = await fetch(assetUrl(ws, "baby", filename)); if (!r.ok) throw new Error("Could not load the baby photo"); return r.blob();},
           centre: faceCentreImage,
-          upload: blob => uploadImage(ws, "baby", new File([blob], "face-centred.png", {type: "image/png"})),
+          upload: (blob, index) => uploadImage(ws, "baby", new File([blob], `face-centred-${index}-${crypto.randomUUID()}.png`, {type: "image/png"}), {editorOwned: "edit"}),
           sleep: ms => new Promise(resolve => setTimeout(resolve, ms)), now: () => Date.now(),
         },
         aspectFor: index => latest.current.babyAspectFor(index),
