@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.services.text_color import parse_text_color
 from app.services.text_spacing import draw_tracked, tracked_bounds
+from app.services.text_effects import TextShadow, composite_text
 
 FontLoader = Callable[[int], ImageFont.ImageFont]
 
@@ -23,6 +24,9 @@ class TextStyle:
     color: str = '#141e32'
     line_spacing: float | None = None
     letter_spacing: int = 0
+    stroke_width: int = 0
+    stroke_color: str = '#ffffff'
+    shadow: TextShadow | None = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +100,8 @@ def _draw_line(draw, xy, text, font, style, width, justify):
         words = text.split()
         gap = (width - sum(_width(draw, word, font, style) for word in words)) / (len(words) - 1)
         for word in words:
-            draw_tracked(draw, (x, y), word, font, style.letter_spacing, fill=parse_text_color(style.color), anchor='la')
+            draw_tracked(draw, (x, y), word, font, style.letter_spacing, fill=parse_text_color(style.color), anchor='la',
+                         stroke_width=style.stroke_width, stroke_fill=parse_text_color(style.stroke_color))
             x += _width(draw, word, font, style) + gap
     else:
         if style.align == 'center':
@@ -107,7 +112,8 @@ def _draw_line(draw, xy, text, font, style, width, justify):
             anchor = 'ra'
         else:
             anchor = 'la'
-        draw_tracked(draw, (x, y), text, font, style.letter_spacing, fill=parse_text_color(style.color), anchor=anchor)
+        draw_tracked(draw, (x, y), text, font, style.letter_spacing, fill=parse_text_color(style.color), anchor=anchor,
+                     stroke_width=style.stroke_width, stroke_fill=parse_text_color(style.stroke_color))
 
 
 def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
@@ -121,6 +127,9 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     For quotes pass min(quote.width, mugshot.width*1.5) and mugshot.height.
     warnings is reserved for announced fallbacks in later feature helpers.
     """
+    if not 0 <= style.stroke_width <= 20:
+        raise ValueError('Stroke width must be 0-20 pixels')
+    parse_text_color(style.stroke_color)
     if not -5 <= style.letter_spacing <= 50:
         raise ValueError('Letter spacing must be -5 to 50 pixels')
     if style.line_spacing is not None and not 0.5 <= style.line_spacing <= 3:
@@ -141,7 +150,8 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     # Preserve legacy ascender positioning, fitting and default spacing.
     if (style.valign == 'top' and style.align in {'left', 'center'}
             and parse_text_color(style.color) == (20, 30, 50)
-            and style.letter_spacing == 0 and style.line_spacing is None):
+            and style.letter_spacing == 0 and style.line_spacing is None
+            and style.stroke_width == 0 and style.shadow is None):
         from app.services.generator import _render_name, _render_wrapped_text
         if kind == 'name':
             _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size)
@@ -160,7 +170,10 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
         y += (height - ink_height) / 2 - top
     elif style.valign == 'bottom':
         y += height - ink_height - top
-    for i, line in enumerate(lines):
-        _draw_line(draw, (box.x, y + i * step), line, font, style, width,
-                   style.align == 'justify' and i < len(lines) - 1)
+    def paint(layer):
+        layer_draw = ImageDraw.Draw(layer)
+        for i, line in enumerate(lines):
+            _draw_line(layer_draw, (box.x, y + i * step), line, font, style, width,
+                       style.align == 'justify' and i < len(lines) - 1)
+    composite_text(image, paint, style.shadow)
     return TextResult(size, tuple(lines), overflow)
