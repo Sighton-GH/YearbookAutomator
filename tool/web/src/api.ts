@@ -500,6 +500,12 @@ export async function startRemoveBackgroundJob(params: {
   return data;
 }
 
+export async function cleanupEditorImages(workspaceId: string, candidates: string[], protectedFilenames: string[]) {
+  await axios.post("/api/mapping/editor-images-cleanup", {
+    workspace_id: workspaceId, candidates, protected_filenames: protectedFilenames,
+  });
+}
+
 export async function cancelRemoveBackgroundJob(jobId: string) {
   const form = new FormData();
   form.append("job_id", jobId);

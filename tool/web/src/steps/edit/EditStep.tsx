@@ -56,6 +56,7 @@ export function EditStep({
   babyBackgroundColor,
   babyBackgroundMode,
   onBabyEditHistoryAdd,
+  babyEditorProtectedFilenames,
   babyMaskBox,
   allowInsecureUploads,
   setStatus,
@@ -129,6 +130,7 @@ export function EditStep({
   defaultBabyFilename: string | null;
   babyBackgroundColor: string;
   babyBackgroundMode: BackgroundMode;
+  babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
   allowInsecureUploads: boolean;
@@ -216,6 +218,7 @@ export function EditStep({
           babyBackgroundColor={babyBackgroundColor}
           babyBackgroundMode={babyBackgroundMode}
           onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+          babyEditorProtectedFilenames={babyEditorProtectedFilenames}
           babyMaskBox={babyMaskBox}
           allowInsecureUploads={allowInsecureUploads}
           setStatus={setStatus}

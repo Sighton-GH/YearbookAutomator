@@ -136,6 +136,11 @@ def update_job(
         job["updated_at"] = now
 
 
+def list_jobs() -> list[dict]:
+    with _lock:
+        return [dict(job) for job in _jobs.values()]
+
+
 def get_job(job_id: str) -> Optional[dict]:
     with _lock:
         job = _jobs.get(job_id)

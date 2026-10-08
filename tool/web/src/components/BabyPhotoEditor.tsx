@@ -4,6 +4,7 @@ import {
   assetUrl,
   babyMaskUrl,
   cancelRemoveBackgroundJob,
+  cleanupEditorImages,
   detectFaceCenter,
   fetchRemoveBackgroundPreviewResult,
   removeBackgroundPreviewStatus,
@@ -35,6 +36,7 @@ type BabyPhotoEditorProps = {
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   originalBabyPeople?: PersonRecord[] | null;
+  babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd?: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
 };
 
@@ -51,6 +53,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setStatus,
     originalBabyPeople = null,
     onBabyEditHistoryAdd,
+    babyEditorProtectedFilenames,
   },
   ref
 ) {
@@ -78,6 +81,13 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
   const [showResetWarning, setShowResetWarning] = useState(false);
   const removeBgCancelRef = useRef(false);
   const removeBgJobRef = useRef<string | null>(null);
+  const tempFilesRef = useRef<{ workspaceId: string; filename: string }[]>([]);
+  const cleanupTempFiles = useCallback(() => {
+    const files = tempFilesRef.current.splice(0);
+    for (const file of files) {
+      void cleanupEditorImages(file.workspaceId, [file.filename], []).catch(() => { tempFilesRef.current.push(file); });
+    }
+  }, []);
   const changesSavedTimerRef = useRef<number | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -118,6 +128,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
   useEffect(() => {
     return () => {
+      cleanupTempFiles();
       removeBgCancelRef.current = true;
       if (removeBgJobRef.current) void cancelRemoveBackgroundJob(removeBgJobRef.current).catch(() => undefined);
       if (previewUrlRef.current) {
@@ -129,7 +140,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         changesSavedTimerRef.current = null;
       }
     };
-  }, []);
+  }, [cleanupTempFiles]);
 
   useEffect(() => {
     const el = editorCropRef.current;
@@ -206,6 +217,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setShowDiscardWarning(true);
       return;
     }
+    cleanupTempFiles();
     setEditingIdx(null);
     setEditingSrc(null);
     setEditingBaseSrc(null);
@@ -238,7 +250,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
-  }, [editingBusy, dirtyEdits]);
+  }, [editingBusy, dirtyEdits, cleanupTempFiles]);
 
   const discardAndCloseEditor = () => {
     if (editingBusy) return;
@@ -246,6 +258,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
+    cleanupTempFiles();
     setEditingIdx(null);
     setEditingSrc(null);
     setEditingBaseSrc(null);
@@ -538,6 +551,14 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         // best-effort
       }
 
+      if (editingFilename) {
+        // History inputs must survive config replay; protect them before React updates.
+        const otherPeople = people.filter((_, idx) => idx !== editingIdx).map((person) => person.baby_photo_filename ?? "");
+        const keep = [...babyEditorProtectedFilenames, ...otherPeople, uploadedFilename];
+        if (onBabyEditHistoryAdd) keep.push(editingFilename);
+        await cleanupEditorImages(workspaceId, [editingFilename], keep).catch(() => undefined);
+      }
+      cleanupTempFiles();
       const nextBase = `${assetUrl(workspaceId, "baby", uploadedFilename)}&nonce=${Date.now()}`;
       setEditingFilename(uploadedFilename);
       setEditingBaseSrc(nextBase);
@@ -580,6 +601,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
     setRemoveBgMessage("Starting…");
     setRemoveBgAlreadyRemoved(false);
     removeBgCancelRef.current = false;
+    cleanupTempFiles();
     try {
       let sourceFilename = editingFilename;
 
@@ -601,6 +623,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
         const blob = await cropToPngBlob(editingSrc, croppedAreaPixels, previewSize, rotation);
         const tmpFile = new File([blob], `baby_preview_${Date.now()}.png`, { type: "image/png" });
         sourceFilename = await uploadImage(workspaceId, "baby", tmpFile);
+        tempFilesRef.current.push({ workspaceId, filename: sourceFilename });
       }
 
       const { job_id } = await startRemoveBackgroundPreviewJob({
@@ -672,6 +695,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setStatus(`Background removal failed.\n${formatServerMessage(err)}`);
     } finally {
       removeBgJobRef.current = null;
+      cleanupTempFiles();
       setEditingBusy(false);
       setEditingAction(null);
     }

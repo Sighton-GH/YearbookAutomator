@@ -54,6 +54,7 @@ export function PeopleTab({
   babyBackgroundColor,
   babyBackgroundMode,
   onBabyEditHistoryAdd,
+  babyEditorProtectedFilenames,
   babyMaskBox,
   allowInsecureUploads,
   setStatus,
@@ -84,6 +85,7 @@ export function PeopleTab({
   defaultBabyFilename: string | null;
   babyBackgroundColor: string;
   babyBackgroundMode: BackgroundMode;
+  babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
   allowInsecureUploads: boolean;
@@ -521,6 +523,7 @@ export function PeopleTab({
           setStatus={setStatus}
           originalBabyPeople={originalBabyPeople}
           onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+          babyEditorProtectedFilenames={babyEditorProtectedFilenames}
         />
 
         <ConfirmDialog

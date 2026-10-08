@@ -3155,6 +3155,12 @@ export default function App({
               defaultBabyFilename={defaultBabyFilename}
               babyBackgroundColor={babyBackgroundColor}
               babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
+              babyEditorProtectedFilenames={[
+                ...babyEditHistory.flatMap((entry) => [entry.input_filename, entry.output_filename]),
+                ...(originalBabyPeople ?? []).map((person) => person.baby_photo_filename ?? ""),
+                ...(originalPeople ?? []).map((person) => person.baby_photo_filename ?? ""),
+                defaultBabyFilename ?? "",
+              ]}
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               allowInsecureUploads={allowInsecureUploads}
