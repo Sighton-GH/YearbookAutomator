@@ -239,4 +239,5 @@ def test_unusable_bitmap_fallback_is_cached_per_size(monkeypatch):
     count = len(loads)
     assert gf.usable_fallback(ord('😀'), 24, ('bitmap.ttf',), True) is None
     assert len(loads) == count
-    gf.clear_glyph_caches()
+    gf.fallback_path.cache_clear()
+    gf.usable_fallback.cache_clear()
