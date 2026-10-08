@@ -439,6 +439,8 @@ export default function App({
   const [importBabyDone, setImportBabyDone] = useState(false);
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
+  const [pendingUploads, setPendingUploads] = useState(false);
+  const [leaveImportTarget, setLeaveImportTarget] = useState<TopStep | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showResetConfirm2, setShowResetConfirm2] = useState(false);
   const [workspaceDefaultsHydrated, setWorkspaceDefaultsHydrated] = useState(false);
@@ -664,7 +666,7 @@ export default function App({
       setStatus(topStepMissing(target).join(" "));
       return;
     }
-    if (importSections && [importAnnotated, importClean, importSpreadsheet, importMugshotsZip, importBabyZip].some(Boolean) && !window.confirm("You have files selected that have not been uploaded. Leave this step?")) return;
+    if (target !== activeStep && importSections && pendingUploads) { setLeaveImportTarget(target); return; }
     setActiveStep(target);
   };
 
@@ -2169,6 +2171,12 @@ export default function App({
     [people, forceAlphabetical, slots, slotNumberToIndex, slotAssignments, peoplePerSpread]
   );
 
+  const portraitBoxByPerson = useMemo(() => babyBoxesByPerson({
+    people: forceAlphabetical ? [...people].sort(comparePeopleByLastName) : people,
+    slots: slots.map(slot => ({...slot, baby_photo: slot.mugshot})),
+    slotNumberToIndex, slotAssignments, peoplePerSpread,
+  }), [people, forceAlphabetical, slots, slotNumberToIndex, slotAssignments, peoplePerSpread]);
+
   const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
 
   const defaultMugshotAssignments = useMemo(() => {
@@ -2890,6 +2898,11 @@ export default function App({
 
   return (
     <>
+      <ConfirmDialog open={leaveImportTarget !== null} title="Leave without uploading?"
+        message="You have selected files that have not been uploaded. Leaving this step will discard those selections."
+        confirmLabel="Leave step" cancelLabel="Stay here"
+        onCancel={() => setLeaveImportTarget(null)}
+        onConfirm={() => { if (leaveImportTarget) setActiveStep(leaveImportTarget); setLeaveImportTarget(null); setPendingUploads(false); }} />
       <ConfirmDialog
         open={showResetConfirm}
         title="Reset everything?"
@@ -3227,7 +3240,7 @@ export default function App({
             <div className="canvas-subheader-wing canvas-subheader-wing-right">{resetContinueButtons}</div>
           </div>
           {activeStep === "template" && templateSize && <SafeAreaPreview size={templateSize}
-            src={templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
+            src={templateId ? templateCleanUrl(templateId) : templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
           {activeStep === "template" && (
             <div className="tool-tips-center tool-tips-top">
               <TipsBox tips={stepTips} />
@@ -3246,6 +3259,7 @@ export default function App({
           )}
           {showImportStep && (
             <ImportStep
+              onPendingUploads={setPendingUploads}
               sections={importSections!}
               workspaceId={workspaceId}
               onParsed={(resp) => {
@@ -3336,7 +3350,7 @@ export default function App({
               backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
               centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
               advancedNameMatchingEnabled={advancedNameMatchingEnabled}
-              onContinue={() => goToAdjacentStep(1)}
+              onContinue={() => { setPendingUploads(false); setActiveStep(TOP_STEPS[stepIndex(activeStep) + 1]?.id ?? activeStep); }}
             />
           )}
 
@@ -3400,6 +3414,7 @@ export default function App({
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
               portraitBox={slots.length > 0 ? slots[0].mugshot : null}
+              portraitBoxByPerson={portraitBoxByPerson}
               babyBoxByPerson={babyBoxByPerson}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}

@@ -230,6 +230,7 @@ export function ImportStep({
   centerOnFaceOpsEnabled,
   advancedNameMatchingEnabled,
   onContinue,
+  onPendingUploads,
 }: {
   /** Which pipeline cards to render. Lets the 5-step flow surface one card per step
    *  (e.g. just "template", or "quotes"+"baby" inside the People step). Defaults to all. */
@@ -311,6 +312,7 @@ export function ImportStep({
   centerOnFaceOpsEnabled: boolean;
   advancedNameMatchingEnabled: boolean;
   onContinue: () => void;
+  onPendingUploads: (pending: boolean) => void;
 }) {
   // --- Template card state ---
   const [showCustomOptions, setShowCustomOptions] = useState(false);
@@ -345,6 +347,11 @@ export function ImportStep({
   // --- Baby photos card state ---
   const [babyZip, setBabyZip] = useState<File | null>(null);
   const [babyFile, setBabyFile] = useState<File | null>(null);
+  const processedFiles = useRef<Array<File | null>>([]);
+  useEffect(() => {
+    onPendingUploads([annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile].some((file, i) => Boolean(file) && file !== processedFiles.current[i]));
+  }, [annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile, loading, onPendingUploads]);
+  useEffect(() => () => onPendingUploads(false), [onPendingUploads]);
   const [babyAdvancedNameMatch, setBabyAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
   const [babyPartialNameMatch, setBabyPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
 
@@ -542,6 +549,7 @@ export function ImportStep({
       if (onRawDebug) onRawDebug(resp.raw_debug ?? null);
       setStatus("Template parsed successfully");
       setProgress(100);
+      processedFiles.current[0] = annotated; processedFiles.current[1] = clean;
       setTemplateStage("done");
       return true;
     } catch (err: any) {
@@ -638,6 +646,7 @@ export function ImportStep({
         setStatus("Portrait mapping processing completed");
       }
       setProgress(100);
+      processedFiles.current[2] = sheet; processedFiles.current[3] = zip;
       setPortraitsStage("done");
       return nextPeople;
     } catch (err) {
@@ -716,6 +725,7 @@ export function ImportStep({
       onQuotesCompletedErrorCount(warnings.length);
       setStatus("Quote processing completed");
       setProgress(100);
+      processedFiles.current[4] = quotesSheet;
       setQuotesStage("done");
       onSkipQuotes(false);
       return resp.people;
@@ -828,6 +838,7 @@ export function ImportStep({
 
       setStatus("Baby photo processing completed");
       setProgress(100);
+      processedFiles.current[5] = babyZip; processedFiles.current[6] = babyFile;
       setBabyStage("done");
       onSkipBabyPhotos(false);
       return true;
