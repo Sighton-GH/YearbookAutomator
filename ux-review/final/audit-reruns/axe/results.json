@@ -1,0 +1,50 @@
+[
+  {
+    "step": "light-Template-upload",
+    "violations": []
+  },
+  {
+    "step": "dark-Template-upload",
+    "violations": []
+  },
+  {
+    "step": "light-Template",
+    "violations": []
+  },
+  {
+    "step": "light-Uploads",
+    "violations": []
+  },
+  {
+    "step": "light-People",
+    "violations": []
+  },
+  {
+    "step": "light-Style",
+    "violations": []
+  },
+  {
+    "step": "light-Generate",
+    "violations": []
+  },
+  {
+    "step": "dark-Template",
+    "violations": []
+  },
+  {
+    "step": "dark-Uploads",
+    "violations": []
+  },
+  {
+    "step": "dark-People",
+    "violations": []
+  },
+  {
+    "step": "dark-Style",
+    "violations": []
+  },
+  {
+    "step": "dark-Generate",
+    "violations": []
+  }
+]
