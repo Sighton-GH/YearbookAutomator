@@ -1126,6 +1126,7 @@ export function ImportStep({
               }}
             >
               <input
+                aria-label="Annotated template"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
@@ -1162,6 +1163,7 @@ export function ImportStep({
               }}
             >
               <input
+                aria-label="Clean template"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {

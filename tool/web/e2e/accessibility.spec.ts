@@ -3,8 +3,10 @@ import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
 import {activate,uploadProject} from './helpers';
 test('no serious or critical accessibility issues across populated steps', async({page}) => {
- await activate(page); await uploadProject(page);
- const results=[];
+ await activate(page);
+ const initial=await new AxeBuilder({page}).analyze();
+ const results=[{step:'light-Template-upload',violations:initial.violations.filter(v=>['serious','critical'].includes(v.impact ?? ''))}];
+ await uploadProject(page);
  for(const theme of ['light','dark']) {
  if(theme === 'dark') await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
  for(const step of ['Template','Uploads','People','Style','Generate']) {
