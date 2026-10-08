@@ -2345,6 +2345,7 @@ export default function App({
         quote_align: quoteAlign,
         baby_background_color: skipBabyPhotos ? undefined : (babyBackgroundColor.trim() ? babyBackgroundColor.trim() : undefined),
         center_baby_on_face: skipBabyPhotos ? undefined : centerBabyOnFace,
+        ...photoSettings,
         ...textStyleRequestFields(textStyles, nameAlign, quoteAlign),
       };
       if (opts.stripOnly) {

@@ -22,7 +22,13 @@ test('fictional portrait crop, framing and print settings persist', async ({ pag
   await portrait.getByRole('combobox', { name: 'Shape', exact: true }).selectOption('ellipse');
   await portrait.getByRole('spinbutton', { name: 'Border width (px)', exact: true }).fill('3');
   await portrait.getByLabel('Shadow', { exact: true }).check();
+  const outgoing = page.waitForRequest(request => request.url().endsWith('/api/generation/generate') && request.method() === 'POST');
   await page.getByRole('button', { name: /^(Re-render preview|Render preview)$/ }).click();
+  const payload = (await outgoing).postDataJSON();
+  expect(payload.output_dpi).toBe(150);
+  expect(payload.mugshot_shape).toBe('ellipse');
+  expect(payload.mugshot_border_width).toBe(3);
+  expect(payload.mugshot_shadow).toBeTruthy();
   await expect(page.getByRole('img', { name: 'preview', exact: true })).toBeVisible({timeout: 60_000});
   await expect(page.getByRole('button', { name: 'Re-render preview', exact: true })).toBeEnabled({timeout: 60000});
   await page.screenshot({ path: '/tmp/f4-render-preview.png', fullPage: true });
