@@ -17,7 +17,7 @@ from app.services import fonts
 from app.services.name_fitting import append_once
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=4096)
 def font_coverage(path: str) -> frozenset[int]:
     try:
         with TTFont(path, lazy=True) as font:
