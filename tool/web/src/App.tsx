@@ -200,6 +200,7 @@ export default function App({
   const [slots, setSlots] = useState<TemplateSlots[]>([]);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
+  const [peopleSwapMode, setPeopleSwapMode] = useState<"off" | "card" | "portrait">("off");
   const [pendingPeopleAdjustments, setPendingPeopleAdjustments] = useState<Record<number, import("./components/PersonInspector").PersonAdjustment>>({});
   const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
@@ -654,6 +655,7 @@ export default function App({
       setStatus("Complete the previous steps before jumping ahead");
       return;
     }
+    if (importSections && [importAnnotated, importClean, importSpreadsheet, importMugshotsZip, importBabyZip].some(Boolean) && !window.confirm("You have files selected that have not been uploaded. Leave this step?")) return;
     setActiveStep(target);
   };
 
@@ -742,6 +744,7 @@ export default function App({
     setOriginalPeople(null);
     setRenderConfirmed(false);
     setPendingPeopleAdjustments({});
+    setPeopleSwapMode("off");
     setOriginalBabyPeople(null);
     setRawDebug(null);
     setAllowInsecureReviewResults(false);
@@ -822,6 +825,7 @@ export default function App({
       },
       people,
       pendingPeopleAdjustments,
+      peopleSwapMode,
       originalPeople: originalPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
       originalBabyPeople: originalBabyPeople?.map(({index, mugshot_filename, baby_photo_filename}) => ({index, mugshot_filename, baby_photo_filename})),
       slotAssignments,
@@ -938,6 +942,7 @@ export default function App({
     setPeople(session.people ?? []);
     setRenderConfirmed(Boolean(session.renderConfirmed));
     setPendingPeopleAdjustments(session.pendingPeopleAdjustments ?? {});
+    setPeopleSwapMode(session.peopleSwapMode ?? "off");
     restoreOriginals(session);
     setSlotAssignments(session.slotAssignments ?? {});
     setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
@@ -1384,6 +1389,7 @@ export default function App({
           setPeople(saved.people ?? []);
         setRenderConfirmed(Boolean(saved.renderConfirmed));
         setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
+        setPeopleSwapMode(saved.peopleSwapMode ?? "off");
           restoreOriginals(saved);
           setSlotAssignments(saved.slotAssignments ?? {});
           setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
@@ -1617,6 +1623,7 @@ export default function App({
         setPeople(saved.people ?? []);
         setRenderConfirmed(Boolean(saved.renderConfirmed));
         setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
+        setPeopleSwapMode(saved.peopleSwapMode ?? "off");
         restoreOriginals(saved);
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
@@ -3272,6 +3279,8 @@ export default function App({
               people={people}
               setPeople={setPeople}
               pendingPeopleAdjustments={pendingPeopleAdjustments}
+              peopleSwapMode={peopleSwapMode}
+              onPeopleSwapMode={setPeopleSwapMode}
               onPendingPeopleAdjustments={setPendingPeopleAdjustments}
               originalPeople={originalPeople}
               setOriginalPeople={setOriginalPeople}

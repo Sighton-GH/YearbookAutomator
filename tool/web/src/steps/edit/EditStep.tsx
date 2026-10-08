@@ -36,6 +36,8 @@ export function EditStep({
   people,
   setPeople,
   pendingPeopleAdjustments,
+  peopleSwapMode,
+  onPeopleSwapMode,
   onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
@@ -113,6 +115,8 @@ export function EditStep({
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  peopleSwapMode: "off" | "card" | "portrait";
+  onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
   pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
   onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
@@ -204,6 +208,8 @@ export function EditStep({
           people={people}
           setPeople={setPeople}
           pendingPeopleAdjustments={pendingPeopleAdjustments}
+          peopleSwapMode={peopleSwapMode}
+          onPeopleSwapMode={onPeopleSwapMode}
           onPendingPeopleAdjustments={onPendingPeopleAdjustments}
           originalPeople={originalPeople}
           setOriginalPeople={setOriginalPeople}

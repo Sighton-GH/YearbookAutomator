@@ -25,7 +25,7 @@ import { PersonInspector, type PersonAdjustment } from "../../components/PersonI
 import { formatServerMessage } from "../../configFile";
 import type { PersistedSessionV1 } from "../../session";
 
-type SwapMode = "off" | "card" | "portrait";
+
 
 export function PeopleTab({
   workspaceId,
@@ -34,6 +34,8 @@ export function PeopleTab({
   people,
   setPeople,
   pendingPeopleAdjustments,
+  peopleSwapMode,
+  onPeopleSwapMode,
   onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
@@ -68,6 +70,8 @@ export function PeopleTab({
   skipBabyPhotos: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  peopleSwapMode: "off" | "card" | "portrait";
+  onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
   pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
   onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
@@ -99,7 +103,8 @@ export function PeopleTab({
   loading: boolean;
 }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [swapMode, setSwapMode] = useState<SwapMode>("off");
+  const swapMode = peopleSwapMode;
+  const setSwapMode = onPeopleSwapMode;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [swapsPerformed, setSwapsPerformed] = useState(false);

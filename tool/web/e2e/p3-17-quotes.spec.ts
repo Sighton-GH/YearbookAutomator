@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { activate, uploadProject } from './helpers';
 test('empty quote uses a placeholder and explicit blank is available', async ({page}) => {
   await activate(page); await uploadProject(page);
-  await page.getByText('José García', {exact:true}).first().click();
+  await page.locator('.people-card-selectable').first().click();
   const editor = page.locator('.pi-quote textarea');
   await editor.fill('');
   await expect(editor).toHaveValue('');

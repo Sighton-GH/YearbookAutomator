@@ -35,6 +35,7 @@ export type PersistedSessionV1 = {
     allowInsecureUploads?: boolean;
   };
   people: PersonRecord[];
+  peopleSwapMode?: "off" | "card" | "portrait";
   pendingPeopleAdjustments?: Record<number, import("./components/PersonInspector").PersonAdjustment>;
   originalPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
   originalBabyPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename">>;
