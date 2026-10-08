@@ -10,6 +10,9 @@ export function TemplatePreview({
   selectedSlot,
   onSelectSlot,
   onUpdate,
+  slotNumbers,
+  renumbering = false,
+  renumberClicks = [],
 }: {
   slots: TemplateSlots[];
   size: { width: number; height: number } | null;
@@ -17,6 +20,9 @@ export function TemplatePreview({
   selectedSlot?: number | null;
   onSelectSlot?: (idx: number) => void;
   onUpdate?: (slots: TemplateSlots[]) => void;
+  slotNumbers?: number[];
+  renumbering?: boolean;
+  renumberClicks?: number[];
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<{
@@ -64,6 +70,7 @@ export function TemplatePreview({
     evt.preventDefault();
     evt.stopPropagation();
     if (onSelectSlot) onSelectSlot(slotIdx);
+    if (renumbering) return;
     const point = clientToSvg(evt);
     setDrag({ slotIdx, part, mode, handle, startBox: { ...slots[slotIdx][part] }, origin: point });
   };
@@ -160,6 +167,7 @@ export function TemplatePreview({
           const isSelected = selectedSlot === i;
           return (
             <g key={i}>
+              <text x={slot.mugshot.x + 8} y={slot.mugshot.y + 28} fontSize={28} fill="white" stroke="#0f172a" strokeWidth={1} style={{ pointerEvents: "none" }}>{slotNumbers?.[i] ?? i + 1}{renumberClicks.includes(i) ? ` (${renumberClicks.indexOf(i) + 1})` : ""}</text>
               {(["mugshot", "baby_photo", "name", "quote"] as (SlotBoxKind)[]).map((part) => (
                 <g key={part}>
                   <rect

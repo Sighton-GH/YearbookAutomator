@@ -6,6 +6,8 @@ import { TemplatePreview } from "../../components/TemplatePreview";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Inspector } from "../../components/Inspector";
 import { SlotInspectorFields } from "../../components/SlotInspectorFields";
+import type { PlacementMode } from "../../types";
+import { applyRenumberSequence, effectiveSlotNumbers } from "../../utils/layout/slotNumbering";
 import { addSlot, duplicateSlot, deleteSlot, type SlotKey } from "../../utils/layout/slotOps";
 import { groupSlotsByProximity } from "../../utils/slots";
 
@@ -23,6 +25,7 @@ export function LayoutTab({
   peoplePerSpread,
   parsedSlots,
   rawDebug,
+  placementMode = "left_then_right",
 }: {
   slots: TemplateSlots[];
   templateSize: { width: number; height: number } | null;
@@ -37,7 +40,10 @@ export function LayoutTab({
   peoplePerSpread: number;
   parsedSlots: TemplateSlots[];
   rawDebug: RawParseDebug | null;
+  placementMode?: PlacementMode;
 }) {
+  const [renumberClicks, setRenumberClicks] = useState<number[] | null>(null);
+  const numbers = effectiveSlotNumbers(slots, placementMode, null);
   const selected = selectedSlot != null ? slots[selectedSlot] : null;
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [regroupConfirm, setRegroupConfirm] = useState<TemplateSlots[] | null>(null);
@@ -58,6 +64,11 @@ export function LayoutTab({
     <div className="layout-with-inspector">
       <div className="stack" style={{ gap: 12 }}>
         <div className="preview-toggle">
+          <button type="button" className="chip" disabled={!slots.length} onClick={() => setRenumberClicks(renumberClicks == null ? [] : null)}>{renumberClicks == null ? "Renumber slots" : "Cancel renumber"}</button>
+          {renumberClicks != null && <button type="button" className="chip" disabled={!renumberClicks.length} onClick={() => {
+            const result = applyRenumberSequence(slots, renumberClicks);
+            onSlots(result.slots); onSelectedSlot(null); setRenumberClicks(null);
+          }}>Apply order</button>}
           <button type="button" className="chip" disabled={!templateSize} onClick={() => {
             if (!templateSize) return;
             const result = addSlot(slots, templateSize);
@@ -116,15 +127,22 @@ export function LayoutTab({
           }}
         />
 
+        {renumberClicks != null && <p className="muted small">Click slots in the desired order ({renumberClicks.length} chosen). Unchosen slots follow. Left-then-right placement still sorts by page and position.</p>}
         <TemplatePreview
           slots={slots}
+          slotNumbers={numbers}
+          renumbering={renumberClicks != null}
+          renumberClicks={renumberClicks ?? []}
           size={templateSize}
           onUpdate={onSlots}
           backgroundUrl={
             previewMode === "annotated" ? annotatedPreviewUrl ?? templatePreviewUrl : cleanPreviewUrl ?? templatePreviewUrl
           }
           selectedSlot={selectedSlot}
-          onSelectSlot={(idx) => onSelectedSlot(idx)}
+          onSelectSlot={(idx) => {
+            if (renumberClicks != null) setRenumberClicks((prev) => prev?.includes(idx) ? prev : [...(prev ?? []), idx]);
+            else onSelectedSlot(idx);
+          }}
         />
 
         {rawDebug && (

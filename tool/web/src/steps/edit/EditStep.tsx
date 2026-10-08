@@ -1,7 +1,7 @@
 import type React from "react";
 import { LayoutGrid, Palette, Users } from "lucide-react";
 import type { BackgroundMode, Box, PersonRecord, RawParseDebug, TemplateSlots } from "../../api";
-import type { Align, FontWeight } from "../../types";
+import type { Align, FontWeight, PlacementMode } from "../../types";
 import type { PersistedSessionV1 } from "../../session";
 import { TabBar, type TabBarItem } from "../../components/TabBar";
 import { LayoutTab } from "./LayoutTab";
@@ -31,6 +31,7 @@ export function EditStep({
   peoplePerSpread,
   parsedSlots,
   rawDebug,
+  placementMode,
   // People tab
   workspaceId,
   people,
@@ -112,6 +113,7 @@ export function EditStep({
   peoplePerSpread: number;
   parsedSlots: TemplateSlots[];
   rawDebug: RawParseDebug | null;
+  placementMode?: PlacementMode;
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
@@ -197,6 +199,7 @@ export function EditStep({
           peoplePerSpread={peoplePerSpread}
           parsedSlots={parsedSlots}
           rawDebug={rawDebug}
+          placementMode={placementMode}
         />
       )}
 

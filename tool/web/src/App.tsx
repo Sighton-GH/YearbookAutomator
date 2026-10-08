@@ -3269,6 +3269,7 @@ export default function App({
               skipBabyPhotos={skipBabyPhotos}
               slots={slots}
               templateSize={templateSize}
+              placementMode={placementMode}
               onSlots={setSlots}
               previewMode={previewMode}
               onPreviewMode={setPreviewMode}
