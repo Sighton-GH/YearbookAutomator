@@ -6,12 +6,17 @@ test('no serious or critical accessibility issues across populated steps', async
  await activate(page);
  const initial=await new AxeBuilder({page}).analyze();
  const results=[{step:'light-Template-upload',violations:initial.violations.filter(v=>['serious','critical'].includes(v.impact ?? ''))}];
+ await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
+ const initialDark=await new AxeBuilder({page}).analyze();
+ results.push({step:'dark-Template-upload',violations:initialDark.violations.filter(v=>['serious','critical'].includes(v.impact ?? ''))});
+ await page.getByRole('button',{name:'Switch to light theme',exact:true}).click();
  await uploadProject(page);
  for(const theme of ['light','dark']) {
  if(theme === 'dark') await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
  for(const step of ['Template','Uploads','People','Style','Generate']) {
   await page.getByRole('button',{name:step,exact:true}).click();
   if(step === 'Generate') { const cancel=page.getByRole('button',{name:'Cancel',exact:true}); if(await cancel.isVisible()) await cancel.click(); }
+  await page.screenshot({path:`/tmp/yearbook-axe-final-${theme}-${step}.png`,fullPage:true});
   const scan=await new AxeBuilder({page}).analyze();
   results.push({step: `${theme}-${step}`,violations:scan.violations.filter(v => ['serious','critical'].includes(v.impact ?? ''))});
  }
