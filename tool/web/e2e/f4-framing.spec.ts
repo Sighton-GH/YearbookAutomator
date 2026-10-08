@@ -16,6 +16,9 @@ test('fictional portrait crop, framing and print settings persist', async ({ pag
 
   await page.getByRole('button', { name: 'Style', exact: true }).click();
   await page.getByRole('button', { name: 'Generate', exact: true }).click();
+  // Let the initial automatic preview finish before changing print settings.
+  // Otherwise its in-flight defaults request can be mistaken for this rerender.
+  await expect(page.getByRole('button', { name: 'Re-render preview', exact: true })).toBeEnabled({timeout:60000});
   await page.getByLabel('DPI (72 to 1200)', { exact: true }).fill('150');
   const portrait = page.getByRole('group', { name: 'Portrait shape', exact: true });
   await page.getByText('Portrait shape, border and shadow', { exact: true }).click();
