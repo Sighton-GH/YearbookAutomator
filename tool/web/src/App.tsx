@@ -73,6 +73,12 @@ import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { cropToPngBlob } from "./utils/image";
 import { groupSlotsByProximity } from "./utils/slots";
+import {
+  clearInflightRender,
+  loadInflightRender,
+  resumeInflightRender,
+  saveInflightRender,
+} from "./utils/inflightRender";
 import { comparePeopleByLastName, computeSlotNumberToIndex } from "./utils/placement";
 import { makeRng } from "./utils/random";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
@@ -2167,6 +2173,7 @@ export default function App({
     suppressStatus?: boolean;
     manageLoading?: boolean;
     onError?: (message: string) => void;
+    onJobStarted?: (jobId: string) => void;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
     const manageLoading = opts.manageLoading ?? true;
@@ -2249,6 +2256,7 @@ export default function App({
 
       const jobId = gen.jobId;
       activeJobIdRef.current = jobId;
+      opts.onJobStarted?.(jobId);
       if (opts.countUsage && gen.usage) setUsageInfo(gen.usage);
 
       const jobStartMs = performance.now();
@@ -2409,6 +2417,47 @@ export default function App({
     });
   };
 
+  // P3-13: after a reload, re-attach to a Render all that was still running.
+  const resumeCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!workspaceId || resumeCheckedRef.current) return;
+    resumeCheckedRef.current = true;
+    const saved = loadInflightRender();
+    if (!saved) return;
+    if (saved.workspaceId !== workspaceId) {
+      clearInflightRender();
+      return;
+    }
+    setLoading(true);
+    setProgress(0);
+    setStatus("Picking up your render where it left off...");
+    activeJobIdRef.current = saved.jobIds[saved.jobIds.length - 1] ?? null;
+    void resumeInflightRender(saved, {
+      getStatus: generationStatus,
+      listOutputs: generationListOutputs,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      isCancelled: () => cancelRequestedRef.current,
+      onProgress: (pct, message) => {
+        setProgress(pct);
+        setStatus(message);
+      },
+      onFinished: (outs, message) => {
+        if (outs.length > 0) {
+          setOutputPaths(outs);
+          setOutputPath(outs[0] || null);
+          setOutputNonce((n) => n + 1);
+        }
+        setProgress(outs.length >= saved.totalSpreads ? 100 : 0);
+        setStatus(message);
+      },
+    }).finally(() => {
+      activeJobIdRef.current = null;
+      clearInflightRender();
+      setLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
   const handleRenderAll = async () => {
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
@@ -2435,6 +2484,8 @@ export default function App({
     let nextIndex = 0;
     let failed = false;
     let lastError: string | null = null;
+    const startedJobIds: string[] = [];
+    const renderStartedAt = Date.now();
 
     setLoading(true);
     setProgress(0);
@@ -2467,6 +2518,10 @@ export default function App({
           onError: (message) => {
             lastError = message;
           },
+          onJobStarted: (jobId) => {
+            startedJobIds.push(jobId);
+            saveInflightRender({ workspaceId, jobIds: [...startedJobIds], totalSpreads, startedAt: renderStartedAt });
+          },
         });
 
         if (!out) {
@@ -2485,6 +2540,7 @@ export default function App({
 
     const workers = Array.from({ length: Math.min(maxParallel, totalSpreads) }, () => worker());
     await Promise.all(workers);
+    clearInflightRender();
 
     if (failed) {
       if (cancelRequestedRef.current) {

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "serve": "node production-server.js",
     "test:server": "node --test tests/production-server.test.js",
-    "test:unit": "node --test tests/replay-fallback.test.ts",
+    "test:inflight": "node --experimental-strip-types --test tests/inflight-render.test.mjs",
     "lint": "eslint .",
     "e2e": "playwright test",
     "test:unit": "node --test tests/*.test.*"
