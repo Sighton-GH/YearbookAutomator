@@ -977,24 +977,27 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         noun = "portrait is" if low_resolution_portraits == 1 else "portraits are"
         warning_cb(f"{low_resolution_portraits} {noun} lower resolution than this print size needs.")
 
-    if output_format == "tiff":
-        tick(92, "Saving TIFF")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(payload.output_dpi, payload.output_dpi))
-    elif output_format == "pdf":
-        tick(92, "Saving PDF")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        if payload.crop_marks:
-            from app.services.print_output import save_pdf_with_crop_marks
-            save_pdf_with_crop_marks(base, temp_out_path, payload.output_dpi)
+    try:
+        if output_format == "tiff":
+            tick(92, "Saving TIFF")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(payload.output_dpi, payload.output_dpi))
+        elif output_format == "pdf":
+            tick(92, "Saving PDF")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            if payload.crop_marks:
+                from app.services.print_output import save_pdf_with_crop_marks
+                save_pdf_with_crop_marks(base, temp_out_path, payload.output_dpi)
+            else:
+                base.save(temp_out_path, format="PDF", resolution=payload.output_dpi)
         else:
-            base.save(temp_out_path, format="PDF", resolution=payload.output_dpi)
-    else:
-        tick(92, "Saving PNG")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(temp_out_path, format="PNG", dpi=(payload.output_dpi, payload.output_dpi))
+            tick(92, "Saving PNG")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            base.save(temp_out_path, format="PNG", dpi=(payload.output_dpi, payload.output_dpi))
 
-    restrict_file_permissions(temp_out_path)
-    temp_out_path.replace(out_path)
-    tick(100, "Done")
+        restrict_file_permissions(temp_out_path)
+        temp_out_path.replace(out_path)
+        tick(100, "Done")
+    finally:
+        temp_out_path.unlink(missing_ok=True)
     return out_path
