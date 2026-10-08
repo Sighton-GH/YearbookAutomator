@@ -6,6 +6,7 @@ import { TemplatePreview } from "../../components/TemplatePreview";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Inspector } from "../../components/Inspector";
 import { SlotInspectorFields } from "../../components/SlotInspectorFields";
+import { historyShortcut } from "../../utils/layout/history";
 import type { PlacementMode } from "../../types";
 import { applyRenumberSequence, effectiveSlotNumbers } from "../../utils/layout/slotNumbering";
 import { addSlot, duplicateSlot, deleteSlot, type SlotKey } from "../../utils/layout/slotOps";
@@ -25,6 +26,7 @@ export function LayoutTab({
   peoplePerSpread,
   parsedSlots,
   rawDebug,
+  layoutHistory,
   placementMode = "left_then_right",
 }: {
   slots: TemplateSlots[];
@@ -41,6 +43,7 @@ export function LayoutTab({
   parsedSlots: TemplateSlots[];
   rawDebug: RawParseDebug | null;
   placementMode?: PlacementMode;
+  layoutHistory?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }) {
   const [renumberClicks, setRenumberClicks] = useState<number[] | null>(null);
   const numbers = effectiveSlotNumbers(slots, placementMode, null);
@@ -61,9 +64,17 @@ export function LayoutTab({
     : undefined;
 
   return (
-    <div className="layout-with-inspector">
+    <div className="layout-with-inspector" onKeyDown={event => {
+      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable=true]")) return;
+      const action = historyShortcut(event);
+      if (action && layoutHistory) {
+        event.preventDefault(); setRenumberClicks(null); onSelectedSlot(null); layoutHistory[action]();
+      }
+    }}>
       <div className="stack" style={{ gap: 12 }}>
         <div className="preview-toggle">
+          <button type="button" className="chip" disabled={!layoutHistory?.canUndo} onClick={() => { setRenumberClicks(null); onSelectedSlot(null); layoutHistory?.undo(); }}>Undo layout</button>
+          <button type="button" className="chip" disabled={!layoutHistory?.canRedo} onClick={() => { setRenumberClicks(null); onSelectedSlot(null); layoutHistory?.redo(); }}>Redo layout</button>
           <button type="button" className="chip" disabled={!slots.length} onClick={() => setRenumberClicks(renumberClicks == null ? [] : null)}>{renumberClicks == null ? "Renumber slots" : "Cancel renumber"}</button>
           {renumberClicks != null && <button type="button" className="chip" disabled={!renumberClicks.length} onClick={() => {
             const result = applyRenumberSequence(slots, renumberClicks);

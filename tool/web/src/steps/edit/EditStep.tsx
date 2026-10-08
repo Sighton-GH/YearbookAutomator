@@ -32,6 +32,7 @@ export function EditStep({
   parsedSlots,
   rawDebug,
   placementMode,
+  layoutHistory,
   // People tab
   workspaceId,
   people,
@@ -114,6 +115,7 @@ export function EditStep({
   parsedSlots: TemplateSlots[];
   rawDebug: RawParseDebug | null;
   placementMode?: PlacementMode;
+  layoutHistory?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
@@ -200,6 +202,7 @@ export function EditStep({
           parsedSlots={parsedSlots}
           rawDebug={rawDebug}
           placementMode={placementMode}
+          layoutHistory={layoutHistory}
         />
       )}
 

@@ -1,5 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutHistory } from "./utils/layout/useLayoutHistory";
 import { useDialogFocus } from "./utils/dialogFocus";
 import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
@@ -199,8 +200,7 @@ export default function App({
   const [parseQuoteColor, setParseQuoteColor] = useState<string>("");
   const [parseMinArea, setParseMinArea] = useState<number>(800);
 
-  const [slots, setSlots] = useState<TemplateSlots[]>([]);
-  const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
+  const { slots, setSlots, resetSlots, layoutHistory, templateSize, setTemplateSize, parsedSlots, setParsedSlots } = useLayoutHistory();
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [peopleSwapMode, setPeopleSwapMode] = useState<"off" | "card" | "portrait">("off");
   const [pendingPeopleAdjustments, setPendingPeopleAdjustments] = useState<Record<number, import("./components/PersonInspector").PersonAdjustment>>({});
@@ -281,7 +281,6 @@ export default function App({
   const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
-  const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
   const [backgroundRemovalOpsEnabled, setBackgroundRemovalOpsEnabled] = useState(false);
   const [centerOnFaceOpsEnabled, setCenterOnFaceOpsEnabled] = useState(false);
   const [quotesFeatureEnabled, setQuotesFeatureEnabled] = useState(true);
@@ -680,7 +679,7 @@ export default function App({
     setParseNameColor("");
     setParseQuoteColor("");
     setParseMinArea(800);
-    setSlots([]);
+    resetSlots([]);
     setParsedSlots([]);
     setTemplateSize(null);
     setNamingPattern(defaultNamingPattern);
@@ -933,7 +932,7 @@ export default function App({
     setAdvancedNameMatch(Boolean(session.portraitsIngest?.advancedNameMatch ?? true));
     setAllowInsecureUploads(Boolean(session.portraitsIngest?.allowInsecureUploads));
 
-    setSlots(session.slots ?? []);
+    resetSlots(session.slots ?? []);
     setParsedSlots(session.parsedSlots ?? []);
     setTemplateSize(session.templateSize ?? null);
     setPeople(session.people ?? []);
@@ -1377,7 +1376,7 @@ export default function App({
           setParseNameColor(saved.templateParse?.nameColor ?? "");
           setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
           setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-          setSlots(saved.slots ?? []);
+          resetSlots(saved.slots ?? []);
           setParsedSlots(saved.parsedSlots ?? []);
           setTemplateSize(saved.templateSize ?? null);
           setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
@@ -1488,7 +1487,7 @@ export default function App({
     return () => {
       canceled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, resetSlots, setParsedSlots, setTemplateSize]);
 
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
@@ -1611,7 +1610,7 @@ export default function App({
         setParseNameColor(saved.templateParse?.nameColor ?? "");
         setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
         setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-        setSlots(saved.slots ?? []);
+        resetSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
         setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
@@ -3271,6 +3270,7 @@ export default function App({
               templateSize={templateSize}
               placementMode={placementMode}
               onSlots={setSlots}
+              layoutHistory={layoutHistory}
               previewMode={previewMode}
               onPreviewMode={setPreviewMode}
               annotatedPreviewUrl={annotatedPreviewUrl}
