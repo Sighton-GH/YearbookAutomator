@@ -155,8 +155,8 @@ def _acquire_rembg_session() -> object:
         from rembg import new_session  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ValueError(
-            "Ultra complex background removal requires 'rembg'. "
-            "Install server requirements to enable this mode."
+            "Ultra complex background removal is unavailable. "
+            "Try Simple or Complex mode instead."
         ) from exc
 
     global _rembg_pool_created, _rembg_pool_max, _rembg_pool_providers, _rembg_providers_logged
@@ -235,8 +235,8 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
         from rembg import remove  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ValueError(
-            "Ultra complex background removal requires 'rembg'. "
-            "Install server requirements to enable this mode."
+            "Ultra complex background removal is unavailable. "
+            "Try Simple or Complex mode instead."
         ) from exc
 
     session = _acquire_rembg_session()

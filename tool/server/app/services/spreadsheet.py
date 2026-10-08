@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.image_messages import unsupported_image_message
+
 import io
 import re
 from re import _parser as sre_parse
@@ -236,7 +238,7 @@ def ingest_spreadsheet(
                     filename_only = Path(member).name
                     if Path(filename_only).suffix.lower() not in allowed_exts:
                         warnings.append(
-                            f"Skipped mugshot '{filename_only}' (unsupported type; images only)."
+                            f"Skipped mugshot '{filename_only}': {unsupported_image_message(filename_only)}."
                         )
                         continue
                     matches = match_people(Path(filename_only).stem, people_tokens)
@@ -277,7 +279,7 @@ def ingest_spreadsheet(
                 filename_only = Path(member).name
                 if Path(filename_only).suffix.lower() not in allowed_exts:
                     warnings.append(
-                        f"Skipped mugshot '{filename_only}' (unsupported type; images only)."
+                        f"Skipped mugshot '{filename_only}': {unsupported_image_message(filename_only)}."
                     )
                     continue
                 stem = Path(filename_only).stem

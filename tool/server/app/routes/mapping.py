@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 import io
+import logging
 import zipfile
 import re
 from difflib import SequenceMatcher
@@ -15,6 +16,7 @@ import mimetypes
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
+from app.services.image_messages import BACKGROUND_FAILURE, unsupported_image_message
 from app.services.mapping_review import apply_mapping_decisions
 from app.services.spreadsheet import RosterFormatError, ingest_spreadsheet
 from app.services.name_matching import (
@@ -147,7 +149,11 @@ async def detect_face_center_api(image: UploadFile = File(...)):
 
     from app.services.face_detection import detect_face_box_for_editor_with_meta
 
-    result = detect_face_box_for_editor_with_meta(img)
+    try:
+        result = detect_face_box_for_editor_with_meta(img)
+    except Exception:
+        logging.getLogger(__name__).exception("Face detection failed")
+        raise HTTPException(status_code=503, detail="Could not detect a face. Try again later or centre the photo manually.") from None
     if not result:
         # Face detection is optional (depends on numpy/opencv). Make this
         # user-actionable for the UI.
@@ -440,7 +446,7 @@ async def upload_image(
     filename = safe_filename(Path(file.filename or "").name)
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
-        raise HTTPException(status_code=400, detail="Only image files are supported (.png, .jpg, .jpeg, .webp, .bmp, .tif, .tiff)")
+        raise HTTPException(status_code=400, detail=unsupported_image_message(filename))
     # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
     subdir = "mugshots" if kind == "mugshot" else kind
 
@@ -455,8 +461,9 @@ async def upload_image(
         try:
             try:
                 out_png = remove_background_bytes(raw, mode=background_mode)
-            except Exception as exc:
-                raise HTTPException(status_code=400, detail=f"Could not remove background: {exc}")
+            except Exception:
+                logging.getLogger(__name__).exception("Background removal failed")
+                raise HTTPException(status_code=400, detail=BACKGROUND_FAILURE) from None
         finally:
             release_bg_job(workspace_id)
         out_name = background_removed_filename(filename)
@@ -526,7 +533,8 @@ async def remove_background_job(
         except BackgroundJobCancelled:
             update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
-            update_bg_job(job_id, error=str(exc), message="Failed")
+            logging.getLogger(__name__).exception("Background removal failed")
+            update_bg_job(job_id, error=BACKGROUND_FAILURE, message="Failed")
         finally:
             release_bg_job(workspace_id)
 
@@ -628,7 +636,8 @@ async def remove_background_preview_job(
         except BackgroundJobCancelled:
             update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
-            update_bg_job(job_id, error=str(exc), message="Failed")
+            logging.getLogger(__name__).exception("Background removal failed")
+            update_bg_job(job_id, error=BACKGROUND_FAILURE, message="Failed")
         finally:
             release_bg_job(workspace_id)
 
@@ -738,7 +747,11 @@ async def upload_baby_zip(
             suffix = Path(filename_only).suffix.lower()
             is_pdf = suffix == ".pdf"
             if suffix not in image_exts and not (convert_pdfs and is_pdf):
-                warnings.append(f"Skipped baby file '{filename_only}' (unsupported type; images only).")
+                if is_pdf:
+                    reason = 'enable "Convert PDFs in baby ZIP" to use this file'
+                else:
+                    reason = unsupported_image_message(filename_only)
+                warnings.append(f"Skipped baby file '{filename_only}': {reason}.")
                 continue
             stem_raw = Path(filename_only).stem
             stem_compact_name = _compact_filename_name(stem_raw)

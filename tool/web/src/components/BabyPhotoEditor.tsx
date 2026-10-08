@@ -16,6 +16,7 @@ import {
 } from "../api";
 import { formatServerMessage } from "../configFile";
 import type { PersistedSessionV1 } from "../session";
+import { centredPhoto, faceDetectionMessage } from "../utils/babyEditor";
 import { cropToPngBlob } from "../utils/image";
 import { rotatedSize, rotateFocusPoint } from "../utils/rotation";
 import { formatEtaSeconds, prefixServerMessage } from "../utils/ui";
@@ -300,10 +301,6 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setRemoveBgPopoverOpen(false);
       setCenterFaceWorking(false);
       setCenterFaceMessage("Initializing crop… please try again");
-      window.setTimeout(() => {
-        setCenterFacePopoverOpen(false);
-        setCenterFaceMessage("");
-      }, 1400);
       return;
     }
 
@@ -312,10 +309,6 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setRemoveBgPopoverOpen(false);
       setCenterFaceWorking(false);
       setCenterFaceMessage("Initializing crop… move the photo slightly, then retry");
-      window.setTimeout(() => {
-        setCenterFacePopoverOpen(false);
-        setCenterFaceMessage("");
-      }, 1600);
       return;
     }
 
@@ -331,11 +324,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       const fc = await detectFaceCenter(blob);
 
       if (!fc.found || fc.center_x == null || fc.center_y == null) {
-        if (fc.reason === "unavailable") {
-          setCenterFaceMessage("Face detection unavailable (missing OpenCV)");
-        } else {
-          setCenterFaceMessage("No face found");
-        }
+        setCenterFaceMessage(faceDetectionMessage(fc.reason));
         return;
       }
 
@@ -485,10 +474,6 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       setCenterFaceMessage("Could not detect face");
     } finally {
       setCenterFaceWorking(false);
-      window.setTimeout(() => {
-        setCenterFacePopoverOpen(false);
-        setCenterFaceMessage("");
-      }, 1400);
     }
   };
 
@@ -687,7 +672,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
           break;
         }
         if (s.status === "error") {
-          setStatus(s.error ? `Background removal failed.\nserver message:\n${s.error}` : "Background removal failed.");
+          setStatus("Could not remove the background. Try another mode or a different photo.");
           break;
         }
         if (s.message?.startsWith("Downloading the background-removal model")) lastNonDownload = Date.now();
@@ -701,7 +686,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
       }
     } catch (err) {
       console.error(err);
-      setStatus(`Background removal failed.\n${formatServerMessage(err)}`);
+      setStatus("Could not remove the background. Try another mode or a different photo.");
     } finally {
       removeBgJobRef.current = null;
       cleanupTempFiles();
@@ -791,10 +776,15 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                 <button
                   type="button"
                   onClick={() => {
-                    setCrop({ x: 0, y: 0 });
+                    setCenterFacePopoverOpen(false);
+                    pendingFaceCenterRef.current = null;
+                    const fitted = centredPhoto();
+                    setCrop(fitted.crop);
+                    setZoom(fitted.zoom);
                     setDirtyEdits(true);
                   }}
                   disabled={editingBusy}
+                  title="Centre the photo and reset zoom to fit"
                 >
                   Center
                 </button>
@@ -802,6 +792,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                 <button
                   type="button"
                   onClick={() => {
+                    setCenterFacePopoverOpen(false);
+                    pendingFaceCenterRef.current = null;
                     setRotation((r) => (r - 90 + 360) % 360);
                     setDirtyEdits(true);
                   }}
@@ -814,6 +806,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                 <button
                   type="button"
                   onClick={() => {
+                    setCenterFacePopoverOpen(false);
+                    pendingFaceCenterRef.current = null;
                     setRotation((r) => (r + 90) % 360);
                     setDirtyEdits(true);
                   }}
@@ -844,7 +838,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
 
                 <button
                   type="button"
-                  onClick={() => setShowResetWarning(true)}
+                  onClick={() => { setCenterFacePopoverOpen(false); setShowResetWarning(true); }}
                   disabled={editingBusy || !originalBabyPeople}
                 >
                   Reset to original
@@ -855,6 +849,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                     type="button"
                     onClick={() => {
                       if (editingBusy) return;
+                      setCenterFacePopoverOpen(false);
                       setRemoveBgMode(babyBackgroundMode ?? "simple");
                       setRemoveBgProgress(0);
                       setRemoveBgPopoverOpen((v) => !v);
@@ -953,6 +948,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                 <div
                   className="baby-editor-crop"
                   ref={editorCropRef}
+                  onPointerDown={() => { setCenterFacePopoverOpen(false); pendingFaceCenterRef.current = null; }}
                   style={{ aspectRatio: `${outSize.width} / ${outSize.height}`, backgroundColor: babyFillColor ?? undefined }}
                 >
                   <Cropper
@@ -990,6 +986,8 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                       step={0.001}
                       value={zoom}
                       onChange={(e) => {
+                        setCenterFacePopoverOpen(false);
+                        pendingFaceCenterRef.current = null;
                         const v = Number(e.target.value);
                         setZoom(Math.max(0.5, Math.min(3, v)));
                         setDirtyEdits(true);
@@ -999,7 +997,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                   </label>
                   <div className="actions" style={{ justifyContent: "flex-end" }}>
                     <div className="popover-anchor">
-                      <button type="button" onClick={() => setShowApplyWarning(true)} disabled={editingBusy || !croppedAreaPixels} aria-disabled={editingBusy || !croppedAreaPixels}>
+                      <button type="button" onClick={() => { setCenterFacePopoverOpen(false); setShowApplyWarning(true); }} disabled={editingBusy || !croppedAreaPixels} aria-disabled={editingBusy || !croppedAreaPixels}>
                         Apply changes
                       </button>
                       {showChangesSaved && (

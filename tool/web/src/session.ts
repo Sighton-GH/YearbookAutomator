@@ -211,7 +211,7 @@ export function migrateActiveStep(raw: number | TopStep | string | null | undefi
 export function parseStepFromSearch(search: string): TopStep | null {
   try {
     const params = new URLSearchParams(search || "");
-    const raw = (params.get("step") || "").trim();
+    const raw = (params.get("step") || "").trim().toLowerCase();
     if (!raw) return null;
     if (isTopStep(raw)) return raw;
     if (raw === "import" || raw === "edit" || raw === "finalize") return migrateActiveStep(raw);
