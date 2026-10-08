@@ -142,16 +142,6 @@ export function ToolMessages({
           open={isOpenNowById[m.id] ?? true}
           role={m.kind === "error" ? "alert" : "status"}
           aria-live={m.kind === "error" ? "assertive" : "polite"}
-          onClick={(evt) => {
-            // Auto-close after the user interacts with the body/actions.
-            // (But don't close when they click the summary or toggle button.)
-            if (!(openById[m.id] ?? true)) return;
-            if (closingById[m.id]) return;
-            const target = evt.target as HTMLElement | null;
-            if (target && target.closest("summary")) return;
-            // Interaction detected in body/actions area: auto-close
-            beginClose(m.id);
-          }}
         >
           <summary
             className="tool-message-summary"

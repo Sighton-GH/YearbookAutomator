@@ -1,5 +1,6 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDialogFocus } from "./utils/dialogFocus";
 import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -874,6 +875,12 @@ export default function App({
     setImportFinalized(false);
     setMissingAsset(null);
   };
+
+  const configModalRef = useRef<HTMLDivElement | null>(null);
+  const closeConfigModalOnEscape = useCallback(() => {
+    if (!configImportBusy) setShowConfigModal(false);
+  }, [configImportBusy]);
+  useDialogFocus(showConfigModal, configModalRef, closeConfigModalOnEscape);
 
   const openConfigImport = () => {
     resetImportUi();
@@ -2751,7 +2758,7 @@ export default function App({
           aria-modal="true"
           aria-label="Import configuration"
         >
-          <div className="modal">
+          <div className="modal" ref={configModalRef} tabIndex={-1}>
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Import configuration</strong>

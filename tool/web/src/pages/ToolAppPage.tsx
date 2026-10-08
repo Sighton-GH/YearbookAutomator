@@ -633,9 +633,16 @@ export function ToolAppPage() {
                 ) : null}
               </div>
               {sessionTiming ? (
-                <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite" ref={sessionInfoRef}>
-                  <span className="app-session-meta">
+                <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="off" ref={sessionInfoRef}>
+                  <span className="app-session-meta" aria-hidden="true">
                     {expiryDisabled ? "No expiry" : formatSessionCountdown(sessionTiming.remainingMs)}
+                  </span>
+                  <span className="sr-only">
+                    {expiryDisabled
+                      ? "Session has no expiry."
+                      : showSessionExpiry
+                        ? `Session expires at ${formatSessionExpiryTime(sessionTiming.expiresAtMs as number)}.`
+                        : "Session timer running."}
                   </span>
                   <button
                     type="button"
