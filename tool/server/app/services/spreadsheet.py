@@ -188,7 +188,7 @@ class _ZipNameIndex:
     """Case-insensitive lookup of ZIP members by file name, then by extension-less stem."""
 
     def __init__(self, members) -> None:
-        self.by_name: dict[str, object] = {}
+        self.by_name: dict[str, list[object]] = {}
         self.by_stem: dict[str, list[object]] = {}
         for info in members:
             if is_archive_junk(info.filename):
@@ -196,7 +196,7 @@ class _ZipNameIndex:
             name = Path(info.filename).name
             if Path(name).suffix.lower() not in _IMAGE_EXTS:
                 continue
-            self.by_name.setdefault(name.lower(), info)
+            self.by_name.setdefault(name.lower(), []).append(info)
             self.by_stem.setdefault(Path(name).stem.lower(), []).append(info)
 
     def find(self, listed: str):
@@ -205,7 +205,7 @@ class _ZipNameIndex:
             return None
         hit = self.by_name.get(name.lower())
         if hit is not None:
-            return hit
+            return hit[0] if len(hit) == 1 else None
         stem = Path(name).stem.lower() if Path(name).suffix.lower() in _IMAGE_EXTS or "." in name else name.lower()
         options = self.by_stem.get(stem, [])
         return options[0] if len(options) == 1 else None
@@ -351,7 +351,7 @@ def ingest_spreadsheet(
                     )
 
             # Pass 1: Advanced name matching
-            if advanced_name_match and people_tokens:
+            if file_col is None and advanced_name_match and people_tokens:
                 assigned_people: set[int] = set(mugshot_lookup)
                 for member_info in archive_members:
                     member = member_info.filename
@@ -390,7 +390,7 @@ def ingest_spreadsheet(
                         )
 
             # Prepare available indices for numeric mapping, honoring name assignments.
-            available_indices = sorted(valid_indices - set(mugshot_lookup.keys()))
+            available_indices = sorted(valid_indices - set(mugshot_lookup.keys())) if file_col is None else []
 
             for member_info in archive_members:
                 member = member_info.filename

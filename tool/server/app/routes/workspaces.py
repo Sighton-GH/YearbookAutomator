@@ -227,7 +227,7 @@ async def takeover(req: WorkspaceActionRequest, request: Request) -> dict[str, b
             device_id=device_id, session_id=session_id,
         )
     if not ok:
-        raise HTTPException(status_code=403 if reason == "workspace_owner_mismatch" else 400, detail=reason or "workspace_takeover_failed")
+        raise HTTPException(status_code=409 if reason == "workspace_locked" else 403 if reason in {"workspace_owner_mismatch", "admin_takeover_disabled"} else 400, detail=reason or "workspace_takeover_failed")
     return {"ok": True}
 
 

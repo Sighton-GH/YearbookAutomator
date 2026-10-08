@@ -449,6 +449,8 @@ async def upload_image(
         remove_background = False
 
     filename = safe_filename(Path(file.filename or "").name)
+    if kind == "baby" and filename.startswith(("baby_preview_", "baby_edit_")):
+        filename = "uploaded_" + filename
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
         raise HTTPException(status_code=400, detail=unsupported_image_message(filename))
@@ -840,7 +842,7 @@ async def upload_baby_zip(
                         out_name = background_removed_filename(out_name, person_index=person_index)
                     await _abort_if_disconnected()
 
-                stored = unique_stored_name(used_names, safe_filename(out_name))
+                stored = unique_stored_name(used_names, safe_filename("uploaded_" + out_name if out_name.startswith(("baby_preview_", "baby_edit_")) else out_name))
                 out_path = save_upload(workspace_id, f"baby/{stored}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:

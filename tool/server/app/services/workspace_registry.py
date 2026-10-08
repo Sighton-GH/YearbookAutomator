@@ -423,6 +423,11 @@ def license_takeover_workspace(*, workspace_id: str, license_key: str, license_t
             return False, "workspace_not_registered"
         if str(binding.get("owner_key") or "") != expected_owner:
             return False, "workspace_owner_mismatch"
+        if not bool(get_face_detection_settings().enable_admin_workspace_takeover):
+            return False, "admin_takeover_disabled"
+        lock = binding.get("lock") if isinstance(binding.get("lock"), dict) else None
+        if lock and int(lock.get("expires_at") or 0) > now and not _lock_owner_matches(lock, device_id=device_id, session_id=session_id):
+            return False, "workspace_locked"
         expires_at = int(binding.get("expires_at") or 0)
         if expires_at > 0 and expires_at <= now:
             return False, "workspace_expired"

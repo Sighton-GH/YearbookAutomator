@@ -994,8 +994,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
         base.save(temp_out_path, format="PNG", dpi=(payload.output_dpi, payload.output_dpi))
 
-    restrict_file_permissions(out_path)
-
-    tick(100, "Done")
+    restrict_file_permissions(temp_out_path)
     temp_out_path.replace(out_path)
+    tick(100, "Done")
     return out_path
