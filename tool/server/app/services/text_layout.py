@@ -10,6 +10,8 @@ from typing import Callable, Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.services.text_color import parse_text_color
+
 FontLoader = Callable[[int], ImageFont.ImageFont]
 
 
@@ -17,6 +19,7 @@ FontLoader = Callable[[int], ImageFont.ImageFont]
 class TextStyle:
     align: Literal['left', 'center', 'right', 'justify'] = 'left'
     valign: Literal['top', 'middle', 'bottom'] = 'top'
+    color: str = '#141e32'
 
 
 @dataclass(frozen=True)
@@ -84,7 +87,7 @@ def _draw_line(draw, xy, text, font, style, width, justify):
         words = text.split()
         gap = (width - sum(_width(draw, word, font, style) for word in words)) / (len(words) - 1)
         for word in words:
-            draw.text((x, y), word, font=font, fill=(20, 30, 50), anchor='la')
+            draw.text((x, y), word, font=font, fill=parse_text_color(style.color), anchor='la')
             x += _width(draw, word, font, style) + gap
     else:
         if style.align == 'center':
@@ -95,7 +98,7 @@ def _draw_line(draw, xy, text, font, style, width, justify):
             anchor = 'ra'
         else:
             anchor = 'la'
-        draw.text((x, y), text, font=font, fill=(20, 30, 50), anchor=anchor)
+        draw.text((x, y), text, font=font, fill=parse_text_color(style.color), anchor=anchor)
 
 
 def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
@@ -109,6 +112,7 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     For quotes pass min(quote.width, mugshot.width*1.5) and mugshot.height.
     warnings is reserved for announced fallbacks in later feature helpers.
     """
+    parse_text_color(style.color)
     if kind not in {'name', 'quote'}:
         raise ValueError('kind must be name or quote')
     if style.align == 'justify' and kind != 'quote':
@@ -122,7 +126,8 @@ def render_text(image: Image.Image, *, text: str, box, load_font: FontLoader,
     width = max(1, int(max_width if max_width is not None else box.width))
     height = max(1, int(max_height if max_height is not None else box.height))
     # Preserve legacy ascender positioning, fitting and default spacing.
-    if style.valign == 'top' and style.align in {'left', 'center'}:
+    if (style.valign == 'top' and style.align in {'left', 'center'}
+            and parse_text_color(style.color) == (20, 30, 50)):
         from app.services.generator import _render_name, _render_wrapped_text
         if kind == 'name':
             _render_name(draw, text, box, load_font, start_size, style.align, all_caps, min_size)
