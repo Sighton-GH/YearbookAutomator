@@ -535,4 +535,7 @@ button.small {
   white-space: nowrap;
   border: 0;
 }
-
+
+/* The native checkbox owns pointer and keyboard input; decorative switch
+   layers must not intercept clicks addressed to it. */
+.switch-ui, .switch-thumb { pointer-events: none; }
