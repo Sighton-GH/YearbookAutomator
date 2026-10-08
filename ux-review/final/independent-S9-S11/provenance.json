@@ -1,0 +1,37 @@
+{
+  "commit": "0b62ed2d9240e80145457af50188e4dc5d1e169e",
+  "gitStatus": "",
+  "fixtureLabel": "FICTIONAL SEEDED QA DATA ONLY",
+  "fixtures": {
+    "roster.csv": {
+      "bytes": 891,
+      "sha256": "a82a2d96f18c8f98fb1ea1511c379de2636564d10b905f84dbbdb05ade4adbfd"
+    },
+    "malformed.csv": {
+      "bytes": 51,
+      "sha256": "90324b4aed4e361cafac411f3bf07181d26bbc29fa737e3f5432b8e5378ca255"
+    },
+    "clean.png": {
+      "bytes": 36910,
+      "sha256": "16a97e17b08f70244406b09d2e9392a5ca3b527ee6d0b8a0c12e2c00531c97da"
+    },
+    "portraits.zip": {
+      "bytes": 358864,
+      "sha256": "20f65654d6ad0db8053244ee55bc9c4173c54031404b3311b2241cb0fbcbaf2a"
+    },
+    "annotated.png": {
+      "bytes": 42402,
+      "sha256": "f564dd2762e8bca9ba708785377cfbecce6213c17ccf2cfd745355d2435ca48a"
+    },
+    "baby.zip": {
+      "bytes": 85573,
+      "sha256": "539eb920d4316ec6666aee92fe7f26d12d31a6c1525753b23b672b1a8d29e6e0"
+    },
+    "quotes.csv": {
+      "bytes": 2095,
+      "sha256": "ffeeb21824f49ca50f55302bd9d8fcac3007efbc73863b57ec97d7ffb9097035"
+    }
+  },
+  "chrome": "Google Chrome 154.0.8037.57",
+  "python": "Python 3.12.14"
+}

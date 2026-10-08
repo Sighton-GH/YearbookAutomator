@@ -1,0 +1,100 @@
+Custom Flow Automator
+File
+Help
+Change License Key
+Back to main website
+Template
+Uploads
+People
+Style
+Generate
+Uploads
+Back
+
+Upload your roster, portraits, quotes & baby photos
+
+Reset all
+Continue to People
+
+Server Message: 
+Mapping failed.
+Could not read the roster spreadsheet. Save it as .xlsx or .csv and try again.
+
+Add your files below, then process everything in one go — roster & portraits, quotes, and baby photos.
+Process all uploads
+Roster & Portraits
+?
+Roster spreadsheet
+Upload File
+malformed.csv
+malformed.csv
+Portraits ZIP (optional)
+Upload File
+No file chosen
+(you can also drag and drop a file)
+Advanced filename options
+?
+Prioritize names (case-insensitive)
+?
+
+40 edited names will be overwritten when re-ingesting.
+
+Keep my name edits
+Ingest roster
+Could not read the roster spreadsheet. Save it as .xlsx or .csv and try again.
+Quotes
+OPTIONAL
+Quotes spreadsheet (optional)
+Upload File
+No file chosen
+(you can also drag and drop a file)
+Advanced name matching
+?
+
+You can also add or edit quotes per-person later in Edit — this upload is optional.
+
+Upload quotes
+
+Server Message: 
+Quote processing completed with 3 errors. Please review the errors here.
+
+3 warning(s)
+Baby Photos
+OPTIONAL
+Baby photo ZIP (optional)
+Upload File
+No file chosen
+(you can also drag and drop a file)
+Advanced name matching
+?
+Partial name matching
+?
+Convert PDFs in baby ZIP to images
+?
+Default baby photo
+?
+Current default: default_baby_abc_blocks_1791500039975_d0d243db.webp
+Upload default baby photo
+Upload File
+No file chosen
+(you can also drag and drop a file)
+Remove background from baby photos
+?
+Center baby photo on face
+?
+Baby photo background colour
+?
+
+You can also add or edit baby photos per-person later in Edit — this upload is optional.
+
+Process baby photos
+
+Server Message: 
+Baby photo processing completed with 3 errors. Please review the errors here.
+
+3 warning(s)
+Back
+Reset all
+Continue to People
+Sighton Yearbook Tools
+Created by Sighton Media

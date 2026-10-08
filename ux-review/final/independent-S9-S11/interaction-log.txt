@@ -1,0 +1,33 @@
+keyboard Enter: Validate license
+keyboard Enter: Skip
+keyboard Enter: Parse template
+keyboard Enter: Continue to Uploads
+keyboard Enter: Process all uploads
+keyboard Enter: People
+keyboard Enter: Style
+keyboard Enter: Generate
+keyboard ArrowDown: Original (4000 × 2600)
+Custom resolution…
+keyboard Control+a: 
+keyboard Enter: Render all
+keyboard Enter: Render anyway
+keyboard Enter: Download
+download output_01.png failure=null
+keyboard Enter: 
+keyboard Enter: Template
+keyboard Enter: Uploads
+keyboard Enter: People
+keyboard Enter: Style
+keyboard Enter: Generate
+keyboard Enter: Render all
+keyboard Enter: Render anyway
+keyboard Enter: Download
+keyboard Enter: Uploads
+keyboard Enter: Ingest roster
+Failed to load resource: the server responded with a status of 400 (Bad Request)
+AxiosError: Request failed with status code 400
+    at settle (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=f31aac98:1654:12)
+    at XMLHttpRequest.onloadend (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=f31aac98:2160:7)
+    at Axios.request (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=f31aac98:3127:41)
+    at async ingestSpreadsheet (http://127.0.0.1:5173/src/api.ts:97:20)
+    at async runPortraitsStage (http://127.0.0.1:5173/src/steps/ImportStep.tsx:510:18)

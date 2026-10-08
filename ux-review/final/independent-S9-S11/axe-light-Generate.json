@@ -1,0 +1,554 @@
+{
+  "testEngine": {
+    "name": "axe-core",
+    "version": "4.13.0"
+  },
+  "testRunner": {
+    "name": "axe"
+  },
+  "testEnvironment": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "windowWidth": 1440,
+    "windowHeight": 1000,
+    "orientationAngle": 0,
+    "orientationType": "landscape-primary"
+  },
+  "url": "http://127.0.0.1:5173/?step=generate",
+  "timestamp": "2026-10-08T22:54:11.657Z",
+  "violations": [
+    {
+      "id": "landmark-one-main",
+      "impact": "moderate",
+      "tags": [
+        "cat.semantics",
+        "best-practice"
+      ],
+      "description": "Ensure the document has a main landmark",
+      "help": "Document should have one main landmark",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/landmark-one-main?application=playwright",
+      "nodes": [
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "page-has-main",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "moderate",
+              "message": "Document does not have a main landmark"
+            }
+          ],
+          "none": [],
+          "impact": "moderate",
+          "html": "<html lang=\"en\" data-theme=\"light\">",
+          "target": [
+            "html"
+          ],
+          "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+        }
+      ]
+    },
+    {
+      "id": "page-has-heading-one",
+      "impact": "moderate",
+      "tags": [
+        "cat.semantics",
+        "best-practice"
+      ],
+      "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+      "help": "Page should contain a level-one heading",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/page-has-heading-one?application=playwright",
+      "nodes": [
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "page-has-heading-one",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "moderate",
+              "message": "Page must have a level-one heading"
+            }
+          ],
+          "none": [],
+          "impact": "moderate",
+          "html": "<html lang=\"en\" data-theme=\"light\">",
+          "target": [
+            "html"
+          ],
+          "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "tags": [
+        "cat.keyboard",
+        "best-practice",
+        "RGAAv4",
+        "RGAA-9.2.1"
+      ],
+      "description": "Ensure all page content is contained by landmarks",
+      "help": "All page content should be contained by landmarks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/region?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "region",
+              "data": {
+                "isIframe": false
+              },
+              "relatedNodes": [],
+              "impact": "moderate",
+              "message": "Some page content is not contained by landmarks"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "moderate",
+          "html": "<div class=\"app-title-row\" style=\"display: flex; align-items: center; gap: 12px;\"><img src=\"/assets/Sighton_Logo.png\" alt=\"Sighton logo\" style=\"width: 28px; height: 28px; object-fit: contain;\"><span class=\"app-title\">Custom Flow Automator</span></div>",
+          "target": [
+            ".app-title-row"
+          ],
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "any": [
+            {
+              "id": "region",
+              "data": {
+                "isIframe": false
+              },
+              "relatedNodes": [],
+              "impact": "moderate",
+              "message": "Some page content is not contained by landmarks"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "moderate",
+          "html": "<a class=\"app-return-link\" href=\"https://yearbook.sighton.ca\">Back to main website</a>",
+          "target": [
+            ".app-return-link"
+          ],
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "aria-valid-attr-value",
+      "impact": "critical",
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag412",
+        "EN-301-549",
+        "EN-9.4.1.2",
+        "RGAAv4",
+        "RGAA-7.1.1"
+      ],
+      "description": "Ensure all ARIA attributes have valid values",
+      "help": "ARIA attributes must conform to valid values",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/aria-valid-attr-value?application=playwright",
+      "nodes": [
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r15:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r15:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Placement description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r15:\">?</button>",
+          "target": [
+            "button[aria-label=\"Placement description\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r15:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r17:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r17:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Simultaneous placement description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r17:\">?</button>",
+          "target": [
+            "button[aria-controls=\":r17:\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r17:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r19:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r19:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Left then right placement description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r19:\">?</button>",
+          "target": [
+            "button[aria-controls=\":r19:\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r19:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r1b:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1b:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Alphabetical placement description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r1b:\">?</button>",
+          "target": [
+            "button[aria-controls=\":r1b:\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1b:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r1d:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1d:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Export format description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r1d:\">?</button>",
+          "target": [
+            "button[aria-label=\"Export format description\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1d:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r1f:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1f:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Export quality description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r1f:\">?</button>",
+          "target": [
+            "button[aria-label=\"Export quality description\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1f:\""
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "aria-valid-attr-value",
+              "data": {
+                "messageKey": "controlsWithinPopup",
+                "needsReview": "aria-controls=\":r1h:\""
+              },
+              "relatedNodes": [],
+              "impact": "critical",
+              "message": "Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1h:\""
+            }
+          ],
+          "none": [],
+          "impact": "critical",
+          "html": "<button type=\"button\" class=\"info-popover-btn\" aria-label=\"Preview render description\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\":r1h:\">?</button>",
+          "target": [
+            "button[aria-label=\"Preview render description\"]"
+          ],
+          "failureSummary": "Fix all of the following:\n  Unable to determine if aria-controls referenced ID exists on the page while using aria-haspopup: aria-controls=\":r1h:\""
+        }
+      ]
+    }
+  ],
+  "passes": [
+    {
+      "id": "aria-allowed-attr",
+      "description": "Ensure an element's role supports its ARIA attributes",
+      "nodeCount": 21
+    },
+    {
+      "id": "aria-allowed-role",
+      "description": "Ensure role attribute has an appropriate value for the element",
+      "nodeCount": 6
+    },
+    {
+      "id": "aria-conditional-attr",
+      "description": "Ensure ARIA attributes are used as described in the specification of the element's role",
+      "nodeCount": 21
+    },
+    {
+      "id": "aria-deprecated-role",
+      "description": "Ensure elements do not use deprecated roles",
+      "nodeCount": 6
+    },
+    {
+      "id": "aria-hidden-body",
+      "description": "Ensure aria-hidden=\"true\" is not present on the document body.",
+      "nodeCount": 1
+    },
+    {
+      "id": "aria-hidden-focus",
+      "description": "Ensure aria-hidden elements are not focusable nor contain focusable elements",
+      "nodeCount": 16
+    },
+    {
+      "id": "aria-prohibited-attr",
+      "description": "Ensure ARIA attributes are not prohibited for an element's role",
+      "nodeCount": 21
+    },
+    {
+      "id": "aria-required-attr",
+      "description": "Ensure elements with ARIA roles have all required ARIA attributes",
+      "nodeCount": 6
+    },
+    {
+      "id": "aria-required-children",
+      "description": "Ensure elements with an ARIA role that require child roles contain them",
+      "nodeCount": 1
+    },
+    {
+      "id": "aria-required-parent",
+      "description": "Ensure elements with an ARIA role that require parent roles are contained by them",
+      "nodeCount": 5
+    },
+    {
+      "id": "aria-roles",
+      "description": "Ensure all elements with a role attribute use a valid value",
+      "nodeCount": 6
+    },
+    {
+      "id": "aria-valid-attr-value",
+      "description": "Ensure all ARIA attributes have valid values",
+      "nodeCount": 14
+    },
+    {
+      "id": "aria-valid-attr",
+      "description": "Ensure attributes that begin with aria- are valid ARIA attributes",
+      "nodeCount": 21
+    },
+    {
+      "id": "avoid-inline-spacing",
+      "description": "Ensure that text spacing set through style attributes can be adjusted with custom stylesheets",
+      "nodeCount": 23
+    },
+    {
+      "id": "button-name",
+      "description": "Ensure buttons have discernible text",
+      "nodeCount": 23
+    },
+    {
+      "id": "bypass",
+      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
+      "nodeCount": 1
+    },
+    {
+      "id": "color-contrast",
+      "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "nodeCount": 71
+    },
+    {
+      "id": "document-title",
+      "description": "Ensure each HTML document contains a non-empty <title> element",
+      "nodeCount": 1
+    },
+    {
+      "id": "empty-heading",
+      "description": "Ensure headings have discernible text",
+      "nodeCount": 2
+    },
+    {
+      "id": "form-field-multiple-labels",
+      "description": "Ensure form field does not have multiple label elements",
+      "nodeCount": 9
+    },
+    {
+      "id": "heading-order",
+      "description": "Ensure the order of headings is semantically correct",
+      "nodeCount": 2
+    },
+    {
+      "id": "html-has-lang",
+      "description": "Ensure every HTML document has a lang attribute",
+      "nodeCount": 1
+    },
+    {
+      "id": "html-lang-valid",
+      "description": "Ensure the lang attribute of the <html> element has a valid value",
+      "nodeCount": 1
+    },
+    {
+      "id": "image-alt",
+      "description": "Ensure <img> elements have alternative text or a role of none or presentation",
+      "nodeCount": 3
+    },
+    {
+      "id": "image-redundant-alt",
+      "description": "Ensure image alternative is not repeated as text",
+      "nodeCount": 3
+    },
+    {
+      "id": "label-title-only",
+      "description": "Ensure that every form element has a visible label and is not solely labeled using hidden labels, or the title or aria-describedby attributes",
+      "nodeCount": 9
+    },
+    {
+      "id": "label",
+      "description": "Ensure every form element has a label",
+      "nodeCount": 6
+    },
+    {
+      "id": "landmark-contentinfo-is-top-level",
+      "description": "Ensure the contentinfo landmark is at top level",
+      "nodeCount": 1
+    },
+    {
+      "id": "landmark-no-duplicate-contentinfo",
+      "description": "Ensure the document has at most one contentinfo landmark",
+      "nodeCount": 1
+    },
+    {
+      "id": "landmark-unique",
+      "description": "Ensure landmarks are unique",
+      "nodeCount": 3
+    },
+    {
+      "id": "link-name",
+      "description": "Ensure links have discernible text",
+      "nodeCount": 2
+    },
+    {
+      "id": "meta-viewport-large",
+      "description": "Ensure <meta name=\"viewport\"> can scale a significant amount",
+      "nodeCount": 1
+    },
+    {
+      "id": "meta-viewport",
+      "description": "Ensure <meta name=\"viewport\"> does not disable text scaling and zooming",
+      "nodeCount": 1
+    },
+    {
+      "id": "nested-interactive",
+      "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies",
+      "nodeCount": 45
+    },
+    {
+      "id": "region",
+      "description": "Ensure all page content is contained by landmarks",
+      "nodeCount": 167
+    },
+    {
+      "id": "select-name",
+      "description": "Ensure select element has an accessible name",
+      "nodeCount": 3
+    },
+    {
+      "id": "summary-name",
+      "description": "Ensure summary elements have discernible text",
+      "nodeCount": 7
+    }
+  ],
+  "inapplicable": [
+    "accesskeys",
+    "area-alt",
+    "aria-braille-equivalent",
+    "aria-command-name",
+    "aria-dialog-name",
+    "aria-input-field-name",
+    "aria-meter-name",
+    "aria-progressbar-name",
+    "aria-tab-name",
+    "aria-text",
+    "aria-toggle-field-name",
+    "aria-tooltip-name",
+    "aria-treeitem-name",
+    "autocomplete-valid",
+    "blink",
+    "definition-list",
+    "dlitem",
+    "duplicate-id-aria",
+    "empty-table-header",
+    "frame-focusable-content",
+    "frame-tested",
+    "frame-title-unique",
+    "frame-title",
+    "html-xml-lang-mismatch",
+    "input-button-name",
+    "input-image-alt",
+    "landmark-banner-is-top-level",
+    "landmark-main-is-top-level",
+    "landmark-no-duplicate-banner",
+    "landmark-no-duplicate-main",
+    "link-in-text-block",
+    "list",
+    "listitem",
+    "marquee",
+    "meta-refresh",
+    "object-alt",
+    "presentation-role-conflict",
+    "role-img-alt",
+    "scope-attr-valid",
+    "scrollable-region-focusable",
+    "server-side-image-map",
+    "skip-link",
+    "svg-img-alt",
+    "tabindex",
+    "table-duplicate-name",
+    "td-headers-attr",
+    "th-has-data-cells",
+    "valid-lang",
+    "video-caption",
+    "no-autoplay-audio"
+  ]
+}
