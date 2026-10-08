@@ -44,3 +44,8 @@ server/app/data/**
 *.log
 .oc-worktrees/
 .oc-runs/
+
+# Isolated fictional browser-test data and artifacts
+tool/web/.e2e-data/
+tool/web/test-results/
+tool/web/playwright-report/

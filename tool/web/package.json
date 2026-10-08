@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "serve": "node production-server.js",
     "test:server": "node --test tests/production-server.test.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "5.51.23",
@@ -24,6 +25,8 @@
     "zustand": "4.5.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.0",
     "@types/node": "22.20.1",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",

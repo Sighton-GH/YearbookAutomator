@@ -28,6 +28,9 @@ npm install
 npm run dev       # Vite dev server on :5173, proxies /api -> 127.0.0.1:8000
 npm run build     # tsc && vite build
 npm run lint       # eslint .
+npm run e2e        # isolated fictional-data Playwright suite
+# Generate repeatable fictional projects from repo root:
+# tool/server/.venv/bin/python scripts/make_synthetic_project.py --out /tmp/fictional-project --students 40 --seed 1
 ```
 
 ### Tool backend + frontend together
