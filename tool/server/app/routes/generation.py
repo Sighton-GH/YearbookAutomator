@@ -37,6 +37,7 @@ from app.services.progress import (
     release_generation,
     request_cancel,
     start_job,
+    append_warning,
     try_reserve_generation,
     update_job,
 )
@@ -154,6 +155,7 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if len(payload.people) > max_people or len(payload.slots) > max_people:
         release_generation(payload.workspace_id)
         raise HTTPException(status_code=400, detail=f"Generation is limited to {max_people} people/slots per job")
+    centre_overridden = bool(payload.center_baby_on_face and not feature_settings.enable_center_on_face_ops)
     if not feature_settings.enable_center_on_face_ops:
         payload.center_baby_on_face = False
 
@@ -206,6 +208,8 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
         _clear_previous_outputs(workspace_dir(payload.workspace_id), keep=requested_output)
     try:
         start_job(job_id, payload.workspace_id)
+        if centre_overridden:
+            append_warning(job_id, "Centre-on-face is turned off by your administrator, so baby photos were centred normally.")
     except Exception:
         release_generation(payload.workspace_id)
         raise
@@ -224,7 +228,7 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             update_job(job_id, progress=pct, status=msg)
 
         try:
-            out_path = generate_composite(payload, progress_cb=progress_cb)
+            out_path = generate_composite(payload, progress_cb=progress_cb, warning_cb=lambda warning: append_warning(job_id, warning))
             update_job(job_id, progress=100, status="done", output=out_path.name)
         except GenerationCancelled:
             update_job(job_id, status="cancelled", error="generation_cancelled")

@@ -67,7 +67,7 @@ def test_baby_zip_background_fallback(tmp_path, monkeypatch, result):
                 "Background removal failed for Ana Silva's photo; the original photo was kept."
             ]
         else:
-            assert payload["warnings"] == []
+            assert bool(payload["warnings"]) == (result == "disabled")
         assert len(calls) == (0 if result in {"not_requested", "disabled"} else 1)
     finally:
         client.close()

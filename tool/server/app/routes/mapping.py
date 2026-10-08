@@ -440,6 +440,7 @@ async def upload_image(
     enforce_workspace_write(request, workspace_id)
 
     feature_settings = get_face_detection_settings()
+    background_overridden = bool(remove_background and not feature_settings.enable_background_removal_ops)
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
@@ -680,6 +681,7 @@ async def upload_baby_zip(
     feature_settings = get_face_detection_settings()
     if not feature_settings.enable_baby_photos_feature:
         raise HTTPException(status_code=403, detail="Baby photo uploads are disabled")
+    background_overridden = bool(remove_background and not feature_settings.enable_background_removal_ops)
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
@@ -706,6 +708,8 @@ async def upload_baby_zip(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     warnings: list[str] = []
+    if background_overridden:
+        warnings.append("Background removal is turned off by your administrator, so original baby photos were kept.")
 
     # Precompute name tokens.
     people_tokens: dict[int, tuple[list[str], list[str]]] = {}

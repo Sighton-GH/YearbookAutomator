@@ -248,6 +248,7 @@ export default function App({
   const [showSaveConfigReminder, setShowSaveConfigReminder] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [outputPaths, setOutputPaths] = useState<string[]>([]);
+  const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
   const [outputNonce, setOutputNonce] = useState(0);
   const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -2213,6 +2214,7 @@ export default function App({
       while (true) {
         try {
           const statusResp = await generationStatus(jobId);
+          if (statusResp.warnings?.length) setGenerationWarnings((old) => [...new Set([...old, ...statusResp.warnings!])]);
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
           const statusText = statusResp.status || "";
@@ -3204,6 +3206,7 @@ export default function App({
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
             ) : (
               <FinalizeStep
+                warnings={generationWarnings}
                 people={people}
                 peoplePerSpread={peoplePerSpread}
                 skipQuotes={skipQuotes}

@@ -444,6 +444,7 @@ export async function generationStatus(jobId: string) {
     status: string;
     output?: string | null;
     error?: string | null;
+    warnings?: string[];
     updated_at?: number;
     workspace_id?: string;
   }>("/api/generation/status", { params: { job_id: jobId } });
@@ -525,6 +526,7 @@ export async function removeBackgroundStatus(jobId: string) {
     message?: string | null;
     error?: string | null;
     eta_seconds?: number | null;
+    warnings?: string[];
     updated_at?: number;
     already_removed?: boolean;
   }>("/api/mapping/remove-background-status", { params: { job_id: jobId } });

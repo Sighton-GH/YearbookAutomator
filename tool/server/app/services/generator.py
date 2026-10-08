@@ -642,7 +642,7 @@ def _render_name(
         draw.text((box.x, box.y), content, font=chosen, fill=(20, 30, 50), anchor="la")
 
 
-def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None) -> Path:
+def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None, warning_cb: Callable[[str], None] | None = None) -> Path:
     if len(payload.people) > len(payload.slots):
         raise ValueError(
             f"This spread has {len(payload.people)} students but only {len(payload.slots)} slots. "
@@ -771,6 +771,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 if baby_filename not in baby_face_center_cache:
                     baby_face_center_cache[baby_filename] = _detect_face_center(b_img)
                 focus = baby_face_center_cache[baby_filename]
+                if focus is None and warning_cb:
+                    warning_cb(f"Couldn't find a face in {person.first_name} {person.last_name}'s baby photo, so it was centred instead.")
 
             # Prefer exact mask saved during template parsing (supports triangles/rounded-rectangles/circles).
             key = f"{slot.baby_photo.x}_{slot.baby_photo.y}_{slot.baby_photo.width}_{slot.baby_photo.height}"

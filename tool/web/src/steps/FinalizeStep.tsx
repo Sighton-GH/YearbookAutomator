@@ -6,6 +6,7 @@ import { InfoPopover } from "../components/InfoPopover";
 import type { PlacementMode } from "../types";
 
 export function FinalizeStep({
+  warnings = [],
   people,
   peoplePerSpread,
   skipQuotes,
@@ -35,6 +36,7 @@ export function FinalizeStep({
   outputNonce,
   usageInfo,
 }: {
+  warnings?: string[];
   people: PersonRecord[];
   peoplePerSpread: number;
   skipQuotes: boolean;
@@ -114,6 +116,7 @@ export function FinalizeStep({
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      {warnings.length > 0 && <details className="callout"><summary>Render warnings ({warnings.length})</summary><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
       {downloadStatus && <div role="status" aria-live="polite" className="callout">{downloadStatus}</div>}
       <div className="callout">
         <div className="stack" style={{ gap: 6 }}>
@@ -274,6 +277,7 @@ export function FinalizeStep({
 
       {workspaceId && files.length > 0 && (
         <div className="stack" style={{ gap: 16 }}>
+      {warnings.length > 0 && <details className="callout"><summary>Render warnings ({warnings.length})</summary><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
           <h3>Results</h3>
           {usageInfo && typeof usageInfo.remaining === "number" && typeof usageInfo.limit === "number" && (
             <div className="callout">
