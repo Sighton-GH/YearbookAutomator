@@ -1526,7 +1526,7 @@ export default function App({
     return () => {
       canceled = true;
     };
-  }, [workspaceId, resetSlots, setParsedSlots, setTemplateSize]);
+  }, [workspaceId, resetSlots, setParsedSlots, setTemplateSize, setSlotAssignments]);
 
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
@@ -1804,17 +1804,18 @@ export default function App({
 
   // URL -> state: allow /app?step=N to jump to a step (and restore after navigating back).
   useEffect(() => {
-    if (!didRestoreSession) return;
+    if (!didRestoreSession || (workspaceId && !workspaceDefaultsHydrated)) return;
     if (location.pathname !== "/") return;
 
     const urlStep = parseStepFromSearch(location.search);
     if (urlStep == null) return;
     if (urlStep === activeStepRef.current) return;
     goToStep(urlStep);
-  }, [didRestoreSession, location.pathname, location.search]);
+  }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search]);
 
-  // State -> URL: keep ?step= in sync (without spamming history).
+  // State -> URL: wait for restore so the initial Template state cannot overwrite a saved step.
   useEffect(() => {
+    if (!didRestoreSession || (workspaceId && !workspaceDefaultsHydrated)) return;
     if (location.pathname !== "/") return;
     const current = parseStepFromSearch(location.search);
     if (current === activeStep) return;
@@ -1822,7 +1823,7 @@ export default function App({
     const next = new URLSearchParams(searchParams);
     next.set("step", String(activeStep));
     setSearchParams(next, { replace: true });
-  }, [location.pathname, location.search, activeStep, searchParams, setSearchParams]);
+  }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search, activeStep, searchParams, setSearchParams]);
 
   // Persist session as the user progresses.
   useEffect(() => {
@@ -2158,7 +2159,7 @@ export default function App({
 
   const slotNumberToIndex = useMemo(() => {
     return computeSlotNumberToIndex(slots, placementMode, null);
-  }, [slots, placementMode, templateSize?.width]);
+  }, [slots, placementMode]);
 
   const babyBoxByPerson = useMemo(
     () =>
