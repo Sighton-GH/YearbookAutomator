@@ -1,3 +1,4 @@
+import { AssetPicker } from "./AssetPicker";
 import { StudentOverrides } from "./StudentOverrides";
 import type React from "react";
 import { Lock, Unlock, Trash2, ImageOff, RotateCcw, Pencil } from "lucide-react";
@@ -226,6 +227,10 @@ export function PersonInspector({
         </div>
       </section>
 
+      {workspaceId && <section className="pi-section">
+        <AssetPicker workspaceId={workspaceId} kind="mugshot" disabled={loading || isLocked} onChoose={filename => onPersonPatch({mugshot_filename: filename})} />
+        {!skipBabyPhotos && <AssetPicker workspaceId={workspaceId} kind="baby" disabled={loading || isLocked} onChoose={filename => onPersonPatch({baby_photo_filename: filename, hide_baby_photo: false, baby_background_removal_failed: false})} />}
+      </section>}
       <StudentOverrides person={person} disabled={loading || isLocked} onPatch={onPersonPatch} />
 
       {!skipQuotes && (

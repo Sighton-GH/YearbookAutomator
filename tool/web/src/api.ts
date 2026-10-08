@@ -737,3 +737,8 @@ export async function generationDownloadFile(url: string, filename: string): Pro
     return data;
   });
 }
+
+export async function listAssets(workspaceId: string, kind: "mugshot" | "baby"): Promise<string[]> {
+  const {data} = await axios.get<{filenames: string[]}>("/api/mapping/assets", {params: {workspace_id: workspaceId, kind}});
+  return data.filenames;
+}

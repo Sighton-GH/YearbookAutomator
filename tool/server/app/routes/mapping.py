@@ -1069,6 +1069,14 @@ async def upload_quotes_spreadsheet(
     return SpreadsheetPreview(workspace_id=workspace_id, people=out_people, warnings=warnings)
 
 
+@router.get("/assets")
+async def list_assets(workspace_id: str, kind: Literal["baby", "mugshot"], request: Request):
+    enforce_workspace_read(request, workspace_id)
+    from app.services.asset_catalog import list_asset_names
+
+    return {"filenames": list_asset_names(workspace_dir(workspace_id), kind)}
+
+
 @router.api_route("/asset", methods=["GET", "HEAD"])
 async def get_asset(workspace_id: str, kind: Literal["baby", "mugshot"], filename: str, request: Request):
     enforce_workspace_read(request, workspace_id)
