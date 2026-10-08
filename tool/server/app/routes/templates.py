@@ -44,7 +44,7 @@ async def parse_template(
     quote_color: str | None = Form(None),
     disable_baby_photos: bool = Form(False),
     disable_quotes: bool = Form(False),
-    min_area: int = Form(400),
+    min_area: int = Form(800),
 ) -> TemplateParseResponse:
     try:
         if not workspace_id:

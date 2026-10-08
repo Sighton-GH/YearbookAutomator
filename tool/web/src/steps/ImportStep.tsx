@@ -1157,8 +1157,8 @@ export function ImportStep({
 
         <label className="field">
           <span className="inline" style={{ alignItems: "center", gap: 6 }}>
-            <span>People per spread (max slots to keep)</span>
-            <InfoPopover content="Slots beyond this count will be dropped during grouping." ariaLabel="People per spread description" />
+            <span>Students per spread - used to split your roster into spreads</span>
+            <InfoPopover content="This count splits your roster into spreads. It does not remove detected template slots." ariaLabel="Students per spread description" />
           </span>
           <input
             type="number"
@@ -1198,8 +1198,8 @@ export function ImportStep({
 
               <div className="color-overrides">
                 {([
-                  ["mugshotColorText", "Portrait colour override", mugshotColor, setMugshotColor, "#22c55e"],
-                  ["babyColorText", "Baby colour override", babyColor, setBabyColor, "#3b82f6"],
+                  ["mugshotColorText", "Portrait colour override", mugshotColor, setMugshotColor, "#00bf63"],
+                  ["babyColorText", "Baby colour override", babyColor, setBabyColor, "#004aad"],
                   ["nameColorText", "Name colour override", nameColor, setNameColor, "#ff751f"],
                   ["quoteColorText", "Quote colour override", quoteColor, setQuoteColor, "#ff3131"],
                 ] as const).map(([id, label, value, setter, placeholder]) => (
