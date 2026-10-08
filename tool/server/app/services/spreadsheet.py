@@ -390,7 +390,7 @@ def ingest_spreadsheet(
                         )
 
             # Prepare available indices for numeric mapping, honoring name assignments.
-            available_indices = sorted(valid_indices - set(mugshot_lookup.keys())) if file_col is None else []
+            available_indices = sorted(valid_indices - set(mugshot_lookup.keys())) if file_col is None else [i for i, listed in enumerate(kept_files, start=1) if not listed and i not in mugshot_lookup]
 
             for member_info in archive_members:
                 member = member_info.filename

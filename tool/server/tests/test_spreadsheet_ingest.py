@@ -293,3 +293,14 @@ def test_default_unchanged_and_candidates_reported():
     assert (cand.column, cand.listed, cand.found, cand.suggested) == ("SelectedImage", 2, 0, False)
     r2 = s.ingest_spreadsheet(uuid4().hex, io.BytesIO(csv), "r.csv", _zip({"a.jpg": _jpeg("red"), "b.jpg": _jpeg("red")}))
     assert r2.filename_column_candidates[0].suggested is True
+
+
+def test_missing_listed_file_never_receives_leftover_numeric_portrait():
+    r = _ingest(_roster(["Ada,Lovelace,missing.jpg", "Bo,Bell,"]), {"001.jpg": _jpeg("red"), "002.jpg": _jpeg("blue")})
+    assert r.people[0].mugshot_filename is None
+    assert r.people[1].mugshot_filename == "001.jpg"  # blank cell uses the documented numeric fallback
+
+
+def test_duplicate_basename_in_zip_is_not_arbitrarily_selected():
+    r = _ingest(_roster(["Ada,Lovelace,a.jpg"]), {"one/a.jpg": _jpeg("red"), "two/a.jpg": _jpeg("blue")})
+    assert r.people[0].mugshot_filename is None
