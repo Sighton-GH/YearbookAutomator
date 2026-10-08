@@ -1,3 +1,5 @@
+import { DEFAULT_PHOTO_SETTINGS, type PhotoSettings } from "./photoSettings";
+import { PhotoSettingsPanel } from "./components/PhotoSettingsPanel";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLayoutHistory } from "./utils/layout/useLayoutHistory";
@@ -241,6 +243,7 @@ export default function App({
     allowInsecureUploads: false,
   });
   const [babyEditHistory, setBabyEditHistory] = useState<NonNullable<PersistedSessionV1["babyEditHistory"]>>([]);
+  const [photoSettings, setPhotoSettings] = useState<PhotoSettings>(DEFAULT_PHOTO_SETTINGS);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
   const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
   const [defaultMugshotFilenames, setDefaultMugshotFilenames] = useState<string[]>([]);
@@ -849,6 +852,7 @@ export default function App({
       defaultBabyFilename,
       babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
+      photoSettings,
       babyBackgroundColor,
       centerBabyOnFace,
       defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
@@ -979,6 +983,7 @@ export default function App({
       allowInsecureUploads: Boolean(session.babyIngest?.allowInsecureUploads ?? false),
     });
     setBabyEditHistory((session.babyEditHistory ?? []) as any);
+    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...session.photoSettings });
     setBabyBackgroundColor(session.babyBackgroundColor ?? "");
     setCenterBabyOnFace(Boolean(session.centerBabyOnFace));
     const nextDefaultMugshots =
@@ -1430,7 +1435,8 @@ export default function App({
             allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
           });
           setBabyEditHistory((saved.babyEditHistory ?? []) as any);
-          setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+          setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+    setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
           setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
           const savedDefaultMugshots =
             Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
@@ -1669,7 +1675,8 @@ export default function App({
           allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
         });
         setBabyEditHistory((saved.babyEditHistory ?? []) as any);
-        setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
+        setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
+    setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         const savedDefaultMugshots =
           Array.isArray(saved.defaultMugshotFilenames) && saved.defaultMugshotFilenames.length > 0
@@ -1881,6 +1888,7 @@ export default function App({
     defaultBabyFilename,
     babyIngest,
     babyEditHistory,
+    photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotFilenames,
@@ -1985,6 +1993,7 @@ export default function App({
     defaultQuotesSeed,
     babyIngest,
     babyEditHistory,
+    photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotRandomize,
@@ -3378,6 +3387,7 @@ export default function App({
               ]}
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
+              portraitBox={slots.length > 0 ? slots[0].mugshot : null}
               babyBoxByPerson={babyBoxByPerson}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
@@ -3415,6 +3425,8 @@ export default function App({
             insecureHttp && !allowInsecureReviewResults ? (
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
             ) : (
+              <>
+              <PhotoSettingsPanel settings={photoSettings} onChange={setPhotoSettings} />
               <FinalizeStep
                 defaultQuote={defaultQuoteFallback}
                 quoteImportWarnings={quotesWarnings.filter(w => /placeholder|link|rejected|url/i.test(w))}
@@ -3450,6 +3462,7 @@ export default function App({
                 outputNonce={outputNonce}
                 usageInfo={usageInfo}
               />
+              </>
             )
           )}
 

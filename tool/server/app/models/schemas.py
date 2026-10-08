@@ -55,6 +55,12 @@ class TemplateParseResponse(BaseModel):
     raw_debug: Optional[RawParseDebug] = None
 
 
+class PhotoFocus(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    zoom: float = Field(default=1, ge=1, le=4)
+
+
 class PersonRecord(BaseModel):
     index: int = Field(ge=1, le=100_000)
     first_name: str = Field(max_length=200)
@@ -214,6 +220,10 @@ class GenerationRequest(BaseModel):
     @classmethod
     def _validate_stroke_color(cls, value: Optional[str]) -> Optional[str]:
         return _check_hex_colour(value, "Outline colour")
+
+    mugshot_fit: Literal["cover", "contain"] = "cover"
+    mugshot_face_aware: bool = False
+    contain_fill_color: str = Field(default="#ffffff", pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
     # Baby photo rendering
     baby_background_color: Optional[str] = Field(

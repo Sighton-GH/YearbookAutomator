@@ -25,6 +25,7 @@ import { ToggleSwitch } from "../../components/ToggleSwitch";
 import { InfoPopover } from "../../components/InfoPopover";
 import { UploadDropLabel } from "../../components/UploadDropLabel";
 import { Inspector } from "../../components/Inspector";
+import { PortraitEditor } from "../../components/PortraitEditor";
 import { PersonInspector, type PersonAdjustment } from "../../components/PersonInspector";
 import { formatServerMessage } from "../../configFile";
 import type { PersistedSessionV1 } from "../../session";
@@ -65,6 +66,7 @@ export function PeopleTab({
   onBabyEditHistoryAdd,
   babyEditorProtectedFilenames,
   babyMaskBox,
+  portraitBox,
   babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
@@ -103,6 +105,7 @@ export function PeopleTab({
   babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
+  portraitBox: Box | null;
   babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
@@ -132,6 +135,7 @@ export function PeopleTab({
   const [previewTitle, setPreviewTitle] = useState("Portrait preview");
   const [previewRotation, setPreviewRotation] = useState(0);
 
+  const [portraitEditorIdx, setPortraitEditorIdx] = useState<number | null>(null);
   const babyEditorRef = useRef<BabyPhotoEditorHandle>(null);
   const swapEnabled = swapMode !== "off";
 
@@ -534,6 +538,12 @@ export function PeopleTab({
           onRotateCounterClockwise={() => setPreviewRotation((r) => (r - 90 + 360) % 360)}
         />
 
+        {portraitEditorIdx !== null && workspaceId && <PortraitEditor
+          src={assetUrl(workspaceId, "mugshot", people[portraitEditorIdx].mugshot_filename || defaultMugshotAssignments[people[portraitEditorIdx].index])}
+          aspect={portraitBox ? portraitBox.width / portraitBox.height : 1}
+          focus={people[portraitEditorIdx].mugshot_focus}
+          onApply={focus => { updatePerson(portraitEditorIdx, p => ({ ...p, mugshot_focus: focus })); setPortraitEditorIdx(null); }}
+          onClose={() => setPortraitEditorIdx(null)} />}
         <BabyPhotoEditor
           ref={babyEditorRef}
           workspaceId={workspaceId}
@@ -861,6 +871,7 @@ export function PeopleTab({
             onUploadReplacementBaby={(file) => void handlePerPersonBaby(selectedIdx, file)}
             onResetBabyToOriginal={() => clearBabyOverride(selectedIdx)}
             onRemoveBabyFromPerson={() => clearBabyFromPerson(selectedIdx)}
+            onAdjustPortrait={() => setPortraitEditorIdx(selectedIdx)}
             onPreviewPortrait={() => {
               if (!workspaceId) return;
               const filename = selected.mugshot_filename || defaultMugshotAssignments[selected.index];

@@ -43,6 +43,7 @@ export function PersonInspector({
   onResetBabyToOriginal,
   onRemoveBabyFromPerson,
   onPreviewPortrait,
+  onAdjustPortrait,
   loading,
 }: {
   person: PersonRecord;
@@ -74,6 +75,7 @@ export function PersonInspector({
   onResetBabyToOriginal: () => void;
   onRemoveBabyFromPerson: () => void;
   onPreviewPortrait: () => void;
+  onAdjustPortrait: () => void;
   loading: boolean;
 }) {
   const mugshotFilename = person.mugshot_filename || assignedDefaultMugshot || null;
@@ -136,6 +138,7 @@ export function PersonInspector({
             <div className="thumb pi-thumb thumb-placeholder thumb-placeholder-label">No portrait</div>
           )}
           <div className="pi-actions">
+            <button type="button" className="small" disabled={isLocked || !mugshotFilename} onClick={onAdjustPortrait}>Adjust portrait</button>
             {usingDefaultMugshot && <span className="chip small pi-chip">Using default</span>}
             <label className="upload-file-button small">
               Replace

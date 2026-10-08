@@ -65,6 +65,7 @@ export function EditStep({
   onBabyEditHistoryAdd,
   babyEditorProtectedFilenames,
   babyMaskBox,
+  portraitBox,
   babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
@@ -151,6 +152,7 @@ export function EditStep({
   babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
+  portraitBox: Box | null;
   babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
@@ -251,6 +253,7 @@ export function EditStep({
           onBabyEditHistoryAdd={onBabyEditHistoryAdd}
           babyEditorProtectedFilenames={babyEditorProtectedFilenames}
           babyMaskBox={babyMaskBox}
+          portraitBox={portraitBox}
           babyBoxByPerson={babyBoxByPerson}
           allowInsecureUploads={allowInsecureUploads}
           setStatus={setStatus}

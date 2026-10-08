@@ -16,6 +16,8 @@ from app.services.placement import auto_place_slots_for_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
 from app.services.fonts import resolve_font_file
+from app.services.face_detection import detect_face
+from app.services.portrait_framing import PortraitStyle, paste_portrait
 from app.services.font_styling import load_styled_font
 from app.services.text_effects import TextShadow
 from app.services.text_layout import TextStyle, render_text
@@ -751,6 +753,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     baby_bg_rgb = _parse_hex_rgb(getattr(payload, "baby_background_color", None))
     center_baby_on_face = bool(getattr(payload, "center_baby_on_face", False))
+    portrait_style = PortraitStyle.from_request(payload)
+    portrait_face_cache = {}
 
     def _looks_like_image(path: Path) -> bool:
         # Extension check is a fast guard, but we still rely on Pillow open errors as truth.
@@ -785,7 +789,22 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             if mug_path.exists() and _looks_like_image(mug_path):
                 m_img = _try_open_rgb(mug_path)
                 if m_img is not None:
-                    _paste_image(base, m_img, slot, kind="mugshot")
+                    if portrait_style.is_default and person.mugshot_focus is None:
+                        _paste_image(base, m_img, slot, kind="mugshot")
+                    else:
+                        face_box = None
+                        if portrait_style.face_aware and person.mugshot_focus is None and portrait_style.fit == "cover":
+                            if mugshot_filename not in portrait_face_cache:
+                                portrait_face_cache[mugshot_filename] = detect_face(m_img)
+                            face = portrait_face_cache[mugshot_filename]
+                            if face is not None:
+                                b = face.box
+                                face_box = (b.x, b.y, b.x + b.w, b.y + b.h)
+                        box = slot.mugshot
+                        for warning in paste_portrait(base, m_img, (box.x, box.y, box.width, box.height),
+                                                      portrait_style, person.mugshot_focus, face_box):
+                            if warning_cb:
+                                warning_cb(warning)
 
         # Baby photo: try per-person first; if invalid/unreadable, fall back to default.
         candidate_baby = person.baby_photo_filename

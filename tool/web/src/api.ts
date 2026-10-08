@@ -70,7 +70,10 @@ export type TemplateParseResponse = {
   raw_debug?: RawParseDebug | null;
 };
 
+import type { PhotoSettings, PhotoFocus } from "./photoSettings";
+
 export type PersonRecord = {
+  mugshot_focus?: PhotoFocus | null;
   index: number;
   first_name: string;
   last_name: string;
@@ -439,7 +442,7 @@ export async function applyMapping(
   return data;
 }
 
-export type GenerateSpreadParams = {
+export type GenerateSpreadParams = PhotoSettings & {
   workspace_id: string;
   template_id: string;
   slots: TemplateSlots[];

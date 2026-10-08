@@ -69,6 +69,7 @@ export type PersistedSessionV1 = {
     used_background_preview?: { background_mode: BackgroundMode; force?: boolean } | null;
     created_at: string;
   }>;
+  photoSettings?: import("./photoSettings").PhotoSettings;
   babyBackgroundColor?: string;
   centerBabyOnFace?: boolean;
   defaultMugshotFilename?: string | null;

@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import Cropper, { getInitialCropFromCroppedAreaPixels, type Area, type MediaSize } from "react-easy-crop";
+import { PhotoCropper } from "./PhotoCropper";
+import { getInitialCropFromCroppedAreaPixels, type Area, type MediaSize } from "react-easy-crop";
 import {
   assetUrl,
   babyMaskUrl,
@@ -961,7 +962,7 @@ export const BabyPhotoEditor = forwardRef<BabyPhotoEditorHandle, BabyPhotoEditor
                     data-testid="baby-editor-clip"
                     style={maskUrl ? ({ ["--baby-mask" as never]: `url(${maskUrl})` } as React.CSSProperties) : undefined}
                   >
-                  <Cropper
+                  <PhotoCropper
                     image={editingSrc}
                     crop={crop}
                     zoom={zoom}
