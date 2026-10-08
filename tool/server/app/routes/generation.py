@@ -25,6 +25,7 @@ from app.services.licensing import (
     get_required_license_key_from_headers,
     validate_and_record_use,
 )
+from app.services.placement import assign_logical_slots
 from app.services.licensing_usage import append_usage_event
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
@@ -367,10 +368,25 @@ async def download_spreadsheet(workspace_id: str, request: Request):
         spread_number = parse_spread_number(out_name, fallback=i + 1)
         slot_count = max(1, len(payload.slots) or 1)
 
-        for idx, person in enumerate(payload.people):
-            default_slot_number = idx + 1
-            raw_slot_number = int((payload.slot_assignments or {}).get(int(person.index), default_slot_number))
-            slot_number = raw_slot_number if 1 <= raw_slot_number <= slot_count else 1
+        if getattr(payload, "auto_place", False):
+            # Same placement code as the renderer, so rows match the printed spread.
+            placed_people, logical_idx, _ = assign_logical_slots(
+                people=payload.people,
+                slots=payload.slots,
+                placement_mode=payload.placement_mode,
+                slot_assignments=payload.slot_assignments,
+                force_alphabetical=payload.force_alphabetical,
+            )
+            placed = [(p, l + 1) for p, l in zip(placed_people, logical_idx)]
+            if not placed:
+                placed = [(p, i + 1) for i, p in enumerate(placed_people)]
+        else:
+            placed = []
+            for idx, person in enumerate(payload.people):
+                raw_slot_number = int((payload.slot_assignments or {}).get(int(person.index), idx + 1))
+                placed.append((person, raw_slot_number if 1 <= raw_slot_number <= slot_count else 1))
+
+        for person, slot_number in placed:
 
             portrait_filename = person.mugshot_filename or payload.default_mugshot_filename or ""
             baby_filename = person.baby_photo_filename or payload.default_baby_photo_filename or ""
