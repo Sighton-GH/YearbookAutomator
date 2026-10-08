@@ -276,7 +276,17 @@ async def preview_strip(payload: GenerationRequest, request: Request) -> dict[st
         warnings: list[str] = []
 
         def render(req: GenerationRequest):
-            return generate_composite(req, warning_cb=lambda w: warnings.append(w) if w not in warnings else None)
+            out = generate_composite(req, warning_cb=lambda w: warnings.append(w) if w not in warnings else None)
+            # Show only the area the two rendered students occupy, at full output resolution.
+            from PIL import Image as _Image
+
+            boxes = [b for slot in req.slots for b in (slot.mugshot, slot.baby_photo, slot.name, slot.quote)]
+            with _Image.open(out) as full:
+                left = max(0, min(b.x for b in boxes) - 20)
+                top = max(0, min(b.y for b in boxes) - 20)
+                right = min(full.width, max(b.x + b.width for b in boxes) + 20)
+                bottom = min(full.height, max(b.y + b.height for b in boxes) + 20)
+                return full.convert("RGB").crop((left, top, right, bottom))
 
         try:
             image = await run_in_threadpool(render_test_strip, payload, render)

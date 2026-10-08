@@ -30,7 +30,9 @@ def test_preview_strip_renders_first_two_and_downsizes(generation_client, monkey
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["output"] == "preview_strip.png"
-    assert max(data["width"], data["height"]) == 1200
+    # Cropped to the two slots (x 20-240, y 20-350 plus margin), not the whole 2400px template.
+    assert data["width"] < 1200 and data["height"] < 1200
+    assert 200 < data["width"] <= 400 and 300 < data["height"] <= 420
     download = client.get("/api/generation/download", params={"workspace_id": workspace_id, "filename": "preview_strip.png"})
     assert download.status_code == 200 and download.content[:4] == b"\x89PNG"
     assert not (storage.workspace_dir(workspace_id) / "output.png").exists()
