@@ -1,6 +1,6 @@
 import type React from "react";
 import { useRef, useState } from "react";
-import type { Box, TemplateSlots } from "../api";
+import type { SlotBoxKind, Box, TemplateSlots } from "../api";
 import { clampBox } from "../utils/slots";
 
 export function TemplatePreview({
@@ -21,7 +21,7 @@ export function TemplatePreview({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<{
     slotIdx: number;
-    part: keyof TemplateSlots;
+    part: SlotBoxKind;
     mode: "move" | "resize";
     handle?: "nw" | "ne" | "sw" | "se";
     startBox: Box;
@@ -45,7 +45,7 @@ export function TemplatePreview({
     return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
   };
 
-  const updateSlot = (slotIdx: number, part: keyof TemplateSlots, updater: (b: Box) => Box) => {
+  const updateSlot = (slotIdx: number, part: SlotBoxKind, updater: (b: Box) => Box) => {
     if (!onUpdate) return;
     const next = slots.map((slot, i) => {
       if (i !== slotIdx) return slot;
@@ -57,7 +57,7 @@ export function TemplatePreview({
   const onMouseDown = (
     evt: React.MouseEvent<SVGRectElement | SVGCircleElement, MouseEvent>,
     slotIdx: number,
-    part: keyof TemplateSlots,
+    part: SlotBoxKind,
     mode: "move" | "resize",
     handle?: "nw" | "ne" | "sw" | "se"
   ) => {
@@ -114,7 +114,7 @@ export function TemplatePreview({
 
   const onMouseUp = () => setDrag(null);
 
-  const renderHandles = (slotIdx: number, part: keyof TemplateSlots, box: Box) => {
+  const renderHandles = (slotIdx: number, part: SlotBoxKind, box: Box) => {
     const handles: ("nw" | "ne" | "sw" | "se")[] = ["nw", "ne", "sw", "se"];
     const coords = {
       nw: { cx: box.x, cy: box.y },
@@ -160,7 +160,7 @@ export function TemplatePreview({
           const isSelected = selectedSlot === i;
           return (
             <g key={i}>
-              {(["mugshot", "baby_photo", "name", "quote"] as (keyof TemplateSlots)[]).map((part) => (
+              {(["mugshot", "baby_photo", "name", "quote"] as (SlotBoxKind)[]).map((part) => (
                 <g key={part}>
                   <rect
                     {...rectProps(slot[part], getStroke(part), `${part}-${i + 1}`, isSelected)}
@@ -178,7 +178,7 @@ export function TemplatePreview({
   );
 }
 
-function getStroke(part: keyof TemplateSlots) {
+function getStroke(part: SlotBoxKind) {
   switch (part) {
     case "mugshot":
       return "#22c55e";

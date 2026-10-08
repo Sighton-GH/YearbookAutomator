@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { clsx } from "clsx";
 import { LayoutGrid } from "lucide-react";
-import type { Box, RawParseDebug, TemplateSlots } from "../../api";
+import type { SlotBoxKind, Box, RawParseDebug, TemplateSlots } from "../../api";
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Inspector } from "../../components/Inspector";
@@ -139,7 +139,7 @@ export function LayoutTab({
                 className="chip small"
                 onClick={() => {
                   const lines = slots.flatMap((slot, idx) =>
-                    (["mugshot", "baby_photo", "name", "quote"] as (keyof TemplateSlots)[]).map((part) => {
+                    (["mugshot", "baby_photo", "name", "quote"] as (SlotBoxKind)[]).map((part) => {
                       const box = slot[part];
                       return `Slot ${idx + 1} ${part}: x=${box.x}, y=${box.y}, w=${box.width}, h=${box.height}`;
                     })

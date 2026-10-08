@@ -22,6 +22,13 @@ class TemplateSlots(BaseModel):
     baby_photo: Box
     name: Box
     quote: Box
+    baby_shape: Literal["auto", "rectangle", "ellipse", "rounded"] | None = None
+
+
+class BabyMaskRequest(BaseModel):
+    workspace_id: str
+    box: Box
+    baby_shape: Literal["auto", "rectangle", "ellipse", "rounded"] = "auto"
 
 
 class RawParseDebug(BaseModel):

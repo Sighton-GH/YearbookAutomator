@@ -5,9 +5,10 @@ import io
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import FileResponse
 
-from app.models.schemas import TemplateParseResponse
+from app.models.schemas import BabyMaskRequest, TemplateParseResponse
 from app.services.storage import save_upload, workspace_dir
 from app.services.template_parser import extract_slots
+from app.services.baby_masks import regenerate_baby_mask
 from app.services.upload_security import validate_image_bytes
 from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
@@ -29,6 +30,16 @@ async def get_annotated_template(workspace_id: str, request: Request):
     path = workspace_dir(workspace_id) / "uploads" / "template_annotated.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="image/png")
+
+
+@router.post("/baby-mask")
+async def update_baby_mask(payload: BabyMaskRequest, request: Request):
+    enforce_workspace_write(request, payload.workspace_id)
+    try:
+        path = regenerate_baby_mask(payload.workspace_id, payload.box, payload.baby_shape)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FileResponse(path, media_type="image/png")
 
 

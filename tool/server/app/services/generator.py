@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from PIL import UnidentifiedImageError
 
 from app.models.schemas import GenerationRequest, TemplateSlots
+from app.services.baby_masks import shape_mask
 from app.services.placement import auto_place_slots_for_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
@@ -779,6 +780,9 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             if key not in baby_mask_cache:
                 baby_mask_cache[key] = _load_baby_mask(payload.workspace_id, slot.baby_photo)
             mask = baby_mask_cache[key]
+
+            if slot.baby_shape and slot.baby_shape != "auto":
+                mask = shape_mask(slot.baby_photo, slot.baby_shape)
 
             shape = baby_shape_cache.get(idx)
             if shape is None:

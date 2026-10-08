@@ -46,7 +46,9 @@ axios.interceptors.response.use(
 );
 
 export type Box = { x: number; y: number; width: number; height: number };
-export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box };
+export type SlotBoxKind = "mugshot" | "baby_photo" | "name" | "quote";
+export type BabyShape = "auto" | "rectangle" | "ellipse" | "rounded";
+export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box; baby_shape?: BabyShape | null };
 export type RawParseDebug = {
   mugshot_count: number;
   baby_count: number;
@@ -157,6 +159,11 @@ export type GenerationOutputsResponse = {
 
 export async function getAdminFeatureFlags() {
   const { data } = await axios.get<AdminFeatureFlags>("/api/admin/settings/features");
+  return data;
+}
+
+export async function regenerateBabyMask(workspace_id: string, box: Box, baby_shape: BabyShape = "auto") {
+  const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
   return data;
 }
 

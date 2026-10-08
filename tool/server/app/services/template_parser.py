@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import BinaryIO, List, Tuple
 
+import json
 import logging
 import os
 
@@ -225,6 +226,8 @@ def extract_slots(
         sx = clean_w / float(width)
         sy = clean_h / float(height)
 
+    mask_color = baby_hex or DEFAULT_BABY_HEX
+    mask_steps = tolerance_steps(tolerance, [24, 32, 40, 48, 64] if baby_hex else [20, 24, 32, 40, 48])
     use_custom = bool(mugshot_hex or baby_hex)
     tol_steps = tolerance_steps(tolerance, [24, 32, 40, 48, 64])
     tol_default = tolerance_steps(tolerance, [20, 24, 32, 40, 48])
@@ -256,6 +259,8 @@ def extract_slots(
             blue_mask = cv2.inRange(_maybe_umat(hsv), np.array(blue_range[0]), np.array(blue_range[1]))
             blue_mask = _maybe_umat_result(blue_mask)
             baby_boxes = _boxes_from_mask(blue_mask, min_area=min_area)
+            mask_color = DEFAULT_BABY_HEX
+            mask_steps = [20]
 
     if not mugshot_boxes and (not enable_baby_photos or not baby_boxes):
         if enable_baby_photos:
@@ -529,6 +534,9 @@ def extract_slots(
                 except OSError:
                     pass
         masks_dir.mkdir(parents=True, exist_ok=True)
+        (masks_dir / "detection.json").write_text(json.dumps({
+            "color": mask_color, "tol_steps": mask_steps, "min_area": min_area,
+        }), encoding="utf-8")
         for slot in out_slots:
             b = slot.baby_photo
             x0 = max(0, int(b.x))
