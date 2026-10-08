@@ -17,7 +17,7 @@ from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity
 from app.services import throttle
 from app.services.fonts import resolve_font_file
 from app.services.face_detection import detect_face
-from app.services.portrait_framing import PortraitStyle, paste_portrait
+from app.services.portrait_framing import PortraitStyle, PortraitShadow, PortraitFocus, paste_portrait
 from app.services.font_styling import load_styled_font
 from app.services.text_effects import TextShadow
 from app.services.text_layout import TextStyle, render_text
@@ -755,6 +755,10 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     center_baby_on_face = bool(getattr(payload, "center_baby_on_face", False))
     portrait_style = PortraitStyle.from_request(payload)
     portrait_face_cache = {}
+    baby_style = PortraitStyle(shape=payload.baby_shape, corner_radius=payload.baby_corner_radius,
+                               border_width=payload.baby_border_width,
+                               border_color=_parse_hex_rgb(payload.baby_border_color) or (255, 255, 255),
+                               shadow=PortraitShadow.coerce(payload.baby_shadow))
 
     def _looks_like_image(path: Path) -> bool:
         # Extension check is a fast guard, but we still rely on Pillow open errors as truth.
@@ -850,7 +854,13 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 shape = _detect_baby_slot_shape(template_ref, slot.baby_photo)
                 baby_shape_cache[idx] = shape
 
-            _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
+            # Designer-supplied masks always win; optional framing is for auto rectangles only.
+            if mask is None and shape == "rect" and not baby_style.is_default:
+                b = slot.baby_photo
+                baby_focus = PortraitFocus(focus[0] / b_img.width, focus[1] / b_img.height) if focus else None
+                paste_portrait(base, b_img, (b.x, b.y, b.width, b.height), baby_style, baby_focus)
+            else:
+                _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
             break
 
         quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")

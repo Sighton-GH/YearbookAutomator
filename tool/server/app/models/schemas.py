@@ -55,6 +55,14 @@ class TemplateParseResponse(BaseModel):
     raw_debug: Optional[RawParseDebug] = None
 
 
+class PhotoShadow(BaseModel):
+    color: str = Field(default="#000000", pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    opacity: float = Field(default=0.4, ge=0, le=1)
+    offset_x: int = Field(default=4, ge=-500, le=500)
+    offset_y: int = Field(default=4, ge=-500, le=500)
+    blur: int = Field(default=6, ge=0, le=100)
+
+
 class PhotoFocus(BaseModel):
     x: float = Field(ge=0, le=1)
     y: float = Field(ge=0, le=1)
@@ -223,6 +231,16 @@ class GenerationRequest(BaseModel):
 
     mugshot_fit: Literal["cover", "contain"] = "cover"
     mugshot_face_aware: bool = False
+    mugshot_shape: Literal["rect", "rounded", "ellipse"] = "rect"
+    mugshot_corner_radius: int = Field(default=0, ge=0, le=500)
+    mugshot_border_width: int = Field(default=0, ge=0, le=100)
+    mugshot_border_color: str = Field(default="#ffffff", pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    mugshot_shadow: Optional[PhotoShadow] = None
+    baby_shape: Literal["rect", "rounded", "ellipse"] = "rect"
+    baby_corner_radius: int = Field(default=0, ge=0, le=500)
+    baby_border_width: int = Field(default=0, ge=0, le=100)
+    baby_border_color: str = Field(default="#ffffff", pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    baby_shadow: Optional[PhotoShadow] = None
     contain_fill_color: str = Field(default="#ffffff", pattern=r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
     # Baby photo rendering
