@@ -1,6 +1,6 @@
 # Independent audit response matrix
 
-Audits reviewed: frontend/backend/Plan3 acceptance at96d772c0, later F1 typography, F2 queue and F3 slot reviews, plus final integration review pending. Earlier green gates did not establish complete acceptance. Findings below refer to their reported scope, not new proof.
+Audits reviewed: frontend/backend/Plan 3 acceptance at96d772c0, later F1 typography, F2 queue and F3 slot reviews, plus final integration review pending. Earlier green gates did not establish complete acceptance. Findings below refer to their reported scope, not new proof.
 
 |Source/finding|Response|Evidence/limit|
 |---|---|---|
