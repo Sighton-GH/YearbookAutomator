@@ -213,7 +213,7 @@ export function FinalizeStep({
               <strong>Export format</strong>
               <InfoPopover content="Affects preview and Render all. Default: PNG. TIFF is a single flattened composite like PNG." ariaLabel="Export format description" />
             </div>
-            <select value={outputFormat} onChange={(e) => onOutputFormat(e.target.value as "png" | "pdf" | "tiff")} disabled={loading}>
+            <select aria-label="Export format" value={outputFormat} onChange={(e) => onOutputFormat(e.target.value as "png" | "pdf" | "tiff")} disabled={loading}>
               <option value="png">PNG (default)</option>
               {pdfOutputEnabled && <option value="pdf">PDF</option>}
               {tiffOutputEnabled && <option value="tiff">TIFF</option>}
@@ -223,7 +223,7 @@ export function FinalizeStep({
               <strong>Export quality</strong>
               <InfoPopover content="Choose an output resolution. Max is the template's original resolution. Aspect ratio is locked to match the template." ariaLabel="Export quality description" />
             </div>
-            <select
+            <select aria-label="Export quality"
               value={exportQualityMode}
               onChange={(e) => {
                 const mode = e.target.value as "original" | "custom";
