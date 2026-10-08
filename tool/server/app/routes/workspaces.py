@@ -134,6 +134,7 @@ async def resolve(req: ResolveWorkspaceRequest, request: Request) -> ResolveWork
                 "code": "workspace_locked",
                 "message": "The workspace session for this commercial license is currently in use.",
                 "lock_expires_at": resolved.lock_expires_at,
+                "workspace_id": resolved.workspace_id,
                 "lock_holder_device_id": resolved.lock_holder_device_id,
             },
         )

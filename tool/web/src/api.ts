@@ -595,6 +595,13 @@ export async function releaseWorkspace(workspaceId: string, sessionId?: string):
   });
 }
 
+export async function takeoverWorkspace(workspaceId: string, sessionId?: string): Promise<void> {
+  await axios.post("/api/workspaces/takeover", {
+    workspace_id: workspaceId,
+    session_id: sessionId || null,
+  });
+}
+
 export async function getWorkspaceState(workspaceId: string): Promise<WorkspaceStateResponse> {
   const { data } = await axios.get<WorkspaceStateResponse>("/api/workspaces/state", {
     params: { workspace_id: workspaceId },
