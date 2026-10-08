@@ -23,7 +23,7 @@ Audits reviewed: frontend/backend/Plan3 acceptance at96d772c0, later F1 typograp
 |Backend3 immediate native cancellation|Partial. Cancel flag stops between stages; native inference cannot be interrupted mid-call and reservation releases after it returns.|controlled slow-step tests; actual Ultra/GPU not verified|
 |Backend4 face detector failures|Shared detector guarded against exception; named fallback warning.|unified detection and warning tests; actual two detected faces not independently verified|
 |Backend6 nonauto export placement|Shared place_generation_people used by renderer+XLSX in both modes.|layout assignment render/export regression|
-|Backend7 filtered logical slots|No silent shortening; allocation assertions covered in slot work.|slot regression|
+|Backend7 filtered logical slots|No silent shortening; explicit allocation assertion added in d44f30d8.|slot regression|
 |Backend8 warning text dedup|Intentionally dedup generic/font text; duplicate identical names may collapse warning text.|Known low-impact limitation|
 |Atomic export concerns|Temp in same directory,chmod beforeos.replace, finally cleanup, stable download readback.|generation output/print tests|
 |F1 typography review|Real variable axes and shared Unicode measurement/drawing integrated.|font/glyph/RTL/COLR tests; CBDT arbitrary strikes and mixed-font RTL remain partial|
