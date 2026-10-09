@@ -5,14 +5,19 @@ test('pending shift survives People to Style navigation',async({page})=>{
  await page.locator('.people-card-selectable').first().click();
  await page.getByLabel('Shift down').check();
  await page.waitForTimeout(500); await page.reload();
+ // After a reload the app restores the session from the server; step clicks are ignored until then.
+ await expect(page.getByText(/Session expires at/).first()).toBeVisible();
  await page.locator('.people-card-selectable').first().click();
  await expect(page.getByLabel('Shift down')).toBeChecked();
  // The step rail ignores clicks while the app is busy (aria-disabled); wait until each step is clickable.
  const goTo = async (name: string) => {
   const step = page.getByRole('button',{name,exact:true});
-  await expect(step).not.toHaveAttribute('aria-disabled','true');
-  await step.click();
-  await expect(page.getByRole('heading',{name,level:2})).toBeVisible();
+  // A click can still be dropped while the restored session settles, so retry until the step opens.
+  await expect(async () => {
+   await expect(step).not.toHaveAttribute('aria-disabled','true');
+   await step.click();
+   await expect(page.getByRole('heading',{name,level:2})).toBeVisible({timeout:2000});
+  }).toPass({timeout:20000});
  };
  await goTo('Style');
  await goTo('People');

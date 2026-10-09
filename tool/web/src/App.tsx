@@ -169,6 +169,10 @@ export default function App({
   const [didRestoreSession, setDidRestoreSession] = useState(false);
   const activeStepRef = useRef<TopStep>("template");
   activeStepRef.current = activeStep;
+  // ?step= values this app wrote itself and has not yet seen come back through the router.
+  const pendingUrlStepWritesRef = useRef<TopStep[]>([]);
+  // Last location.search the URL -> state effect saw; only a real URL change may move the step.
+  const lastSeenUrlSearchRef = useRef<string | null>(null);
 
   // Jump back to the top of the page whenever the user changes steps so each step
   // (especially the long People grid) starts from the top instead of mid-scroll.
@@ -1400,7 +1404,9 @@ export default function App({
 
         if (snap && isPersistedSessionV1(snap)) {
           const saved = snap;
-          setActiveStep(migrateActiveStep(saved.activeStep));
+          // Same as the local restore: a deep-linked /?step= wins over the saved step.
+          const urlStep = window.location.pathname === "/" ? parseStepFromSearch(window.location.search) : null;
+          setActiveStep(urlStep ?? migrateActiveStep(saved.activeStep));
           setEditTab(saved.editTab ?? "layout");
           setSkipQuotes(Boolean(saved.skipQuotes));
           setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
@@ -1808,8 +1814,21 @@ export default function App({
     if (!didRestoreSession || (workspaceId && !workspaceDefaultsHydrated)) return;
     if (location.pathname !== "/") return;
 
+    // When the restore gate opens, the restored step is authoritative (restore already honours
+    // a deep-linked ?step=); only later URL changes should move the step.
+    const prevSearch = lastSeenUrlSearchRef.current;
+    lastSeenUrlSearchRef.current = location.search;
+    if (prevSearch === null || prevSearch === location.search) return;
+
     const urlStep = parseStepFromSearch(location.search);
     if (urlStep == null) return;
+    // Ignore the echo of our own State -> URL write; otherwise a URL that lags one click
+    // behind the step makes the two effects swap values forever.
+    const echoIdx = pendingUrlStepWritesRef.current.indexOf(urlStep);
+    if (echoIdx !== -1) {
+      pendingUrlStepWritesRef.current = pendingUrlStepWritesRef.current.slice(echoIdx + 1);
+      return;
+    }
     if (urlStep === activeStepRef.current) return;
     goToStep(urlStep);
   }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search]);
@@ -1823,6 +1842,7 @@ export default function App({
 
     const next = new URLSearchParams(searchParams);
     next.set("step", String(activeStep));
+    pendingUrlStepWritesRef.current = [...pendingUrlStepWritesRef.current, activeStep];
     setSearchParams(next, { replace: true });
   }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search, activeStep, searchParams, setSearchParams]);
 
