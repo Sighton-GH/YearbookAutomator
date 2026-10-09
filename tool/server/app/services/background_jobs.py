@@ -72,10 +72,33 @@ def start_job(job_id: str, workspace_id: str, *, kind: str, source_filename: str
             "updated_at": now,
             "completed_at": None,
             "already_removed": False,
+            "cancel_requested": False,
             # Optional in-memory preview payload (used for non-destructive previews).
             "result_bytes": None,
             "result_bytes_at": None,
         }
+
+
+class BackgroundJobCancelled(Exception):
+    """Cancellation takes effect at the next processing-stage boundary."""
+
+
+def request_cancel(job_id: str) -> bool:
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return False
+        if job["status"] == "running":
+            job["cancel_requested"] = True
+        return True
+
+
+def raise_if_cancelled(job_id: str) -> None:
+    with _lock:
+        job = _jobs.get(job_id)
+        cancelled = bool(job and job.get("cancel_requested"))
+    if cancelled:
+        raise BackgroundJobCancelled()
 
 
 def update_job(
@@ -97,7 +120,7 @@ def update_job(
             job["progress"] = max(0, min(100, int(progress)))
         if status is not None:
             job["status"] = status
-            if status in {"done", "error"}:
+            if status in {"done", "error", "cancelled"}:
                 job["completed_at"] = now
         if message is not None:
             job["message"] = message
@@ -111,6 +134,11 @@ def update_job(
         if already_removed is not None:
             job["already_removed"] = bool(already_removed)
         job["updated_at"] = now
+
+
+def list_jobs() -> list[dict]:
+    with _lock:
+        return [dict(job) for job in _jobs.values()]
 
 
 def get_job(job_id: str) -> Optional[dict]:

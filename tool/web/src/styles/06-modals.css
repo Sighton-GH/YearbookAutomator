@@ -98,6 +98,24 @@
   overflow: auto;
 }
 
+.baby-editor-clip {
+  position: absolute;
+  inset: 0;
+}
+
+/* Clip to the slot's real mask so the editor shows what print will cut off. */
+.baby-editor-clip-masked {
+  -webkit-mask-image: var(--baby-mask);
+  mask-image: var(--baby-mask);
+  mask-mode: luminance;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
 .baby-editor-mask {
   position: absolute;
   inset: 0;

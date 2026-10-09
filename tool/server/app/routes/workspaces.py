@@ -14,6 +14,7 @@ from app.services.storage import (
 )
 from app.services.workspace_registry import (
     admin_takeover_workspace,
+    license_takeover_workspace,
     heartbeat_workspace,
     release_workspace,
     resolve_workspace,
@@ -134,6 +135,7 @@ async def resolve(req: ResolveWorkspaceRequest, request: Request) -> ResolveWork
                 "code": "workspace_locked",
                 "message": "The workspace session for this commercial license is currently in use.",
                 "lock_expires_at": resolved.lock_expires_at,
+                "workspace_id": resolved.workspace_id,
                 "lock_holder_device_id": resolved.lock_holder_device_id,
             },
         )
@@ -209,19 +211,23 @@ async def set_state(req: WorkspaceStateRequest, request: Request) -> WorkspaceSt
 
 @router.post("/takeover")
 async def takeover(req: WorkspaceActionRequest, request: Request) -> dict[str, bool]:
-    # Admin-only force takeover for commercial workspace locks.
     is_valid, _, _ = get_admin_session_state(request)
-    if not is_valid and not admin_basic_auth_valid(request):
-        raise HTTPException(status_code=401, detail="Admin authentication required")
-
     device_id = getattr(request.state, "license_device_id", None)
-    ok, reason = admin_takeover_workspace(
-        workspace_id=req.workspace_id,
-        device_id=device_id,
-        session_id=req.session_id or getattr(request.state, "client_session_id", None),
-    )
+    session_id = req.session_id or getattr(request.state, "client_session_id", None)
+    if is_valid or admin_basic_auth_valid(request):
+        ok, reason = admin_takeover_workspace(workspace_id=req.workspace_id, device_id=device_id, session_id=session_id)
+    else:
+        meta = getattr(request.state, "license_meta", None) or {}
+        key = str(getattr(request.state, "license_key", "") or "")
+        if not key:
+            raise HTTPException(status_code=401, detail="License key required")
+        ok, reason = license_takeover_workspace(
+            workspace_id=req.workspace_id, license_key=key,
+            license_type="commercial" if str(meta.get("license_type") or "") == "commercial" else "personal",
+            device_id=device_id, session_id=session_id,
+        )
     if not ok:
-        raise HTTPException(status_code=400, detail=reason or "workspace_takeover_failed")
+        raise HTTPException(status_code=409 if reason == "workspace_locked" else 403 if reason in {"workspace_owner_mismatch", "admin_takeover_disabled"} else 400, detail=reason or "workspace_takeover_failed")
     return {"ok": True}
 
 

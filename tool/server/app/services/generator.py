@@ -1,4 +1,6 @@
 from __future__ import annotations
+from dataclasses import replace
+from uuid import uuid4
 
 import os
 import time
@@ -9,10 +11,19 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from PIL import UnidentifiedImageError
 
 from app.models.schemas import GenerationRequest, TemplateSlots
-from app.services.placement import auto_place_slots_for_people
+from app.services.baby_masks import shape_mask
+from app.services.placement import place_generation_people
 from app.services.storage import InvalidWorkspacePath, ensure_workspace_capacity, restrict_file_permissions, safe_filename, workspace_dir, workspace_file
 from app.services import throttle
 from app.services.fonts import resolve_font_file
+from app.services.face_detection import detect_face
+from app.services.portrait_framing import PortraitStyle, PortraitShadow, PortraitFocus, paste_portrait
+from app.services.font_styling import load_styled_font
+from app.services.text_effects import TextShadow
+from app.services.text_layout import TextStyle, render_text
+
+
+PRINT_DPI = 300
 
 
 _OUTPUT_EXT_BY_FORMAT: dict[str, str] = {
@@ -159,7 +170,7 @@ def _try_truetype(name_or_path: str, size: int) -> ImageFont.FreeTypeFont | None
         return None
 
 
-def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int = 32) -> ImageFont.FreeTypeFont:
+def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int = 32, warning_cb: Callable[[str], None] | None = None) -> ImageFont.FreeTypeFont:
     # Prefer an uploaded font file (by filename) if present in the workspace.
     # Otherwise, try resolving a real TrueType font from the provided family/stack.
     fonts_dir = workspace_dir(workspace_id) / "fonts"
@@ -189,6 +200,9 @@ def _load_font(workspace_id: str, font_family: str, font_weight: str, size: int 
         loaded = _try_truetype(cand, size=size)
         if loaded is not None:
             return loaded
+
+    if warning_cb:
+        warning_cb(f"Font {font_family!r} was not available, so a fallback font was used.")
 
     # Robust fallbacks: common Linux/cross-platform fonts first, then Windows fonts.
     for fallback in [
@@ -282,6 +296,7 @@ def _render_wrapped_text(
     min_size: int = 8,
     max_height: int | None = None,
     spacing: int = 0,
+    color: tuple[int, int, int] = (20, 30, 50),
 ) -> None:
     content = (text.upper() if all_caps else text).strip()
     if not content:
@@ -309,14 +324,14 @@ def _render_wrapped_text(
         height = bbox[3] - bbox[1]
         width = bbox[2] - bbox[0]
         if height <= allowed_height and width <= max_width:
-            draw.multiline_text((x, y), "\n".join(lines), font=font, fill=(20, 30, 50), align=align, anchor=anchor, spacing=spacing)
+            draw.multiline_text((x, y), "\n".join(lines), font=font, fill=color, align=align, anchor=anchor, spacing=spacing)
             return
 
     # If we can't fit even at min_size, draw anyway (wrapped) at min_size.
     font = load_font(int(min_size))
     lines = _wrap_text(draw, content, font, max_width=max_width)
     if lines:
-        draw.multiline_text((x, y), "\n".join(lines), font=font, fill=(20, 30, 50), align=align, anchor=anchor, spacing=spacing)
+        draw.multiline_text((x, y), "\n".join(lines), font=font, fill=color, align=align, anchor=anchor, spacing=spacing)
 
 
 def _fit_image(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
@@ -360,7 +375,10 @@ def _detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
         from app.services.face_detection import detect_face_center_for_generation as detect
     except Exception:
         return None
-    return detect(img_rgb)
+    try:
+        return detect(img_rgb)
+    except Exception:
+        return None
 
 
 def detect_face_center(img_rgb: Image.Image) -> tuple[float, float] | None:
@@ -601,14 +619,20 @@ def _paste_image(
     else:
         fitted = _fit_image(overlay, target.width, target.height)
     if kind == "baby" and alpha_mask is not None:
+        if fitted.mode == "RGBA":
+            from PIL import ImageChops
+            alpha_mask = ImageChops.multiply(alpha_mask, fitted.getchannel("A"))
         base.paste(fitted, (target.x, target.y), alpha_mask)
     elif kind == "baby" and mask_shape == "ellipse":
         mask = Image.new("L", (target.width, target.height), 0)
         mdraw = ImageDraw.Draw(mask)
         mdraw.ellipse((0, 0, target.width - 1, target.height - 1), fill=255)
+        if fitted.mode == "RGBA":
+            from PIL import ImageChops
+            mask = ImageChops.multiply(mask, fitted.getchannel("A"))
         base.paste(fitted, (target.x, target.y), mask)
     else:
-        base.paste(fitted, (target.x, target.y))
+        base.paste(fitted, (target.x, target.y), fitted.getchannel("A") if fitted.mode == "RGBA" else None)
 
 
 def _render_name(
@@ -620,6 +644,7 @@ def _render_name(
     align: str,
     all_caps: bool,
     min_size: int = 8,
+    color: tuple[int, int, int] = (20, 30, 50),
 ) -> None:
     content = (text.upper() if all_caps else text).strip()
     if not content:
@@ -634,15 +659,44 @@ def _render_name(
     else:
         chosen = load_font(int(min_size))
     if align == "center":
-        draw.text((box.x + box.width / 2, box.y), content, font=chosen, fill=(20, 30, 50), anchor="ma")
+        draw.text((box.x + box.width / 2, box.y), content, font=chosen, fill=color, anchor="ma")
     else:
-        draw.text((box.x, box.y), content, font=chosen, fill=(20, 30, 50), anchor="la")
+        draw.text((box.x, box.y), content, font=chosen, fill=color, anchor="la")
 
 
-def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None) -> Path:
-    if len(payload.people) > len(payload.slots):
+
+
+def _text_style(payload: GenerationRequest, prefix: str, align: str) -> TextStyle:
+    """Build the F1 text style for 'name' or 'quote'. Null/default fields reproduce base output."""
+    shadow = getattr(payload, f"{prefix}_shadow")
+    return TextStyle(
+        align=align,
+        valign=getattr(payload, f"{prefix}_valign") or "top",
+        color=getattr(payload, f"{prefix}_color") or "#141e32",
+        line_spacing=getattr(payload, f"{prefix}_line_spacing"),
+        letter_spacing=int(getattr(payload, f"{prefix}_letter_spacing")),
+        stroke_width=int(getattr(payload, f"{prefix}_stroke_width")),
+        stroke_color=getattr(payload, f"{prefix}_stroke_color") or "#ffffff",
+        shadow=TextShadow(**shadow.model_dump()) if shadow is not None else None,
+        name_fit=payload.name_fit if prefix == "name" else "shrink",
+    )
+
+
+def _styled_loader(payload: GenerationRequest, prefix: str, family: str, weight: str, warnings: list[str]):
+    """Keep default upright instances unchanged; explicit styles set real axes."""
+    font_style = getattr(payload, f"{prefix}_font_style") or "normal"
+    if font_style == "italic" or weight.strip().lower() in {"bold", "700", "800", "900"}:
+        return lambda s: load_styled_font(payload.workspace_id, family, weight, s, font_style, warnings)
+    return lambda s: _load_font(payload.workspace_id, family, weight, size=s)
+
+
+
+
+def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, str], None] | None = None, warning_cb: Callable[[str], None] | None = None) -> Path:
+    active_people = [p for p in payload.people if not p.excluded]
+    if len(active_people) > len(payload.slots):
         raise ValueError(
-            f"This spread has {len(payload.people)} students but only {len(payload.slots)} slots. "
+            f"This spread has {len(active_people)} students but only {len(payload.slots)} slots. "
             "Re-render with 'Render all', which splits students across spreads."
         )
 
@@ -681,30 +735,30 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
     quote_align = payload.quote_align or payload.align
     quote_all_caps = payload.quote_all_caps if payload.quote_all_caps is not None else payload.all_caps
 
-    quote_font = _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=quote_font_size)
+    quote_font = _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=quote_font_size, warning_cb=warning_cb)
     draw = ImageDraw.Draw(base)
 
     baby_shape_cache: dict[int, str] = {}
     baby_mask_cache: dict[str, Image.Image | None] = {}
     baby_face_center_cache: dict[str, tuple[float, float] | None] = {}
 
-    effective_people = payload.people
-    effective_slots = payload.slots
-
-    if getattr(payload, "auto_place", False):
-        effective_people, effective_slots = auto_place_slots_for_people(
-            people=payload.people,
-            slots=payload.slots,
-            placement_mode=getattr(payload, "placement_mode", "left_then_right"),
-            slot_assignments=getattr(payload, "slot_assignments", None),
-            force_alphabetical=getattr(payload, "force_alphabetical", False),
-        )
+    effective_people, logical_indices, number_to_index = place_generation_people(payload)
+    effective_slots = [payload.slots[number_to_index[l]] for l in logical_indices]
 
     total = max(len(effective_people), 1)
     allowed_image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
     baby_bg_rgb = _parse_hex_rgb(getattr(payload, "baby_background_color", None))
     center_baby_on_face = bool(getattr(payload, "center_baby_on_face", False))
+    portrait_style = PortraitStyle.from_request(payload)
+    portrait_face_cache = {}
+    low_resolution_portraits = 0
+    output_scale = min(1, (payload.output_width / template_w) if payload.output_width else
+                       (payload.output_height / template_h) if payload.output_height else 1)
+    baby_style = PortraitStyle(shape=payload.baby_shape, corner_radius=payload.baby_corner_radius,
+                               border_width=payload.baby_border_width,
+                               border_color=_parse_hex_rgb(payload.baby_border_color) or (255, 255, 255),
+                               shadow=PortraitShadow.coerce(payload.baby_shadow))
 
     def _looks_like_image(path: Path) -> bool:
         # Extension check is a fast guard, but we still rely on Pillow open errors as truth.
@@ -717,14 +771,16 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
-    def _try_open_baby_rgb(path: Path) -> Image.Image | None:
+    def _try_open_baby_rgb(path: Path, fill_rgb, preserve_alpha=False) -> Image.Image | None:
         try:
             with Image.open(path) as img:
                 upright = ImageOps.exif_transpose(img)
-                if baby_bg_rgb is None:
-                    # Preserve historical behavior: convert directly to RGB.
+                if preserve_alpha:
+                    return upright.convert("RGBA")
+                if fill_rgb is None:
+                    # Omitted override keeps historical behavior.
                     return upright.convert("RGB")
-                return _fill_transparency(upright, baby_bg_rgb)
+                return _fill_transparency(upright, fill_rgb)
         except (UnidentifiedImageError, OSError, ValueError):
             return None
 
@@ -739,7 +795,31 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             if mug_path.exists() and _looks_like_image(mug_path):
                 m_img = _try_open_rgb(mug_path)
                 if m_img is not None:
-                    _paste_image(base, m_img, slot, kind="mugshot")
+                    from app.services.print_output import portrait_upscale
+                    if portrait_upscale(m_img.size, (slot.mugshot.width, slot.mugshot.height),
+                                        portrait_style.fit, person.mugshot_focus) * output_scale > 1.5:
+                        low_resolution_portraits += 1
+                    if portrait_style.is_default and person.mugshot_focus is None:
+                        _paste_image(base, m_img, slot, kind="mugshot")
+                    else:
+                        face_box = None
+                        if portrait_style.face_aware and person.mugshot_focus is None and portrait_style.fit == "cover":
+                            if mugshot_filename not in portrait_face_cache:
+                                try:
+                                    portrait_face_cache[mugshot_filename] = detect_face(m_img)
+                                except Exception:
+                                    portrait_face_cache[mugshot_filename] = None
+                                    if warning_cb:
+                                        warning_cb(f"Portrait face detection failed for {person.first_name} {person.last_name}; it was centred instead.")
+                            face = portrait_face_cache[mugshot_filename]
+                            if face is not None:
+                                b = face.box
+                                face_box = (b.x, b.y, b.x + b.w, b.y + b.h)
+                        box = slot.mugshot
+                        for warning in paste_portrait(base, m_img, (box.x, box.y, box.width, box.height),
+                                                      portrait_style, person.mugshot_focus, face_box):
+                            if warning_cb:
+                                warning_cb(warning)
 
         # Baby photo: try per-person first; if invalid/unreadable, fall back to default.
         candidate_baby = person.baby_photo_filename
@@ -750,7 +830,7 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
         if default_baby and default_baby not in baby_to_try:
             baby_to_try.append(default_baby)
 
-        for baby_filename in baby_to_try:
+        for baby_filename in ([] if person.hide_baby_photo else baby_to_try):
             try:
                 baby_path = workspace_file(payload.workspace_id, "baby", safe_filename(baby_filename))
             except InvalidWorkspacePath:
@@ -759,7 +839,9 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 continue
             if not _looks_like_image(baby_path):
                 continue
-            b_img = _try_open_baby_rgb(baby_path)
+            has_fill_override = "baby_fill_color" in person.model_fields_set
+            fill = _parse_hex_rgb(person.baby_fill_color) if has_fill_override else baby_bg_rgb
+            b_img = _try_open_baby_rgb(baby_path, fill, has_fill_override and person.baby_fill_color is None)
             if b_img is None:
                 continue
 
@@ -768,6 +850,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 if baby_filename not in baby_face_center_cache:
                     baby_face_center_cache[baby_filename] = _detect_face_center(b_img)
                 focus = baby_face_center_cache[baby_filename]
+                if focus is None and warning_cb:
+                    warning_cb(f"Couldn't find a face in {person.first_name} {person.last_name}'s baby photo, so it was centred instead.")
 
             # Prefer exact mask saved during template parsing (supports triangles/rounded-rectangles/circles).
             key = f"{slot.baby_photo.x}_{slot.baby_photo.y}_{slot.baby_photo.width}_{slot.baby_photo.height}"
@@ -775,32 +859,59 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
                 baby_mask_cache[key] = _load_baby_mask(payload.workspace_id, slot.baby_photo)
             mask = baby_mask_cache[key]
 
+            if slot.baby_shape and slot.baby_shape != "auto":
+                mask = shape_mask(slot.baby_photo, slot.baby_shape)
+
             shape = baby_shape_cache.get(idx)
             if shape is None:
                 shape = _detect_baby_slot_shape(template_ref, slot.baby_photo)
                 baby_shape_cache[idx] = shape
 
-            _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
+            # Designer-supplied masks always win; optional framing is for auto rectangles only.
+            if (mask is None or mask.getextrema() == (255, 255)) and shape == "rect" and not baby_style.is_default:
+                b = slot.baby_photo
+                baby_focus = PortraitFocus(focus[0] / b_img.width, focus[1] / b_img.height) if focus else None
+                paste_portrait(base, b_img, (b.x, b.y, b.width, b.height), baby_style, baby_focus)
+            else:
+                _paste_image(base, b_img, slot, kind="baby", mask_shape=shape, alpha_mask=mask, focus_point=focus)
             break
 
-        quote = person.quote or payload.default_quote or ""
-        _render_name(draw, f"{person.first_name} {person.last_name}", slot.name, lambda s: _load_font(payload.workspace_id, name_font_family, name_font_weight, size=s), name_font_size, name_align, name_all_caps)
+        quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
+        text_warnings: list[str] = []
+        student_label = f"{person.first_name} {person.last_name}".strip()
+        render_text(
+            base,
+            text=f"{person.first_name} {person.last_name}",
+            box=slot.name,
+            load_font=_styled_loader(payload, "name", name_font_family, name_font_weight, text_warnings),
+            start_size=person.name_font_size or name_font_size,
+            kind="name",
+            style=replace(_text_style(payload, "name", name_align), color=person.name_color or payload.name_color or "#141e32"),
+            all_caps=name_all_caps,
+            min_size=int(payload.name_min_size),
+            warnings=text_warnings,
+            student=student_label,
+        )
         if quote:
-            max_quote_width = min(int(slot.quote.width), int(slot.mugshot.width * 1.5))
-            _render_wrapped_text(
-                draw=draw,
-                load_font=lambda s: _load_font(payload.workspace_id, quote_font_family, quote_font_weight, size=s),
+            render_text(
+                base,
                 text=quote,
                 box=slot.quote,
-                max_width=max_quote_width,
-                start_size=quote_font_size,
-                align=quote_align,
+                load_font=_styled_loader(payload, "quote", quote_font_family, quote_font_weight, text_warnings),
+                start_size=person.quote_font_size or quote_font_size,
+                kind="quote",
+                style=replace(_text_style(payload, "quote", quote_align), color=person.quote_color or payload.quote_color or "#141e32"),
                 all_caps=quote_all_caps,
-                # Allow the quote to use the full mugshot height before shrinking.
+                min_size=int(payload.quote_min_size),
+                # Quote geometry: width capped by the portrait, height is the portrait height.
+                max_width=min(int(slot.quote.width), int(slot.mugshot.width * 1.5)),
                 max_height=int(slot.mugshot.height),
-                # Pack lines tighter to maximize usable space; shrink only as a last resort.
-                spacing=0,
+                warnings=text_warnings,
+                student=student_label,
             )
+        if warning_cb:
+            for text_warning in text_warnings:
+                warning_cb(text_warning)
 
         pct = 10 + int((idx + 1) / total * 80)
         tick(pct, f"Rendered {idx + 1}/{total}")
@@ -808,6 +919,8 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
 
     out_name = _normalize_output_filename(getattr(payload, "output_filename", None), output_format)
     out_path = workspace_file(payload.workspace_id, out_name)
+    # Publish only a complete file, never a partially encoded preview.
+    temp_out_path = out_path.with_name(f".{out_path.name}.{uuid4().hex}.tmp")
 
     # Optional export resolution override.
     # Rules:
@@ -856,20 +969,31 @@ def generate_composite(payload: GenerationRequest, progress_cb: Callable[[int, s
             except Exception:
                 base = base.resize((w, h), resample=resampling)
 
-    if output_format == "tiff":
-        tick(92, "Saving TIFF")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="TIFF", compression="tiff_deflate")
-    elif output_format == "pdf":
-        tick(92, "Saving PDF")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PDF")
-    else:
-        tick(92, "Saving PNG")
-        ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
-        base.save(out_path, format="PNG")
+    if low_resolution_portraits and warning_cb:
+        noun = "portrait is" if low_resolution_portraits == 1 else "portraits are"
+        warning_cb(f"{low_resolution_portraits} {noun} lower resolution than this print size needs.")
 
-    restrict_file_permissions(out_path)
+    try:
+        if output_format == "tiff":
+            tick(92, "Saving TIFF")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            base.save(temp_out_path, format="TIFF", compression="tiff_deflate", dpi=(payload.output_dpi, payload.output_dpi))
+        elif output_format == "pdf":
+            tick(92, "Saving PDF")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            if payload.crop_marks:
+                from app.services.print_output import save_pdf_with_crop_marks
+                save_pdf_with_crop_marks(base, temp_out_path, payload.output_dpi)
+            else:
+                base.save(temp_out_path, format="PDF", resolution=payload.output_dpi)
+        else:
+            tick(92, "Saving PNG")
+            ensure_workspace_capacity(payload.workspace_id, base.width * base.height * 4, replacing=out_path)
+            base.save(temp_out_path, format="PNG", dpi=(payload.output_dpi, payload.output_dpi))
 
-    tick(100, "Done")
+        restrict_file_permissions(temp_out_path)
+        temp_out_path.replace(out_path)
+        tick(100, "Done")
+    finally:
+        temp_out_path.unlink(missing_ok=True)
     return out_path

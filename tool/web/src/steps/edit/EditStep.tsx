@@ -1,7 +1,7 @@
 import type React from "react";
 import { LayoutGrid, Palette, Users } from "lucide-react";
 import type { BackgroundMode, Box, PersonRecord, RawParseDebug, TemplateSlots } from "../../api";
-import type { Align, FontWeight } from "../../types";
+import type { Align, FontWeight, PlacementMode } from "../../types";
 import type { PersistedSessionV1 } from "../../session";
 import { TabBar, type TabBarItem } from "../../components/TabBar";
 import { LayoutTab } from "./LayoutTab";
@@ -31,10 +31,17 @@ export function EditStep({
   peoplePerSpread,
   parsedSlots,
   rawDebug,
+  placementMode,
+  layoutHistory,
   // People tab
   workspaceId,
   people,
   setPeople,
+  positionSettings,
+  pendingPeopleAdjustments,
+  peopleSwapMode,
+  onPeopleSwapMode,
+  onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
   originalBabyPeople,
@@ -56,7 +63,11 @@ export function EditStep({
   babyBackgroundColor,
   babyBackgroundMode,
   onBabyEditHistoryAdd,
+  babyEditorProtectedFilenames,
   babyMaskBox,
+  portraitBox,
+  portraitBoxByPerson,
+  babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
   loading,
@@ -81,6 +92,9 @@ export function EditStep({
   onQuoteFontSize,
   onQuoteAllCaps,
   onQuoteAlign,
+  textStyles,
+  onTextStyles,
+  onRenderStyleStrip,
   availableFonts,
   setAvailableFonts,
   customFontUploadEnabled,
@@ -95,7 +109,7 @@ export function EditStep({
   skipBabyPhotos: boolean;
   slots: TemplateSlots[];
   templateSize: { width: number; height: number } | null;
-  onSlots: (slots: TemplateSlots[]) => void;
+  onSlots: (slots: TemplateSlots[], gestureKey?: string, order?: number[]) => void;
   previewMode: "clean" | "annotated";
   onPreviewMode: (mode: "clean" | "annotated") => void;
   annotatedPreviewUrl: string | null;
@@ -106,9 +120,16 @@ export function EditStep({
   peoplePerSpread: number;
   parsedSlots: TemplateSlots[];
   rawDebug: RawParseDebug | null;
+  placementMode?: PlacementMode;
+  layoutHistory?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
   workspaceId: string | null;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  positionSettings: import("../../components/StudentPosition").PositionSettings;
+  peopleSwapMode: "off" | "card" | "portrait";
+  onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
+  pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
+  onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
   setOriginalPeople: (p: PersonRecord[] | null) => void;
   originalBabyPeople: PersonRecord[] | null;
@@ -129,8 +150,12 @@ export function EditStep({
   defaultBabyFilename: string | null;
   babyBackgroundColor: string;
   babyBackgroundMode: BackgroundMode;
+  babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
+  portraitBox: Box | null;
+  portraitBoxByPerson?: Record<number, Box | null>;
+  babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   loading: boolean;
@@ -154,6 +179,9 @@ export function EditStep({
   onQuoteFontSize: (v: number) => void;
   onQuoteAllCaps: (v: boolean) => void;
   onQuoteAlign: (v: Align) => void;
+  textStyles: import("../../utils/textStyle").TextStylesSetting;
+  onTextStyles: (v: import("../../utils/textStyle").TextStylesSetting) => void;
+  onRenderStyleStrip: () => Promise<{ url: string; warnings: string[] }>;
   availableFonts: { name: string; filename: string; source?: string }[];
   setAvailableFonts: (fonts: { name: string; filename: string; source?: string }[]) => void;
   customFontUploadEnabled: boolean;
@@ -173,6 +201,8 @@ export function EditStep({
       {editTab === "layout" && (
         <LayoutTab
           slots={slots}
+          workspaceId={workspaceId}
+          skipBabyPhotos={skipBabyPhotos}
           templateSize={templateSize}
           onSlots={onSlots}
           previewMode={previewMode}
@@ -185,6 +215,8 @@ export function EditStep({
           peoplePerSpread={peoplePerSpread}
           parsedSlots={parsedSlots}
           rawDebug={rawDebug}
+          placementMode={placementMode}
+          layoutHistory={layoutHistory}
         />
       )}
 
@@ -195,6 +227,11 @@ export function EditStep({
           skipBabyPhotos={skipBabyPhotos}
           people={people}
           setPeople={setPeople}
+          positionSettings={positionSettings}
+          pendingPeopleAdjustments={pendingPeopleAdjustments}
+          peopleSwapMode={peopleSwapMode}
+          onPeopleSwapMode={onPeopleSwapMode}
+          onPendingPeopleAdjustments={onPendingPeopleAdjustments}
           originalPeople={originalPeople}
           setOriginalPeople={setOriginalPeople}
           originalBabyPeople={originalBabyPeople}
@@ -216,7 +253,11 @@ export function EditStep({
           babyBackgroundColor={babyBackgroundColor}
           babyBackgroundMode={babyBackgroundMode}
           onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+          babyEditorProtectedFilenames={babyEditorProtectedFilenames}
           babyMaskBox={babyMaskBox}
+          portraitBox={portraitBox}
+          portraitBoxByPerson={portraitBoxByPerson}
+          babyBoxByPerson={babyBoxByPerson}
           allowInsecureUploads={allowInsecureUploads}
           setStatus={setStatus}
           loading={loading}
@@ -246,6 +287,9 @@ export function EditStep({
           onQuoteFontSize={onQuoteFontSize}
           onQuoteAllCaps={onQuoteAllCaps}
           onQuoteAlign={onQuoteAlign}
+          textStyles={textStyles}
+          onTextStyles={onTextStyles}
+          onRenderStyleStrip={onRenderStyleStrip}
           workspaceId={workspaceId}
           availableFonts={availableFonts}
           setAvailableFonts={setAvailableFonts}

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import BinaryIO, List, Tuple
 
+import json
 import logging
 import os
 
 import cv2
 import numpy as np
 
-from app.models.schemas import Box, TemplateParseResponse, TemplateSlots
+from app.models.schemas import Box, TemplateDetectionOptions, TemplateParseResponse, TemplateSlots
 from app.services.storage import new_workspace_id, workspace_dir
 
 DEFAULT_MUGSHOT_HEX = "00bf63"
@@ -178,6 +179,14 @@ def _dedupe_boxes(boxes: List[Box], tolerance: int = 10) -> List[Box]:
     return unique
 
 
+def tolerance_steps(tolerance: int | None, defaults: list[int]) -> list[int]:
+    """Omitted sensitivity preserves the legacy sweep, including custom colours."""
+    validated = TemplateDetectionOptions(tolerance=tolerance).tolerance
+    if validated is None:
+        return defaults
+    return sorted({min(64, validated + delta) for delta in (0, 8, 16, 24, 32)})
+
+
 def extract_slots(
     annotated_png: BinaryIO,
     clean_template: BinaryIO | None = None,
@@ -189,6 +198,7 @@ def extract_slots(
     enable_baby_photos: bool = True,
     enable_quotes: bool = True,
     template_id: str | None = None,
+    tolerance: int | None = None,
 ) -> TemplateParseResponse:
     annotated_bytes = annotated_png.read()
     np_data = np.frombuffer(annotated_bytes, np.uint8)
@@ -216,19 +226,22 @@ def extract_slots(
         sx = clean_w / float(width)
         sy = clean_h / float(height)
 
+    mask_color = baby_hex or DEFAULT_BABY_HEX
+    mask_steps = tolerance_steps(tolerance, [24, 32, 40, 48, 64] if baby_hex else [20, 24, 32, 40, 48])
     use_custom = bool(mugshot_hex or baby_hex)
-    tol_steps = [24, 32, 40, 48, 64]
+    tol_steps = tolerance_steps(tolerance, [24, 32, 40, 48, 64])
+    tol_default = tolerance_steps(tolerance, [20, 24, 32, 40, 48])
 
     if mugshot_hex:
         mugshot_boxes, green_mask = _detect_boxes_with_color(mugshot_hex, hsv, min_area, tol_steps)
     else:
-        mugshot_boxes, green_mask = _detect_boxes_with_color(DEFAULT_MUGSHOT_HEX, hsv, min_area, [20, 24, 32, 40, 48])
+        mugshot_boxes, green_mask = _detect_boxes_with_color(DEFAULT_MUGSHOT_HEX, hsv, min_area, tol_default)
 
     if enable_baby_photos:
         if baby_hex:
             baby_boxes, blue_mask = _detect_boxes_with_color(baby_hex, hsv, min_area, tol_steps)
         else:
-            baby_boxes, blue_mask = _detect_boxes_with_color(DEFAULT_BABY_HEX, hsv, min_area, [20, 24, 32, 40, 48])
+            baby_boxes, blue_mask = _detect_boxes_with_color(DEFAULT_BABY_HEX, hsv, min_area, tol_default)
     else:
         baby_boxes = []
         blue_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
@@ -246,6 +259,8 @@ def extract_slots(
             blue_mask = cv2.inRange(_maybe_umat(hsv), np.array(blue_range[0]), np.array(blue_range[1]))
             blue_mask = _maybe_umat_result(blue_mask)
             baby_boxes = _boxes_from_mask(blue_mask, min_area=min_area)
+            mask_color = DEFAULT_BABY_HEX
+            mask_steps = [20]
 
     if not mugshot_boxes and (not enable_baby_photos or not baby_boxes):
         if enable_baby_photos:
@@ -254,13 +269,17 @@ def extract_slots(
 
     name_hex = name_hex or TEXT_NAME_HEX
     quote_hex = quote_hex or TEXT_QUOTE_HEX
-    tol_default = [20, 24, 32, 40, 48]
     name_boxes, _ = _detect_boxes_with_color(name_hex, hsv, min_area, tol_default)
     quote_boxes, _ = _detect_boxes_with_color(quote_hex, hsv, min_area, tol_default) if enable_quotes else ([], np.zeros(hsv.shape[:2], dtype=np.uint8))
     if not name_boxes:
         raise ValueError("No name (orange) rectangles detected. Ensure the annotated template has coloured regions for names.")
     if enable_quotes and not quote_boxes:
         raise ValueError("No quote (red) rectangles detected. Ensure the annotated template has coloured regions for quotes.")
+
+    detected = {
+        "mugshot": list(mugshot_boxes), "baby_photo": list(baby_boxes),
+        "name": list(name_boxes), "quote": list(quote_boxes),
+    }
 
     # Deduplicate boxes to remove elements with exact or near-identical coordinates
     mugshot_boxes = _dedupe_boxes(mugshot_boxes)
@@ -320,17 +339,16 @@ def extract_slots(
 
     quote_boxes = quote_boxes_filtered if quote_boxes_filtered else quote_boxes
 
-    # Capture counts after processing for debug
+    # Capture raw detections before grouping, deduplication or reclassification.
     raw_debug = {
-        "mugshot_count": len(mugshot_boxes),
-        "baby_count": len(baby_boxes),
-        "name_count": len(name_boxes),
-        "quote_count": len(quote_boxes),
-        "mugshots": list(mugshot_boxes),
-        "baby_photos": list(baby_boxes),
-        "names": list(name_boxes),
-        "quotes": list(quote_boxes),
+        "mugshot_count": len(detected["mugshot"]),
+        "baby_count": len(detected["baby_photo"]),
+        "name_count": len(detected["name"]),
+        "quote_count": len(detected["quote"]),
+        "mugshots": detected["mugshot"], "baby_photos": detected["baby_photo"],
+        "names": detected["name"], "quotes": detected["quote"],
     }
+    invented: dict[str, list[Box]] = {kind: [] for kind in detected}
 
     def box_center(box: Box) -> tuple[float, float]:
         return (box.x + box.width / 2, box.y + box.height / 2)
@@ -410,6 +428,7 @@ def extract_slots(
                 used_baby.add(baby_idx)
             if baby is None:
                 baby = mug  # fallback
+                invented["baby_photo"].append(baby)
         else:
             baby = mug
 
@@ -419,6 +438,7 @@ def extract_slots(
             used_name.add(name_idx)
         if name_box is None:
             name_box = Box(x=mug.x, y=mug.y + mug.height + 6, width=mug.width, height=36)
+            invented["name"].append(name_box)
 
         # Find nearest quote box
         if enable_quotes:
@@ -432,10 +452,31 @@ def extract_slots(
                     width=name_box.width,
                     height=max(48, name_box.height),
                 )
+                invented["quote"].append(quote_box)
         else:
             quote_box = name_box
 
         slots.append(TemplateSlots(mugshot=mug, baby_photo=baby, name=name_box, quote=quote_box))
+
+    dropped: dict[str, list[Box]] = {}
+    for kind, boxes in detected.items():
+        remaining = [getattr(slot, kind) for slot in slots]
+        dropped[kind] = []
+        for box in boxes:
+            if box in remaining:
+                remaining.remove(box)
+            else:
+                dropped[kind].append(box)
+    messages = []
+    labels = {"mugshot": "portrait", "baby_photo": "baby photo", "name": "name", "quote": "quote"}
+    for kind, label in labels.items():
+        if dropped[kind]:
+            n = len(dropped[kind])
+            messages.append(f"{n} extra {label} {'box was' if n == 1 else 'boxes were'} ignored")
+        if invented[kind]:
+            n = len(invented[kind])
+            messages.append(f"{n} {label} {'box was' if n == 1 else 'boxes were'} guessed - please check them")
+    raw_debug.update(dropped=dropped, invented=invented, messages=messages)
 
     if not slots:
         raise ValueError("No slots could be generated from the annotated template.")
@@ -475,6 +516,8 @@ def extract_slots(
                 "baby_photos": [_scale_box(b, sx, sy) for b in raw_debug["baby_photos"]],
                 "names": [_scale_box(b, sx, sy) for b in raw_debug["names"]],
                 "quotes": [_scale_box(b, sx, sy) for b in raw_debug["quotes"]],
+                "dropped": {k: [_scale_box(b, sx, sy) for b in v] for k, v in dropped.items()},
+                "invented": {k: [_scale_box(b, sx, sy) for b in v] for k, v in invented.items()},
             }
 
     # Persist baby-photo masks for exact shape cropping (circle/rounded-rect/triangle/etc).
@@ -491,6 +534,9 @@ def extract_slots(
                 except OSError:
                     pass
         masks_dir.mkdir(parents=True, exist_ok=True)
+        (masks_dir / "detection.json").write_text(json.dumps({
+            "color": mask_color, "tol_steps": mask_steps, "min_area": min_area,
+        }), encoding="utf-8")
         for slot in out_slots:
             b = slot.baby_photo
             x0 = max(0, int(b.x))

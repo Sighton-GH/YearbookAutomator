@@ -405,6 +405,38 @@ def release_workspace(*, workspace_id: str, license_type: LicenseType, device_id
     return True, None
 
 
+def license_takeover_workspace(*, workspace_id: str, license_key: str, license_type: LicenseType,
+                               device_id: str | None, session_id: str | None) -> tuple[bool, str | None]:
+    """Allow only the authenticated commercial owner to move their own lock.
+
+    Ownership and lock replacement share the registry mutex. Admin takeover
+    remains separately authenticated and subject to its existing setting.
+    """
+    if license_type != "commercial":
+        return False, "takeover_not_allowed_for_license_type"
+    now = int(time.time())
+    expected_owner = _owner_key(license_key, license_type, device_id)
+    with _STORE_LOCK:
+        store = _load_registry()
+        binding = _binding_by_workspace(store["bindings"], workspace_id)
+        if binding is None:
+            return False, "workspace_not_registered"
+        if str(binding.get("owner_key") or "") != expected_owner:
+            return False, "workspace_owner_mismatch"
+        if not bool(get_face_detection_settings().enable_admin_workspace_takeover):
+            return False, "admin_takeover_disabled"
+        lock = binding.get("lock") if isinstance(binding.get("lock"), dict) else None
+        if lock and int(lock.get("expires_at") or 0) > now and not _lock_owner_matches(lock, device_id=device_id, session_id=session_id):
+            return False, "workspace_locked"
+        expires_at = int(binding.get("expires_at") or 0)
+        if expires_at > 0 and expires_at <= now:
+            return False, "workspace_expired"
+        _acquire_lock(binding, device_id=device_id, session_id=session_id, now=now)
+        _save_registry(store)
+    _audit("workspace_owner_takeover", workspace_id=workspace_id, license_type="commercial", device_id=device_id)
+    return True, None
+
+
 def admin_takeover_workspace(*, workspace_id: str, device_id: str | None, session_id: str | None) -> tuple[bool, str | None]:
     settings = get_face_detection_settings()
     if not bool(settings.enable_admin_workspace_takeover):

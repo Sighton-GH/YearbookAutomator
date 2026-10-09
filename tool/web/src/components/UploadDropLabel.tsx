@@ -165,7 +165,7 @@ export function UploadDropLabel({
             <div key="__upload_file_row" className="upload-file-row">
               {clonedInput}
               <div className="upload-file-ui" aria-hidden="true">
-                <button type="button" className="upload-file-button">
+                <span className="upload-file-button">
                   <svg
                     className="upload-file-icon"
                     width="16"
@@ -198,7 +198,7 @@ export function UploadDropLabel({
                     />
                   </svg>
                   Upload File
-                </button>
+                </span>
                 <span className="upload-file-name">{hasFile ? fileName || "File selected" : "No file chosen"}</span>
                 {!hasFile ? <span className="upload-file-tip">(you can also drag and drop a file)</span> : null}
               </div>

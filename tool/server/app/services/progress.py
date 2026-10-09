@@ -50,6 +50,7 @@ def start_job(job_id: str, workspace_id: str) -> None:
             "error": None,
             "updated_at": time.time(),
             "cancel_requested": False,
+            "warnings": [],
         }
 
 
@@ -106,3 +107,10 @@ def clear_job(job_id: str) -> None:
 def list_jobs() -> list[dict]:
     with _lock:
         return list(_progress.values())
+
+
+def append_warning(job_id: str, warning: str) -> None:
+    with _lock:
+        job = _progress.get(job_id)
+        if job is not None and warning not in job["warnings"]:
+            job["warnings"].append(warning)

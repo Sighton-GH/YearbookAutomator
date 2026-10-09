@@ -1,3 +1,5 @@
+import { FilenameColumnControl } from "../components/FilenameColumnControl";
+import { hasNameEdit, keepNameEdits } from "../utils/personEdits";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -181,8 +183,14 @@ export function ImportStep({
   quoteColor,
   setQuoteColor,
   minArea,
+  tolerance,
+  setTolerance,
   setMinArea,
   onRawDebug,
+  filenameCandidates,
+  onFilenameCandidates,
+  filenameColumn,
+  onFilenameColumn,
   namingPattern,
   setNamingPattern,
   advancedNameMatch,
@@ -222,6 +230,7 @@ export function ImportStep({
   centerOnFaceOpsEnabled,
   advancedNameMatchingEnabled,
   onContinue,
+  onPendingUploads,
 }: {
   /** Which pipeline cards to render. Lets the 5-step flow surface one card per step
    *  (e.g. just "template", or "quotes"+"baby" inside the People step). Defaults to all. */
@@ -256,8 +265,14 @@ export function ImportStep({
   quoteColor: string;
   setQuoteColor: (v: string) => void;
   minArea: number;
+  tolerance?: number;
+  setTolerance: (value: number | undefined) => void;
   setMinArea: (n: number) => void;
   onRawDebug?: (debug: RawParseDebug | null) => void;
+  filenameCandidates: import("../api").FilenameColumnCandidate[];
+  onFilenameCandidates: (value: import("../api").FilenameColumnCandidate[]) => void;
+  filenameColumn: string | null | undefined;
+  onFilenameColumn: (value: string | null | undefined) => void;
   namingPattern: string;
   setNamingPattern: (v: string) => void;
   advancedNameMatch: boolean;
@@ -297,6 +312,7 @@ export function ImportStep({
   centerOnFaceOpsEnabled: boolean;
   advancedNameMatchingEnabled: boolean;
   onContinue: () => void;
+  onPendingUploads: (pending: boolean) => void;
 }) {
   // --- Template card state ---
   const [showCustomOptions, setShowCustomOptions] = useState(false);
@@ -331,6 +347,11 @@ export function ImportStep({
   // --- Baby photos card state ---
   const [babyZip, setBabyZip] = useState<File | null>(null);
   const [babyFile, setBabyFile] = useState<File | null>(null);
+  const processedFiles = useRef<Array<File | null>>([workspaceId ? annotated : null, workspaceId ? clean : null]);
+  useEffect(() => {
+    onPendingUploads([annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile].some((file, i) => Boolean(file) && file !== processedFiles.current[i]));
+  }, [annotated, clean, sheet, zip, quotesSheet, babyZip, babyFile, loading, onPendingUploads]);
+  useEffect(() => () => onPendingUploads(false), [onPendingUploads]);
   const [babyAdvancedNameMatch, setBabyAdvancedNameMatch] = useState(Boolean(babyIngest.advancedNameMatch ?? true));
   const [babyPartialNameMatch, setBabyPartialNameMatch] = useState(Boolean(babyIngest.partialNameMatch ?? true));
 
@@ -506,6 +527,7 @@ export function ImportStep({
         disableBabyPhotos: skipBabyPhotos,
         disableQuotes: skipQuotes,
         minArea,
+        tolerance,
         onProgress: (pct) => {
           const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)));
           const elapsed = Math.max(0, (performance.now() - opStartMs) / 1000);
@@ -527,6 +549,7 @@ export function ImportStep({
       if (onRawDebug) onRawDebug(resp.raw_debug ?? null);
       setStatus("Template parsed successfully");
       setProgress(100);
+      processedFiles.current[0] = annotated; processedFiles.current[1] = clean;
       setTemplateStage("done");
       return true;
     } catch (err: any) {
@@ -546,6 +569,8 @@ export function ImportStep({
   // Returns the freshly-ingested people list (or null on failure) rather than a bare boolean
   // so the cascade below can hand the *current* roster to quotes/baby instead of relying on
   // the `people` prop, which won't reflect this stage's setPeople() call until the next render.
+  const [keepEditedNames, setKeepEditedNames] = useState(false);
+  const editedNameCount = people.filter(hasNameEdit).length;
   const runPortraitsStage = async (): Promise<PersonRecord[] | null> => {
     if (!workspaceId) {
       setStatus("Parse the template first");
@@ -581,7 +606,8 @@ export function ImportStep({
     });
     const opStartMs = performance.now();
     try {
-      const resp = await ingestSpreadsheet(workspaceId, sheet, zip, {
+      let resp = await ingestSpreadsheet(workspaceId, sheet, zip, {
+        filenameColumn,
         namingPattern: namingPattern || undefined,
         advancedNameMatch,
         onProgress: (pct) => {
@@ -600,9 +626,18 @@ export function ImportStep({
           setStatus(`Uploading portraits… ${clamped}%${etaPart}`);
         },
       });
+      const candidates = resp.filename_column_candidates ?? [];
+      onFilenameCandidates(candidates);
+      if (filenameColumn === undefined) {
+        const suggested = candidates.find(candidate => candidate.suggested)?.column ?? null;
+        onFilenameColumn(suggested);
+        if (suggested) resp = await ingestSpreadsheet(workspaceId, sheet, zip, {filenameColumn: suggested, namingPattern: namingPattern || undefined, advancedNameMatch});
+      }
       ticker.finish(opStartMs);
-      setPeople(resp.people);
+      const nextPeople = keepEditedNames ? keepNameEdits(resp.people, people) : resp.people;
+      setPeople(nextPeople);
       setOriginalPeople(resp.people.map((p) => ({ ...p })));
+      setOriginalBabyPeople(null);
       const nextWarnings = resp.warnings ?? [];
       onPortraitWarnings(nextWarnings);
       onPortraitCompletedErrorCount(nextWarnings.length);
@@ -612,8 +647,9 @@ export function ImportStep({
         setStatus("Portrait mapping processing completed");
       }
       setProgress(100);
+      processedFiles.current[2] = sheet; processedFiles.current[3] = zip;
       setPortraitsStage("done");
-      return resp.people;
+      return nextPeople;
     } catch (err) {
       ticker.finish(opStartMs);
       console.error(err);
@@ -690,6 +726,7 @@ export function ImportStep({
       onQuotesCompletedErrorCount(warnings.length);
       setStatus("Quote processing completed");
       setProgress(100);
+      processedFiles.current[4] = quotesSheet;
       setQuotesStage("done");
       onSkipQuotes(false);
       return resp.people;
@@ -802,6 +839,7 @@ export function ImportStep({
 
       setStatus("Baby photo processing completed");
       setProgress(100);
+      processedFiles.current[5] = babyZip; processedFiles.current[6] = babyFile;
       setBabyStage("done");
       onSkipBabyPhotos(false);
       return true;
@@ -1088,6 +1126,7 @@ export function ImportStep({
               }}
             >
               <input
+                aria-label="Annotated template"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
@@ -1124,6 +1163,7 @@ export function ImportStep({
               }}
             >
               <input
+                aria-label="Clean template"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
@@ -1157,8 +1197,8 @@ export function ImportStep({
 
         <label className="field">
           <span className="inline" style={{ alignItems: "center", gap: 6 }}>
-            <span>People per spread (max slots to keep)</span>
-            <InfoPopover content="Slots beyond this count will be dropped during grouping." ariaLabel="People per spread description" />
+            <span>Students per spread - used to split your roster into spreads</span>
+            <InfoPopover content="This count splits your roster into spreads. It does not remove detected template slots." ariaLabel="Students per spread description" />
           </span>
           <input
             type="number"
@@ -1169,6 +1209,12 @@ export function ImportStep({
           />
         </label>
 
+        <label className="field">
+          <span>Detection sensitivity: {tolerance == null ? "Automatic (default)" : tolerance}</span>
+          <input aria-label="Detection sensitivity" type="range" min={0} max={64} step={1} value={tolerance ?? 24} onChange={event => setTolerance(Number(event.target.value))} />
+          <span className="muted small">Higher values include a wider range of guide colours. Re-parse to apply.</span>
+          <button type="button" className="chip small" onClick={() => setTolerance(undefined)}>Use automatic sensitivity</button>
+        </label>
         <div className="stack" style={{ gap: 8 }}>
           <div className="inline" style={{ alignItems: "center", gap: 6 }}>
             <button type="button" onClick={() => setShowCustomOptions((v) => !v)}>
@@ -1198,8 +1244,8 @@ export function ImportStep({
 
               <div className="color-overrides">
                 {([
-                  ["mugshotColorText", "Portrait colour override", mugshotColor, setMugshotColor, "#22c55e"],
-                  ["babyColorText", "Baby colour override", babyColor, setBabyColor, "#3b82f6"],
+                  ["mugshotColorText", "Portrait colour override", mugshotColor, setMugshotColor, "#00bf63"],
+                  ["babyColorText", "Baby colour override", babyColor, setBabyColor, "#004aad"],
                   ["nameColorText", "Name colour override", nameColor, setNameColor, "#ff751f"],
                   ["quoteColorText", "Quote colour override", quoteColor, setQuoteColor, "#ff3131"],
                 ] as const).map(([id, label, value, setter, placeholder]) => (
@@ -1308,7 +1354,7 @@ export function ImportStep({
                   setPortraitsStage("pending");
                 }}
               >
-                <input
+                <input aria-label="Roster spreadsheet"
                   type="file"
                   accept=".xlsx,.csv"
                   onChange={(e) => {
@@ -1331,7 +1377,7 @@ export function ImportStep({
                   setPortraitsStage("pending");
                 }}
               >
-                <input
+                <input aria-label="Portraits ZIP"
                   type="file"
                   accept=".zip"
                   onChange={(e) => {
@@ -1373,6 +1419,11 @@ export function ImportStep({
             <ToggleSwitch checked={allowInsecureUploads} onChange={() => undefined} label="Uploads over HTTP" description="Contact an admin to allow insecure uploads." disabled />
           )}
 
+          <FilenameColumnControl candidates={filenameCandidates} value={filenameColumn} onChange={onFilenameColumn} disabled={loading} />
+          {editedNameCount > 0 && <div className="panel">
+            <p>{editedNameCount} edited names will be {keepEditedNames ? "kept when their original roster row still matches" : "overwritten"} when re-ingesting.</p>
+            <ToggleSwitch checked={keepEditedNames} onChange={setKeepEditedNames} label="Keep my name edits" disabled={loading} />
+          </div>}
           <div className="import-card-actions">
             <ProcessButton
               status={portraitsStage}
@@ -1437,7 +1488,7 @@ export function ImportStep({
               setQuotesStage("pending");
             }}
           >
-            <input
+            <input aria-label="Quotes spreadsheet"
               type="file"
               accept=".xlsx,.csv"
               onChange={(e) => {
@@ -1520,7 +1571,7 @@ export function ImportStep({
                 setBabyStage("pending");
               }}
             >
-              <input
+              <input aria-label="Baby photo ZIP"
                 type="file"
                 accept=".zip"
                 onChange={(e) => {

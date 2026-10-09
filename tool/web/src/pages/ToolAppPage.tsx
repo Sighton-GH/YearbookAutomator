@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import App from "../App";
 import { withBase } from "../baseUrl";
 import { WEBSITE_URL } from "../env";
-import { releaseWorkspace, resolveWorkspace } from "../api";
+import { releaseWorkspace, resolveWorkspace, takeoverWorkspace } from "../api";
 import {
   getOrCreateClientSessionId,
   getStoredLicenseKey,
@@ -14,6 +14,8 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { GuidedTour, type TourStep } from "../components/GuidedTour";
 import { HelpPanel } from "../components/HelpPanel";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { LockConflictScreen } from "../components/LockConflictScreen";
+import { licenseFailureMessage, licenseThrownMessage, takeoverFailureMessage } from "../utils/licenseErrors";
 import { ChevronDown, File as FileIcon, HelpCircle, KeyRound } from "lucide-react";
 
 const TOUR_SEEN_KEY = "ymga-tour-seen-v1";
@@ -87,7 +89,9 @@ export function ToolAppPage() {
   const [resolvedLicenseType, setResolvedLicenseType] = useState<"personal" | "commercial" | null>(null);
   const [resolvedSessionExpiresAtMs, setResolvedSessionExpiresAtMs] = useState<number | null>(null);
   const [resolvedSessionExpiryDisabled, setResolvedSessionExpiryDisabled] = useState(false);
-  const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null } | null>(null);
+  const [lockConflict, setLockConflict] = useState<{ message: string; lockExpiresAt?: number | null; workspaceId?: string | null } | null>(null);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockActionError, setLockActionError] = useState("");
   const [clientSessionId] = useState<string>(() => getOrCreateClientSessionId());
   const [releasingWorkspace, setReleasingWorkspace] = useState(false);
   const [showChangeLicenseConfirm, setShowChangeLicenseConfirm] = useState(false);
@@ -147,6 +151,7 @@ export function ToolAppPage() {
           message:
             "The workspace session for this commercial license is already in use. Ask the other user to disconnect, release the session, or wait for the lock timeout.",
           lockExpiresAt,
+          workspaceId: String(err?.response?.data?.detail?.workspace_id || "") || null,
         });
         setResolvedWorkspaceId(null);
       } else {
@@ -181,6 +186,40 @@ export function ToolAppPage() {
     };
   }, []);
 
+  const handleLockRetry = async () => {
+    const key = getStoredLicenseKey();
+    if (!key) return;
+    setLockBusy(true);
+    setLockActionError("");
+    try {
+      await activateLicense(key);
+    } catch (err: unknown) {
+      const status = (err as {response?:{status?:number}})?.response?.status;
+      setLockActionError(status === 409 ? "This session is still in use on another device. Wait for the countdown or take over this session." : licenseThrownMessage(null));
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
+  const handleLockTakeover = async () => {
+    const key = getStoredLicenseKey();
+    const wid = lockConflict?.workspaceId;
+    if (!key || !wid) {
+      setLockActionError(takeoverFailureMessage(null));
+      return;
+    }
+    setLockBusy(true);
+    setLockActionError("");
+    try {
+      await takeoverWorkspace(wid, clientSessionId);
+      await activateLicense(key);
+    } catch (err: any) {
+      setLockActionError(takeoverFailureMessage(err?.response?.status));
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
   const handleValidateClick = async () => {
     if (!trimmedLicenseInput) return;
     setLicenseBusy(true);
@@ -188,10 +227,10 @@ export function ToolAppPage() {
     try {
       const res = await activateLicense(trimmedLicenseInput);
       if (!res.valid) {
-        setLicenseError(res.reason ? `Invalid license key (${res.reason}).` : "Invalid license key.");
+        setLicenseError(licenseFailureMessage(res.reason));
       }
     } catch (e) {
-      setLicenseError(e instanceof Error ? e.message : "Could not validate license key");
+      setLicenseError(licenseThrownMessage(e));
     } finally {
       setLicenseBusy(false);
     }
@@ -205,7 +244,7 @@ export function ToolAppPage() {
       setLicenseKeyInput(key);
       const res = await activateLicense(key);
       if (!res.valid) {
-        setLicenseError(res.reason ? `Invalid license key (${res.reason}).` : "Invalid license key.");
+        setLicenseError(licenseFailureMessage(res.reason));
       }
     } catch (e) {
       setLicenseError(e instanceof Error ? e.message : "Could not create free key");
@@ -595,9 +634,16 @@ export function ToolAppPage() {
                 ) : null}
               </div>
               {sessionTiming ? (
-                <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="polite" ref={sessionInfoRef}>
-                  <span className="app-session-meta">
+                <div className={`app-session-inline${sessionToneClass}`} role="status" aria-live="off" ref={sessionInfoRef}>
+                  <span className="app-session-meta" aria-hidden="true">
                     {expiryDisabled ? "No expiry" : formatSessionCountdown(sessionTiming.remainingMs)}
+                  </span>
+                  <span className="sr-only">
+                    {expiryDisabled
+                      ? "Session has no expiry."
+                      : showSessionExpiry
+                        ? `Session expires at ${formatSessionExpiryTime(sessionTiming.expiresAtMs as number)}.`
+                        : "Session timer running."}
                   </span>
                   <button
                     type="button"
@@ -695,14 +741,14 @@ export function ToolAppPage() {
       {checking ? (
         <div className="app-loading">Validating license…</div>
       ) : lockConflict ? (
-        <div className="app-loading" role="alert">
-          <div>{lockConflict.message}</div>
-          {lockConflict.lockExpiresAt ? (
-            <div style={{ marginTop: 6, opacity: 0.8 }}>
-              Lock expires at {new Date(lockConflict.lockExpiresAt * 1000).toLocaleTimeString()}.
-            </div>
-          ) : null}
-        </div>
+        <LockConflictScreen
+          message={lockConflict.message}
+          lockExpiresAt={lockConflict.lockExpiresAt}
+          busy={lockBusy}
+          error={lockActionError}
+          onRetry={handleLockRetry}
+          onTakeover={handleLockTakeover}
+        />
       ) : (
         <App
           embedded

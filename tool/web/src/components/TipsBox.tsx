@@ -14,13 +14,14 @@ export function TipsBox({ tips }: { tips: string[] }) {
   }, [tips]);
   const [open, setOpen] = useState(true);
   const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [prevIdx, setPrevIdx] = useState(0);
   const autoplayTimerRef = useRef<number | null>(null);
 
   // Auto-advance tips when open
   useEffect(() => {
-    if (!open || stableTips.length <= 1) return;
+    if (!open || paused || stableTips.length <= 1) return;
 
     autoplayTimerRef.current = window.setInterval(() => {
       setIdx((prev) => (prev + 1) % stableTips.length);
@@ -29,7 +30,7 @@ export function TipsBox({ tips }: { tips: string[] }) {
     return () => {
       if (autoplayTimerRef.current) window.clearInterval(autoplayTimerRef.current);
     };
-  }, [open, stableTips.length]);
+  }, [open, paused, stableTips.length]);
 
   // Track previous index for scroll direction
   useEffect(() => {
@@ -76,6 +77,7 @@ export function TipsBox({ tips }: { tips: string[] }) {
     );
   }
 
+  const autoRotating = !paused && stableTips.length > 1;
   const isMovingForward = idx > prevIdx || (prevIdx === stableTips.length - 1 && idx === 0);
   const scrollDirection = isMovingForward ? "forward" : "backward";
 
@@ -83,10 +85,22 @@ export function TipsBox({ tips }: { tips: string[] }) {
     <div
       className={clsx("tips-box", isClosing && "closing")}
       role="status"
+      aria-live={autoRotating ? "off" : "polite"}
       aria-label="Tips"
     >
       <div className="tips-box-header">
         <strong className="tips-box-title">Did you know...</strong>
+        {stableTips.length > 1 ? (
+          <button
+            type="button"
+            className="tips-box-close"
+            onClick={() => setPaused((v) => !v)}
+            aria-pressed={paused}
+            aria-label={paused ? "Resume automatic tips" : "Pause automatic tips"}
+          >
+            {paused ? "Play" : "Pause"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="tips-box-close"

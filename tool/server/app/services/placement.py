@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import unicodedata
 from dataclasses import dataclass
 
-from app.models.schemas import PersonRecord, TemplateSlots
+from app.models.schemas import GenerationRequest, PersonRecord, TemplateSlots
 
 
 @dataclass(frozen=True)
@@ -17,13 +21,31 @@ def _normalize_name(s: str | None) -> str:
     return (s or "").strip()
 
 
+# Fixed shared Unicode contract, independent of host Python's Unicode version.
+_COMBINING_RANGES = json.loads((Path(__file__).resolve().parents[3] / "shared/name-combining-ranges.json").read_text())["ranges"]
+def _is_accent_mark(ch: str) -> bool:
+    cp = ord(ch)
+    return any(start <= cp <= end for start, end in _COMBINING_RANGES)
+
+
+def fold_name(s: str | None) -> str:
+    """Accent-folded, case-insensitive name key (NFKD, combining marks stripped).
+
+    Must match `foldName` in tool/web/src/utils/placement.ts.
+    """
+    decomposed = unicodedata.normalize("NFKD", _normalize_name(s))
+    stripped = "".join(ch for ch in decomposed if not _is_accent_mark(ch))
+    return stripped.casefold()
+
+
 def sort_people_alphabetical(people: list[PersonRecord]) -> list[PersonRecord]:
-    # Matches the frontend comparePeopleByLastName behavior.
+    # Same rule as the frontend comparePeopleByLastName: last name, then first
+    # name, accents folded, case-insensitive; blank last names go last.
     def key(p: PersonRecord):
-        last = _normalize_name(p.last_name)
-        first = _normalize_name(p.first_name)
+        last = fold_name(p.last_name)
+        first = fold_name(p.first_name)
         last_empty = 1 if not last else 0
-        return (last_empty, last.casefold(), first.casefold(), int(p.index or 0))
+        return (last_empty, last, first, int(p.index or 0))
 
     return sorted(list(people), key=key)
 
@@ -95,25 +117,26 @@ def compute_slot_number_to_index(
     return order_side(left) + order_side(right)
 
 
-def auto_place_slots_for_people(
+def assign_logical_slots(
     *,
     people: list[PersonRecord],
     slots: list[TemplateSlots],
     placement_mode: str = "left_then_right",
     slot_assignments: dict[int, int] | None = None,
     force_alphabetical: bool = False,
-) -> tuple[list[PersonRecord], list[TemplateSlots]]:
-    """Returns (effective_people, effective_slots) where len(slots)==len(people).
+) -> tuple[list[PersonRecord], list[int], list[int]]:
+    """Returns (effective_people, logical_slot_idx_per_person, slot_number_to_index).
 
-    The N people provided are placed into the first N logical slots. Slot overrides
-    (person_index -> slot_number) are applied within this spread.
+    Single source of truth for who lands in which slot: the renderer and the
+    verification spreadsheet both use it. Logical slot number = idx + 1.
     """
 
+    people = [p for p in people if not p.excluded]
     if force_alphabetical:
         people = sort_people_alphabetical(people)
 
     if not slots or not people:
-        return people, []
+        return people, [], []
 
     slot_assignments = slot_assignments or {}
 
@@ -162,9 +185,40 @@ def auto_place_slots_for_people(
         claimed[logical_idx] = i
         assigned_logical[i] = logical_idx
 
-    out_slots: list[TemplateSlots] = []
-    for logical in assigned_logical:
-        assert logical is not None
-        out_slots.append(slots[slot_number_to_index[logical]])
+    if any(logical is None for logical in assigned_logical):
+        raise RuntimeError("Every student must receive a resolved slot")
+    return people, [int(logical) for logical in assigned_logical], slot_number_to_index
 
-    return people, out_slots
+
+def auto_place_slots_for_people(
+    *,
+    people: list[PersonRecord],
+    slots: list[TemplateSlots],
+    placement_mode: str = "left_then_right",
+    slot_assignments: dict[int, int] | None = None,
+    force_alphabetical: bool = False,
+) -> tuple[list[PersonRecord], list[TemplateSlots]]:
+    """Returns (effective_people, effective_slots) where len(slots)==len(people).
+
+    The N people provided are placed into the first N logical slots. Slot overrides
+    (person_index -> slot_number) are applied within this spread.
+    """
+
+    people, logical, slot_number_to_index = assign_logical_slots(
+        people=people,
+        slots=slots,
+        placement_mode=placement_mode,
+        slot_assignments=slot_assignments,
+        force_alphabetical=force_alphabetical,
+    )
+    return people, [slots[slot_number_to_index[l]] for l in logical]
+
+
+def place_generation_people(payload: GenerationRequest) -> tuple[list[PersonRecord], list[int], list[int]]:
+    """Resolve assignments for both generation modes without changing default raw order."""
+    return assign_logical_slots(
+        people=payload.people, slots=payload.slots,
+        placement_mode=payload.placement_mode if payload.auto_place else "simultaneous",
+        slot_assignments=payload.slot_assignments,
+        force_alphabetical=payload.force_alphabetical if payload.auto_place else False,
+    )

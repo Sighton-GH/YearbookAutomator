@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useDialogFocus } from "../utils/dialogFocus";
 
 export type TourStep = {
   /** CSS selector of the element to spotlight. Omit for a centered, element-less step. */
@@ -69,8 +70,7 @@ export function GuidedTour({
     window.addEventListener("resize", onChange);
     window.addEventListener("scroll", onChange, true);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight" && !isLast) setIndex((i) => i + 1);
+      if (e.key === "ArrowRight" && !isLast) setIndex((i) => i + 1);
       else if (e.key === "ArrowLeft" && index > 0) setIndex((i) => i - 1);
     };
     window.addEventListener("keydown", onKey);
@@ -80,6 +80,9 @@ export function GuidedTour({
       window.removeEventListener("keydown", onKey);
     };
   }, [open, measure, isLast, index, onClose]);
+
+  // Focus moves into the card (re-focused on each step), Tab stays inside, focus returns on close.
+  useDialogFocus(open && Boolean(step), cardRef, onClose, index);
 
   if (!open || !step) return null;
 
@@ -129,7 +132,7 @@ export function GuidedTour({
         <div className="tour-scrim" onClick={onClose} />
       )}
 
-      <div className="tour-card" style={cardStyle} ref={cardRef}>
+      <div className="tour-card" style={cardStyle} ref={cardRef} tabIndex={-1}>
         <button type="button" className="tour-close icon" aria-label="Close tour" onClick={onClose}>
           <X size={15} />
         </button>

@@ -9,6 +9,7 @@ export const TOP_STEP_ORDER: TopStep[] = ["template", "roster", "people", "style
 
 export type PersistedSessionV1 = {
   v: 1;
+  renderConfirmed?: boolean;
   sessionId?: string;
   startedAtMs?: number;
   expiresAtMs?: number;
@@ -24,16 +25,23 @@ export type PersistedSessionV1 = {
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
   };
   slots: TemplateSlots[];
   parsedSlots: TemplateSlots[];
   templateSize: { width: number; height: number } | null;
   portraitsIngest?: {
     namingPattern?: string;
+    filenameColumn?: string | null;
+    filenameCandidates?: import("./api").FilenameColumnCandidate[];
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
   };
   people: PersonRecord[];
+  peopleSwapMode?: "off" | "card" | "portrait";
+  pendingPeopleAdjustments?: Record<number, import("./components/PersonInspector").PersonAdjustment>;
+  originalPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename" | "baby_background_removal_failed">>;
+  originalBabyPeople?: Array<Pick<PersonRecord, "index" | "mugshot_filename" | "baby_photo_filename" | "baby_background_removal_failed">>;
   slotAssignments: Record<number, number>;
   placementMode?: PlacementMode;
   forceAlphabetical?: boolean;
@@ -61,6 +69,8 @@ export type PersistedSessionV1 = {
     used_background_preview?: { background_mode: BackgroundMode; force?: boolean } | null;
     created_at: string;
   }>;
+  safeArea?: { show: boolean; bleed_mm: number; safe_mm: number };
+  photoSettings?: import("./photoSettings").PhotoSettings;
   babyBackgroundColor?: string;
   centerBabyOnFace?: boolean;
   defaultMugshotFilename?: string | null;
@@ -78,6 +88,8 @@ export type PersistedSessionV1 = {
   quoteFontSize: number;
   quoteAllCaps: boolean;
   quoteAlign: Align;
+  /** F1 text controls (colour, spacing, outline, shadow, italic, fitting). Missing in old sessions = today's look. */
+  textStyles?: import("./utils/textStyle").TextStylesSetting;
   peoplePerSpread: number;
   outputFormat?: "png" | "pdf" | "tiff";
   outputSize?: { width: number; height: number } | null;
@@ -211,7 +223,7 @@ export function migrateActiveStep(raw: number | TopStep | string | null | undefi
 export function parseStepFromSearch(search: string): TopStep | null {
   try {
     const params = new URLSearchParams(search || "");
-    const raw = (params.get("step") || "").trim();
+    const raw = (params.get("step") || "").trim().toLowerCase();
     if (!raw) return null;
     if (isTopStep(raw)) return raw;
     if (raw === "import" || raw === "edit" || raw === "finalize") return migrateActiveStep(raw);

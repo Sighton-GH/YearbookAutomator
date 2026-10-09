@@ -4,6 +4,8 @@ import type { Align, FontWeight } from "../../types";
 import { uploadFont } from "../../api";
 import { FontPick } from "../../components/FontPick";
 import { UploadDropLabel } from "../../components/UploadDropLabel";
+import { TextStyleControls } from "../../components/TextStyleControls";
+import type { TextStylesSetting } from "../../utils/textStyle";
 
 export function StyleTab({
   skipQuotes,
@@ -27,6 +29,9 @@ export function StyleTab({
   onQuoteFontSize,
   onQuoteAllCaps,
   onQuoteAlign,
+  textStyles,
+  onTextStyles,
+  onRenderStyleStrip,
   workspaceId,
   availableFonts,
   setAvailableFonts,
@@ -53,6 +58,9 @@ export function StyleTab({
   onQuoteFontSize: (v: number) => void;
   onQuoteAllCaps: (v: boolean) => void;
   onQuoteAlign: (v: Align) => void;
+  textStyles: TextStylesSetting;
+  onTextStyles: (v: TextStylesSetting) => void;
+  onRenderStyleStrip: () => Promise<{ url: string; warnings: string[] }>;
   workspaceId: string | null;
   availableFonts: { name: string; filename: string; source?: string }[];
   setAvailableFonts: (fonts: { name: string; filename: string; source?: string }[]) => void;
@@ -75,6 +83,14 @@ export function StyleTab({
           onAlign={onNameAlign}
           availableFonts={availableFonts}
         />
+        <TextStyleControls
+          kind="name"
+          label="Name"
+          value={textStyles.name}
+          onChange={(name) => onTextStyles({ ...textStyles, name })}
+          nameFit={textStyles.nameFit}
+          onNameFit={(nameFit) => onTextStyles({ ...textStyles, nameFit })}
+        />
 
         {!skipQuotes && (
           <FontPick
@@ -91,6 +107,9 @@ export function StyleTab({
             onAlign={onQuoteAlign}
             availableFonts={availableFonts}
           />
+        )}
+        {!skipQuotes && (
+          <TextStyleControls kind="quote" label="Quote" value={textStyles.quote} onChange={(quote) => onTextStyles({ ...textStyles, quote })} />
         )}
 
         {customFontUploadEnabled && (
@@ -110,6 +129,9 @@ export function StyleTab({
         quoteFontSize={quoteFontSize}
         quoteAllCaps={quoteAllCaps}
         quoteAlign={quoteAlign}
+        textStyles={textStyles}
+        onRenderStyleStrip={onRenderStyleStrip}
+        canRender={Boolean(workspaceId)}
       />
     </div>
   );
@@ -131,7 +153,13 @@ function StylePreview({
   quoteFontSize,
   quoteAllCaps,
   quoteAlign,
+  textStyles,
+  onRenderStyleStrip,
+  canRender,
 }: {
+  textStyles: TextStylesSetting;
+  onRenderStyleStrip: () => Promise<{ url: string; warnings: string[] }>;
+  canRender: boolean;
   skipQuotes: boolean;
   nameFontFamily: string;
   nameFontWeight: FontWeight;
@@ -144,18 +172,45 @@ function StylePreview({
   quoteAllCaps: boolean;
   quoteAlign: Align;
 }) {
+  const [strip, setStrip] = useState<{ url: string; warnings: string[] } | null>(null);
+  const [stripBusy, setStripBusy] = useState(false);
+  const [stripError, setStripError] = useState<string | null>(null);
+  const renderStrip = async () => {
+    setStripBusy(true);
+    setStripError(null);
+    try {
+      const next = await onRenderStyleStrip();
+      setStrip((old) => {
+        if (old) URL.revokeObjectURL(old.url);
+        return next;
+      });
+    } catch (err) {
+      setStripError(err instanceof Error && err.message ? err.message : "The test render did not finish. Try again in a moment.");
+    } finally {
+      setStripBusy(false);
+    }
+  };
+  const cssOf = (s: TextStylesSetting["name"], align: Align): React.CSSProperties => ({
+    color: s.color,
+    fontStyle: s.fontStyle,
+    letterSpacing: s.letterSpacing ? `${s.letterSpacing}px` : undefined,
+    lineHeight: s.lineSpacing ? Number(s.lineSpacing) : undefined,
+    textAlign: s.alignExtra || align,
+    WebkitTextStroke: s.strokeWidth ? `${Math.min(s.strokeWidth, 4)}px ${s.strokeColor}` : undefined,
+    textShadow: s.shadow ? `${s.shadow.offset_x}px ${s.shadow.offset_y}px ${s.shadow.blur}px ${s.shadow.color}` : undefined,
+  });
   const nameStyle: React.CSSProperties = {
+    ...cssOf(textStyles.name, nameAlign),
     fontFamily: nameFontFamily,
     fontSize: previewPx(nameFontSize),
     fontWeight: nameFontWeight === "bold" ? 700 : 400,
-    textAlign: nameAlign,
     textTransform: nameAllCaps ? "uppercase" : "none",
   };
   const quoteStyle: React.CSSProperties = {
+    ...cssOf(textStyles.quote, quoteAlign),
     fontFamily: quoteFontFamily,
     fontSize: previewPx(quoteFontSize),
     fontWeight: quoteFontWeight === "bold" ? 700 : 400,
-    textAlign: quoteAlign,
     textTransform: quoteAllCaps ? "uppercase" : "none",
   };
 
@@ -163,9 +218,9 @@ function StylePreview({
     <aside className="style-preview">
       <div className="style-preview-head">
         <span className="eyebrow">Live preview</span>
-        <span className="muted small">Approximate — final render uses your exact font &amp; size.</span>
+        <span className="muted small">Approximate. Use “Preview with real rendering” below to see the exact result.</span>
       </div>
-      <div className="style-preview-card">
+      <div className="style-preview-card" style={{ background: "#ffffff", color: "#141e32" }}>
         <div className="style-preview-portrait" aria-hidden="true">
           <span>Portrait</span>
         </div>
@@ -182,6 +237,26 @@ function StylePreview({
               “The best way out is always through.”
             </div>
           </div>
+        )}
+      </div>
+      <div className="stack" style={{ marginTop: 12 }}>
+        <button type="button" onClick={() => void renderStrip()} disabled={!canRender || stripBusy}>
+          {stripBusy ? "Rendering…" : "Preview with real rendering"}
+        </button>
+        {!canRender && <span className="muted small">Add your template and roster first.</span>}
+        {stripError && <span role="alert" className="small">{stripError}</span>}
+        {strip && (
+          <figure style={{ margin: 0 }}>
+            <img src={strip.url} alt="Real rendering of the first two students" style={{ maxWidth: "100%" }} data-testid="style-strip-image" />
+            <figcaption className="muted small">Rendered by the output renderer, scaled down for preview.</figcaption>
+            {strip.warnings.length > 0 && (
+              <ul className="small" data-testid="style-strip-warnings">
+                {strip.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
+          </figure>
         )}
       </div>
     </aside>

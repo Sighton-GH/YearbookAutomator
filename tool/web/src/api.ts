@@ -46,7 +46,9 @@ axios.interceptors.response.use(
 );
 
 export type Box = { x: number; y: number; width: number; height: number };
-export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box };
+export type SlotBoxKind = "mugshot" | "baby_photo" | "name" | "quote";
+export type BabyShape = "auto" | "rectangle" | "ellipse" | "rounded";
+export type TemplateSlots = { mugshot: Box; baby_photo: Box; name: Box; quote: Box; baby_shape?: BabyShape | null };
 export type RawParseDebug = {
   mugshot_count: number;
   baby_count: number;
@@ -56,6 +58,9 @@ export type RawParseDebug = {
   baby_photos: Box[];
   names: Box[];
   quotes: Box[];
+  dropped?: Record<string, Box[]>;
+  invented?: Record<string, Box[]>;
+  messages?: string[];
 };
 export type TemplateParseResponse = {
   template_id: string;
@@ -65,21 +70,45 @@ export type TemplateParseResponse = {
   raw_debug?: RawParseDebug | null;
 };
 
+import type { PhotoSettings, PhotoFocus } from "./photoSettings";
+
 export type PersonRecord = {
+  mugshot_focus?: PhotoFocus | null;
+  baby_fill_color?: string | null;
   index: number;
   first_name: string;
   last_name: string;
   mugshot_filename?: string | null;
   quote?: string | null;
+  quote_blank?: boolean;
+  added_manually?: boolean;
+  excluded?: boolean;
+  name_font_size?: number | null;
+  quote_font_size?: number | null;
+  name_color?: string | null;
+  quote_color?: string | null;
+  hide_baby_photo?: boolean | null;
+  original_first_name?: string;
+  original_last_name?: string;
   baby_photo_filename?: string | null;
+  baby_background_removal_failed?: boolean;
 };
 
 export type BackgroundMode = "simple" | "complex" | "ultra_complex";
+
+export type FilenameColumnCandidate = {
+  column: string;
+  listed: number;
+  found: number;
+  suggested: boolean;
+};
 
 export type SpreadsheetPreview = {
   workspace_id: string;
   people: PersonRecord[];
   warnings?: string[];
+  /** F2.6 (partial: not yet used by the UI). Roster columns that look like portrait filenames. */
+  filename_column_candidates?: FilenameColumnCandidate[];
 };
 
 export type FaceCenterResponse = {
@@ -146,6 +175,19 @@ export async function getAdminFeatureFlags() {
   return data;
 }
 
+export async function regenerateBabyMask(workspace_id: string, box: Box, baby_shape: BabyShape = "auto") {
+  try {
+    const { data } = await axios.post<Blob>("/api/templates/baby-mask", { workspace_id, box, baby_shape }, { responseType: "blob" });
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+      const detail = JSON.parse(await error.response.data.text()).detail;
+      if (typeof detail === "string") throw new Error(detail);
+    }
+    throw error;
+  }
+}
+
 export async function parseTemplate(
   annotated: File | null,
   clean: File | null,
@@ -158,6 +200,7 @@ export async function parseTemplate(
     disableBabyPhotos?: boolean;
     disableQuotes?: boolean;
     minArea?: number;
+    tolerance?: number;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
   }
@@ -173,6 +216,7 @@ export async function parseTemplate(
   if (opts?.disableBabyPhotos) form.append("disable_baby_photos", "true");
   if (opts?.disableQuotes) form.append("disable_quotes", "true");
   if (opts?.minArea) form.append("min_area", String(opts.minArea));
+  if (opts?.tolerance !== undefined) form.append("tolerance", String(opts.tolerance));
   const { data } = await axios.post<TemplateParseResponse>("/api/templates/parse", form, {
     headers: { "Content-Type": "multipart/form-data" },
     signal: opts?.signal,
@@ -205,6 +249,8 @@ export async function ingestSpreadsheet(
   opts?: {
     namingPattern?: string;
     advancedNameMatch?: boolean;
+    /** F2.6: roster column naming each student's portrait file. */
+    filenameColumn?: string | null;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
   }
@@ -215,6 +261,7 @@ export async function ingestSpreadsheet(
   if (mugshotsZip) form.append("mugshots_zip", mugshotsZip);
   if (opts?.namingPattern) form.append("naming_pattern", opts.namingPattern);
   if (opts?.advancedNameMatch) form.append("advanced_name_match", "true");
+  if (opts?.filenameColumn) form.append("filename_column", opts.filenameColumn);
   const { data } = await axios.post<SpreadsheetPreview>("/api/mapping/ingest", form, {
     headers: { "Content-Type": "multipart/form-data" },
     signal: opts?.signal,
@@ -236,6 +283,7 @@ export async function uploadImage(
   file: File,
   opts?: {
     removeBackground?: boolean;
+    editorOwned?: "preview" | "edit";
     backgroundMode?: BackgroundMode;
     signal?: AbortSignal;
     onProgress?: (progressPct: number) => void;
@@ -244,6 +292,7 @@ export async function uploadImage(
   const form = new FormData();
   form.append("workspace_id", workspaceId);
   form.append("kind", kind);
+  if (opts?.editorOwned) form.append("editor_owned", opts.editorOwned);
   // Ensure every upload gets a unique filename to avoid overwriting server-side
   // and to defeat browser caching for <img src> previews.
   const uniqueFileName = (() => {
@@ -294,8 +343,12 @@ export async function uploadImageAs(
   const form = new FormData();
   form.append("workspace_id", workspaceId);
   form.append("kind", kind);
+  form.append("restore_exact", "true");
 
   const safeName = (desiredFilename || file.name || `${kind}.png`).split(/[\\/]/).pop() || `${kind}.png`;
+  if (kind === "baby" && /^baby_(preview|edit)_[A-Za-z0-9_-]+\.png$/.test(safeName)) {
+    form.append("editor_owned", "replay");
+  }
   const uploadFile = new File([file], safeName, {
     type: file.type || "application/octet-stream",
     lastModified: file.lastModified,
@@ -396,7 +449,7 @@ export async function applyMapping(
   return data;
 }
 
-export async function generateSpread(params: {
+export type GenerateSpreadParams = PhotoSettings & {
   workspace_id: string;
   template_id: string;
   slots: TemplateSlots[];
@@ -421,20 +474,41 @@ export async function generateSpread(params: {
   name_font_weight?: "normal" | "bold";
   name_font_size?: number;
   name_all_caps?: boolean;
-  name_align?: "left" | "center";
+  name_align?: "left" | "center" | "right";
   quote_font_family?: string;
   quote_font_weight?: "normal" | "bold";
   quote_font_size?: number;
   quote_all_caps?: boolean;
-  quote_align?: "left" | "center";
+  quote_align?: "left" | "center" | "right" | "justify";
   baby_background_color?: string | null;
   center_baby_on_face?: boolean;
-}) {
+  // F1 text styling (name_/quote_ colour, valign, line_spacing, letter_spacing, stroke_width,
+  // stroke_color, shadow, font_style, min_size, plus name_fit). Built by utils/textStyle.ts and
+  // validated field by field by GenerationRequest in schemas.py.
+} & Record<string, unknown>;
+
+export async function generateSpread(params: GenerateSpreadParams) {
   const { data } = await axios.post<{
     job_id: string;
     usage?: { remaining: number; limit: number; period: "month" | "lifetime" };
   }>("/api/generation/generate", params);
   return { jobId: data.job_id, usage: data.usage };
+}
+
+/** Renders the first two students with the real output renderer, scaled down. */
+export async function renderPreviewStrip(params: GenerateSpreadParams) {
+  const { data } = await axios.post<{ output: string; width: number; height: number; warnings: string[] }>(
+    "/api/generation/preview-strip",
+    params,
+  );
+  return data;
+}
+
+/** Fetches a rendered file as an object URL so it can be shown in an <img> (headers carry the licence). */
+export async function fetchGenerationImageObjectUrl(workspaceId: string, filename: string): Promise<string> {
+  const url = generationDownloadUrl(workspaceId, filename, { cache: String(Date.now()) });
+  const { data } = await axios.get<Blob>(url, { responseType: "blob" });
+  return URL.createObjectURL(data);
 }
 
 export async function generationStatus(jobId: string) {
@@ -443,6 +517,7 @@ export async function generationStatus(jobId: string) {
     status: string;
     output?: string | null;
     error?: string | null;
+    warnings?: string[];
     updated_at?: number;
     workspace_id?: string;
   }>("/api/generation/status", { params: { job_id: jobId } });
@@ -499,6 +574,18 @@ export async function startRemoveBackgroundJob(params: {
   return data;
 }
 
+export async function cleanupEditorImages(workspaceId: string, candidates: string[], protectedFilenames: string[]) {
+  await axios.post("/api/mapping/editor-images-cleanup", {
+    workspace_id: workspaceId, candidates, protected_filenames: protectedFilenames,
+  });
+}
+
+export async function cancelRemoveBackgroundJob(jobId: string) {
+  const form = new FormData();
+  form.append("job_id", jobId);
+  await axios.post("/api/mapping/remove-background-cancel", form);
+}
+
 export async function removeBackgroundStatus(jobId: string) {
   const { data } = await axios.get<{
     job_id: string;
@@ -512,6 +599,7 @@ export async function removeBackgroundStatus(jobId: string) {
     message?: string | null;
     error?: string | null;
     eta_seconds?: number | null;
+    warnings?: string[];
     updated_at?: number;
     already_removed?: boolean;
   }>("/api/mapping/remove-background-status", { params: { job_id: jobId } });
@@ -577,6 +665,13 @@ export async function resolveWorkspace(sessionId?: string): Promise<WorkspaceRes
 
 export async function releaseWorkspace(workspaceId: string, sessionId?: string): Promise<void> {
   await axios.post("/api/workspaces/release", {
+    workspace_id: workspaceId,
+    session_id: sessionId || null,
+  });
+}
+
+export async function takeoverWorkspace(workspaceId: string, sessionId?: string): Promise<void> {
+  await axios.post("/api/workspaces/takeover", {
     workspace_id: workspaceId,
     session_id: sessionId || null,
   });
@@ -664,4 +759,17 @@ export function generationDownloadAllUrl(workspaceId: string) {
 export function generationDownloadSpreadsheetUrl(workspaceId: string) {
   const params = new URLSearchParams({ workspace_id: workspaceId });
   return `/api/generation/download-spreadsheet?${params.toString()}`;
+}
+
+export async function generationDownloadFile(url: string, filename: string): Promise<void> {
+  const { downloadBlobFile } = await import("./utils/downloadFile");
+  await downloadBlobFile(url, filename, async (downloadUrl) => {
+    const { data } = await axios.get<Blob>(downloadUrl, { responseType: "blob" });
+    return data;
+  });
+}
+
+export async function listAssets(workspaceId: string, kind: "mugshot" | "baby"): Promise<string[]> {
+  const {data} = await axios.get<{filenames: string[]}>("/api/mapping/assets", {params: {workspace_id: workspaceId, kind}});
+  return data.filenames;
 }

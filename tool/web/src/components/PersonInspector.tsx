@@ -1,3 +1,5 @@
+import { AssetPicker } from "./AssetPicker";
+import { StudentOverrides } from "./StudentOverrides";
 import type React from "react";
 import { Lock, Unlock, Trash2, ImageOff, RotateCcw, Pencil } from "lucide-react";
 import { assetUrl, type PersonRecord } from "../api";
@@ -31,12 +33,18 @@ export function PersonInspector({
   onUploadReplacementPortrait,
   onRequestRemovePortrait,
   onRequestRemovePerson,
+  onPersonPatch,
+  onRestorePerson,
+  onNameChange,
   onQuoteChange,
+  onQuoteBlank,
   onOpenBabyEditor,
   onUploadReplacementBaby,
   onResetBabyToOriginal,
   onRemoveBabyFromPerson,
   onPreviewPortrait,
+  onAdjustPortrait,
+  onBabyFillColor,
   loading,
 }: {
   person: PersonRecord;
@@ -58,12 +66,18 @@ export function PersonInspector({
   onUploadReplacementPortrait: (file: File | null) => void;
   onRequestRemovePortrait: () => void;
   onRequestRemovePerson: () => void;
+  onPersonPatch: (patch: Partial<PersonRecord>) => void;
+  onRestorePerson: () => void;
+  onNameChange: (field: "first_name" | "last_name", value: string) => void;
   onQuoteChange: (value: string) => void;
+  onQuoteBlank: (value: boolean) => void;
   onOpenBabyEditor: () => void;
   onUploadReplacementBaby: (file: File | null) => void;
   onResetBabyToOriginal: () => void;
   onRemoveBabyFromPerson: () => void;
   onPreviewPortrait: () => void;
+  onAdjustPortrait: () => void;
+  onBabyFillColor: (colour: string | null | undefined) => void;
   loading: boolean;
 }) {
   const mugshotFilename = person.mugshot_filename || assignedDefaultMugshot || null;
@@ -99,14 +113,21 @@ export function PersonInspector({
             type="button"
             className="icon-btn danger"
             onClick={onRequestRemovePerson}
-            aria-label="Remove person"
-            title="Remove person"
+            aria-label="Remove from yearbook"
+            title="Remove from yearbook"
             disabled={isLocked}
           >
             <Trash2 size={15} />
           </button>
         </div>
       </div>
+
+      {person.excluded && <p className="muted">Excluded from the yearbook. <button type="button" onClick={onRestorePerson} disabled={isLocked || loading}>Include in yearbook</button></p>}
+      <section className="pi-section">
+        <div className="inspector-section-title">Name</div>
+        <label className="field"><span>First name</span><input maxLength={200} value={person.first_name} disabled={loading || isLocked} onChange={e => onNameChange("first_name", e.target.value)} /></label>
+        <label className="field"><span>Last name</span><input maxLength={200} value={person.last_name} disabled={loading || isLocked} onChange={e => onNameChange("last_name", e.target.value)} /></label>
+      </section>
 
       <section className="pi-section">
         <div className="inspector-section-title">Portrait</div>
@@ -119,6 +140,7 @@ export function PersonInspector({
             <div className="thumb pi-thumb thumb-placeholder thumb-placeholder-label">No portrait</div>
           )}
           <div className="pi-actions">
+            <button type="button" className="small" disabled={isLocked || !mugshotFilename} onClick={onAdjustPortrait}>Adjust portrait</button>
             {usingDefaultMugshot && <span className="chip small pi-chip">Using default</span>}
             <label className="upload-file-button small">
               Replace
@@ -140,6 +162,15 @@ export function PersonInspector({
       {!skipBabyPhotos && (
         <section className="pi-section">
           <div className="inspector-section-title">Baby photo</div>
+          <label className="field"><span>Baby background colour</span>
+            <select disabled={isLocked} value={person.baby_fill_color === undefined ? "inherit" : person.baby_fill_color === null ? "transparent" : "fill"}
+              onChange={e => onBabyFillColor(e.target.value === "inherit" ? undefined : e.target.value === "transparent" ? null : "#ffffff")}>
+              <option value="inherit">Use global setting</option><option value="transparent">Keep transparency</option><option value="fill">Fill colour</option>
+            </select>
+          </label>
+          {person.baby_fill_color && <input type="color" aria-label="Baby fill colour" disabled={isLocked}
+            value={person.baby_fill_color} onChange={e => onBabyFillColor(e.target.value)} />}
+
           <div className="pi-row">
             {babyFilename && workspaceId ? (
               <button
@@ -165,6 +196,14 @@ export function PersonInspector({
               <button type="button" className="small" onClick={onOpenBabyEditor} disabled={isLocked || !babyFilename}>
                 <Pencil size={13} /> Edit
               </button>
+              {person.baby_background_removal_failed && babyFilename && (
+                <>
+                  <span className="muted small" style={{ gridColumn: "1 / -1", whiteSpace: "normal" }}>Background removal failed. Original photo kept.</span>
+                  <button type="button" className="small" style={{ gridColumn: "1 / -1", whiteSpace: "normal" }} onClick={onOpenBabyEditor} disabled={loading || isLocked}>
+                    <RotateCcw size={13} /> Retry background removal
+                  </button>
+                </>
+              )}
               <label className="upload-file-button small">
                 Replace
                 <input
@@ -202,15 +241,23 @@ export function PersonInspector({
         </div>
       </section>
 
+      {workspaceId && <section className="pi-section">
+        <AssetPicker workspaceId={workspaceId} kind="mugshot" disabled={loading || isLocked} onChoose={filename => onPersonPatch({mugshot_filename: filename})} />
+        {!skipBabyPhotos && <AssetPicker workspaceId={workspaceId} kind="baby" disabled={loading || isLocked} onChoose={filename => onPersonPatch({baby_photo_filename: filename, hide_baby_photo: false, baby_background_removal_failed: false})} />}
+      </section>}
+      <StudentOverrides person={person} disabled={loading || isLocked} onPatch={onPersonPatch} />
+
       {!skipQuotes && (
         <section className="pi-section pi-quote">
           <div className="inspector-section-title">Quote</div>
+          {!person.quote?.trim() && !person.quote_blank && <p className="muted small">Using the default quote</p>}
+          <ToggleSwitch checked={Boolean(person.quote_blank)} onChange={onQuoteBlank} label="No quote for this student" disabled={isLocked} />
           <textarea
             rows={3}
-            value={displayQuote}
+            value={person.quote ?? ""}
             onChange={(e) => onQuoteChange(e.target.value)}
             disabled={isLocked}
-            placeholder="No quote"
+            placeholder={displayQuote}
           />
         </section>
       )}

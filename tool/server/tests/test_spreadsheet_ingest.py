@@ -196,3 +196,111 @@ def test_ingest_route_maps_bad_headers_to_400(tmp_path, monkeypatch):
         assert "First Name" in resp.json()["detail"]
     finally:
         client.close()
+
+
+def test_ingest_route_accepts_filename_column(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("YMGA_LICENSE_STORE_DIR", str(tmp_path / "licenses"))
+    monkeypatch.setenv("YMGA_LICENSE_SECRET", "test-secret")
+    monkeypatch.setenv("YMGA_CLEAR_WORKSPACES_ON_STARTUP", "false")
+    from app import main as main_mod
+
+    importlib.reload(main_mod)
+    from app.services import storage
+
+    monkeypatch.setattr(storage, "BASE_DATA", tmp_path / "data")
+    storage.BASE_DATA.mkdir(parents=True, exist_ok=True)
+    from live_test_client import LiveTestClient
+
+    client = LiveTestClient(main_mod.app)
+    try:
+        from app.services import licensing
+        from app.services.workspace_registry import resolve_workspace
+
+        key = licensing.create_license(license_type="commercial", note="test")
+        workspace_id = resolve_workspace(
+            license_key=key, license_type="commercial", device_id="dev1", session_id="session-f26"
+        ).workspace_id
+        headers = {"X-License-Key": key, "X-Device-Id": "dev1"}
+        files = {
+            "spreadsheet": ("r.csv", _roster(["Ada,Lovelace,zz.jpg"]), "text/csv"),
+            "mugshots_zip": ("p.zip", _zip({"zz.jpg": _jpeg("red")}).getvalue(), "application/zip"),
+        }
+        resp = client.post(
+            "/api/mapping/ingest",
+            files=files,
+            data={"workspace_id": workspace_id, "filename_column": "SelectedImage"},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["people"][0]["mugshot_filename"] == "zz.jpg"
+        bad = client.post(
+            "/api/mapping/ingest",
+            files=files,
+            data={"workspace_id": workspace_id, "filename_column": "Nope"},
+            headers=headers,
+        )
+        assert bad.status_code == 400
+    finally:
+        client.close()
+
+
+# --- F2.6: match portraits by a filename column (fictional data only) ---
+
+def _roster(rows, header="First Name,Last Name,SelectedImage"):
+    return ("\n".join([header, *rows]) + "\n").encode()
+
+
+def _ingest(csv_bytes, members, column="SelectedImage", **kw):
+    return s.ingest_spreadsheet(
+        uuid4().hex, io.BytesIO(csv_bytes), "r.csv", _zip(members), filename_column=column, **kw
+    )
+
+
+def test_filename_column_exact_and_case_and_extension_insensitive():
+    csv = _roster(["Ada,Lovelace,IMG_9.JPG", "Bo,Bell,img_2", "Cy,Cole,missing.jpg"])
+    r = _ingest(csv, {"img_9.jpg": _jpeg("red"), "IMG_2.jpeg": _jpeg("blue")})
+    by = {p.last_name: p.mugshot_filename for p in r.people}
+    assert by["Lovelace"] == "img_9.jpg"
+    assert by["Bell"] == "IMG_2.jpeg"
+    assert by["Cole"] is None
+    assert any("'missing.jpg'" in w and "not found" in w for w in r.warnings)
+
+
+def test_filename_column_wins_over_numeric_order_and_blank_falls_back():
+    csv = _roster(["Ada,Lovelace,b.jpg", "Bo,Bell,"])
+    r = _ingest(csv, {"b.jpg": _jpeg("red"), "002.jpg": _jpeg("blue")})
+    by = {p.last_name: p.mugshot_filename for p in r.people}
+    assert by["Lovelace"] == "b.jpg"
+    assert by["Bell"] == "002.jpg"
+
+
+def test_filename_column_ignores_folders_and_unknown_column_errors():
+    csv = _roster(["Ada,Lovelace,C:\\photos\\a.jpg"])
+    r = _ingest(csv, {"sub/a.jpg": _jpeg("red")})
+    assert r.people[0].mugshot_filename == "a.jpg"
+    with pytest.raises(s.RosterFormatError):
+        _ingest(csv, {"a.jpg": _jpeg("red")}, column="Nope")
+
+
+def test_default_unchanged_and_candidates_reported():
+    csv = _roster(["Ada,Lovelace,a.jpg", "Bo,Bell,b.jpg"])
+    r = s.ingest_spreadsheet(uuid4().hex, io.BytesIO(csv), "r.csv", _zip({"001.jpg": _jpeg("red")}))
+    assert r.people[0].mugshot_filename == "001.jpg"
+    assert r.people[1].mugshot_filename is None
+    cand = r.filename_column_candidates[0]
+    assert (cand.column, cand.listed, cand.found, cand.suggested) == ("SelectedImage", 2, 0, False)
+    r2 = s.ingest_spreadsheet(uuid4().hex, io.BytesIO(csv), "r.csv", _zip({"a.jpg": _jpeg("red"), "b.jpg": _jpeg("red")}))
+    assert r2.filename_column_candidates[0].suggested is True
+
+
+def test_missing_listed_file_never_receives_leftover_numeric_portrait():
+    r = _ingest(_roster(["Ada,Lovelace,missing.jpg", "Bo,Bell,"]), {"001.jpg": _jpeg("red"), "002.jpg": _jpeg("blue")})
+    assert r.people[0].mugshot_filename is None
+    assert r.people[1].mugshot_filename == "001.jpg"  # blank cell uses the documented numeric fallback
+
+
+def test_duplicate_basename_in_zip_is_not_arbitrarily_selected():
+    r = _ingest(_roster(["Ada,Lovelace,a.jpg"]), {"one/a.jpg": _jpeg("red"), "two/a.jpg": _jpeg("blue")})
+    assert r.people[0].mugshot_filename is None

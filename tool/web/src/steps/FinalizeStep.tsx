@@ -1,14 +1,24 @@
-import { generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
+import { useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { describeApiError } from "../configFile";
+import { generationDownloadFile, generationDownloadAllUrl, generationDownloadSpreadsheetUrl, generationDownloadUrl, type PersonRecord } from "../api";
+import { printSizeDescription } from "../utils/printSize";
 import { InfoPopover } from "../components/InfoPopover";
 import type { PlacementMode } from "../types";
 
 export function FinalizeStep({
+  defaultQuote,
+  quoteImportWarnings,
+  renderConfirmed,
+  onRenderConfirmed,
+  warnings = [],
   people,
   peoplePerSpread,
   skipQuotes,
   skipBabyPhotos,
   templateSize,
   outputSize,
+  outputDpi = 300,
   onOutputSize,
   outputFormat,
   onOutputFormat,
@@ -32,11 +42,17 @@ export function FinalizeStep({
   outputNonce,
   usageInfo,
 }: {
+  defaultQuote: string;
+  quoteImportWarnings: string[];
+  renderConfirmed: boolean;
+  onRenderConfirmed: (value: boolean) => void;
+  warnings?: string[];
   people: PersonRecord[];
   peoplePerSpread: number;
   skipQuotes: boolean;
   skipBabyPhotos: boolean;
   templateSize: { width: number; height: number } | null;
+  outputDpi?: number;
   outputSize: { width: number; height: number } | null;
   onOutputSize: (v: { width: number; height: number } | null) => void;
   outputFormat: "png" | "pdf" | "tiff";
@@ -61,6 +77,33 @@ export function FinalizeStep({
   outputNonce: number;
   usageInfo?: { remaining: number; limit: number; period: "month" | "lifetime" } | null;
 }) {
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const download = async (url: string, filename: string) => {
+    setDownloading(true);
+    setDownloadStatus("Preparing download...");
+    try {
+      await generationDownloadFile(url, filename);
+      setDownloadStatus("Download started.");
+    } catch (error) {
+      setDownloadStatus(describeApiError(error, "Could not download this file. Please try again."));
+    } finally {
+      setDownloading(false);
+    }
+  };
+  const [confirmRender, setConfirmRender] = useState(false);
+  const defaultQuotePeople = skipQuotes ? [] : people.filter(p => !p.quote_blank && !p.quote?.trim());
+  const missingPortraits = people.filter(p => !p.mugshot_filename);
+  const missingBabies = skipBabyPhotos ? [] : people.filter(p => !p.baby_photo_filename);
+  const groups = [
+    {label: `Default quote: "${defaultQuote}"`, people: defaultQuotePeople},
+    {label: "No portrait: default portrait or blank will print", people: missingPortraits},
+    {label: "No baby photo: default baby photo or blank will print", people: missingBabies},
+  ];
+  const requestRender = () => {
+    if (!renderConfirmed && (groups.some(g => g.people.length) || quoteImportWarnings.length)) setConfirmRender(true);
+    else handleRenderAll();
+  };
   const previewIsPng = outputFormat === "png";
   const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
   const hasTemplateSize = Boolean(templateSize && templateSize.width > 0 && templateSize.height > 0);
@@ -97,6 +140,13 @@ export function FinalizeStep({
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <div className="callout"><strong>Before you render</strong>
+        {groups.map(g => <details key={g.label}><summary>{g.label} ({g.people.length})</summary><ul>{g.people.map(p => <li key={p.index}>{p.first_name} {p.last_name}</li>)}</ul></details>)}
+        {quoteImportWarnings.length > 0 && <details><summary>Quotes skipped during import ({quoteImportWarnings.length})</summary><ul>{quoteImportWarnings.map((warning,i) => <li key={i}>{warning}</li>)}</ul></details>}
+      </div>
+      <ConfirmDialog open={confirmRender} title="Render with missing content?" confirmLabel="Render anyway" cancelLabel="Go back" onCancel={() => setConfirmRender(false)} onConfirm={() => {setConfirmRender(false);handleRenderAll();}} message={<div>{groups.filter(g => g.people.length).map(g => <p key={g.label}>{g.people.length} students: {g.label}. {g.people.map(p => `${p.first_name} ${p.last_name}`).join(", ")}</p>)}<label><input type="checkbox" checked={renderConfirmed} onChange={e => onRenderConfirmed(e.target.checked)} />Don't ask again for this project</label></div>} />
+      {warnings.length > 0 && <details className="callout"><summary>Render warnings ({warnings.length})</summary><ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
+      {downloadStatus && <div role="status" aria-live="polite" className="callout">{downloadStatus}</div>}
       <div className="callout">
         <div className="stack" style={{ gap: 6 }}>
           <strong>Stats</strong>
@@ -163,7 +213,7 @@ export function FinalizeStep({
               <strong>Export format</strong>
               <InfoPopover content="Affects preview and Render all. Default: PNG. TIFF is a single flattened composite like PNG." ariaLabel="Export format description" />
             </div>
-            <select value={outputFormat} onChange={(e) => onOutputFormat(e.target.value as "png" | "pdf" | "tiff")} disabled={loading}>
+            <select aria-label="Export format" value={outputFormat} onChange={(e) => onOutputFormat(e.target.value as "png" | "pdf" | "tiff")} disabled={loading}>
               <option value="png">PNG (default)</option>
               {pdfOutputEnabled && <option value="pdf">PDF</option>}
               {tiffOutputEnabled && <option value="tiff">TIFF</option>}
@@ -173,7 +223,7 @@ export function FinalizeStep({
               <strong>Export quality</strong>
               <InfoPopover content="Choose an output resolution. Max is the template's original resolution. Aspect ratio is locked to match the template." ariaLabel="Export quality description" />
             </div>
-            <select
+            <select aria-label="Export quality"
               value={exportQualityMode}
               onChange={(e) => {
                 const mode = e.target.value as "original" | "custom";
@@ -185,6 +235,10 @@ export function FinalizeStep({
               <option value="original">Original{templateSize ? ` (${templateSize.width} × ${templateSize.height})` : ""}</option>
               <option value="custom">Custom resolution…</option>
             </select>
+
+            {templateSize && (
+              <div className="muted small">{printSizeDescription(templateSize, outputSize, outputDpi)}</div>
+            )}
 
             {hasTemplateSize && exportQualityMode === "custom" && outputSize && (
               <div className="grid two" style={{ gap: 10 }}>
@@ -212,7 +266,7 @@ export function FinalizeStep({
             <button disabled={loading || !canContinue} onClick={handleRenderPreview}>
               {previewPath ? "Re-render preview" : "Render preview"}
             </button>
-            <button className="primary" disabled={loading || !canContinue} onClick={handleRenderAll}>
+            <button className="primary" disabled={loading || !canContinue} onClick={requestRender}>
               {loading ? "Rendering..." : "Render all"}
             </button>
             {loading && onCancelRender && (
@@ -222,9 +276,10 @@ export function FinalizeStep({
             )}
             {previewPath && workspaceId && (
               <button
+                disabled={downloading}
                 onClick={() => {
                   const fname = previewPath.split(/[\\/]/).pop() || previewPath;
-                  window.open(generationDownloadUrl(workspaceId, fname), "_blank");
+                  void download(generationDownloadUrl(workspaceId, fname), fname);
                 }}
               >
                 Download preview
@@ -270,10 +325,10 @@ export function FinalizeStep({
                 <span className="muted small">(chronological order)</span>
               </div>
               <div className="inline" style={{ gap: 10, flexWrap: "wrap" }}>
-                <button className="primary" onClick={() => window.open(generationDownloadAllUrl(workspaceId), "_blank")}>
+                <button className="primary" disabled={downloading} onClick={() => void download(generationDownloadAllUrl(workspaceId), "spreads.zip")}>
                   Download all spreads
                 </button>
-                <button onClick={() => window.open(generationDownloadSpreadsheetUrl(workspaceId), "_blank")}>
+                <button disabled={downloading} onClick={() => void download(generationDownloadSpreadsheetUrl(workspaceId), `spread_data_${workspaceId}.xlsx`)}>
                   Download spreadsheet
                 </button>
               </div>
@@ -290,7 +345,7 @@ export function FinalizeStep({
                     <strong>Spread {spreadNumber}</strong>
                     <span className="muted">{fname}</span>
                   </div>
-                  <button onClick={() => window.open(generationDownloadUrl(workspaceId, fname), "_blank")}>Download</button>
+                  <button disabled={downloading} onClick={() => void download(generationDownloadUrl(workspaceId, fname), fname)}>Download</button>
                 </div>
                 {isPng ? (
                   <img

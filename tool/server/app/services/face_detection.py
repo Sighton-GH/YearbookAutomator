@@ -29,6 +29,22 @@ class FaceBox:
     score: float
 
 
+@dataclass(frozen=True)
+class FaceDetection:
+    """One selected face in an image: the shared result of detect_face().
+
+    `box` and `center` are in original-image pixel coordinates. `detector`
+    names the backend that produced the box ("yunet", "retinaface" or "haar")
+    and `rotation_cw` is the clockwise rotation (0/90/180/270) of the image
+    orientation the face was detected in.
+    """
+
+    box: FaceBox
+    center: tuple[float, float]
+    detector: str
+    rotation_cw: int
+
+
 _RETINA_SESSION: object | None = None
 _RETINA_MODEL_PATH: str | None = None
 _RETINA_INPUT_SIZE: int | None = None
@@ -308,29 +324,6 @@ def _retinaface_pip_detect(img_rgb: Image.Image, conf_threshold: float) -> list[
     return _nms(out)
 
 
-def _yunet_detect(img_rgb: Image.Image, model_path: str, input_size: int, score_threshold: float) -> list[FaceBox]:
-    detector = _load_yunet(model_path, input_size, score_threshold)
-    if detector is None:
-        return []
-
-    rgb = img_rgb.convert("RGB")
-    img = np.array(rgb)
-    bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    detector.setInputSize((bgr.shape[1], bgr.shape[0]))
-    started = time.monotonic()
-    with throttle.gpu_concurrency_gate():
-        ok, detections = detector.detect(bgr)
-    throttle.gpu_pace(started)
-    if not ok or detections is None:
-        return []
-
-    out: list[FaceBox] = []
-    for det in detections:
-        x, y, w, h, score = det[:5]
-        out.append(FaceBox(float(x), float(y), float(w), float(h), float(score)))
-    return out
-
-
 def _yunet_detect_with_status(
     img_rgb: Image.Image,
     model_path: str,
@@ -399,20 +392,6 @@ def _haar_detect(img_rgb: Image.Image) -> list[FaceBox]:
     for (x, y, w, h) in faces:
         out.append(FaceBox(float(x), float(y), float(w), float(h), score=0.35))
     return out
-
-
-def _pick_center(boxes: list[FaceBox]) -> Optional[tuple[float, float]]:
-    if not boxes:
-        return None
-    # Prefer the largest face (more stable for baby photos)
-    best = max(boxes, key=lambda b: b.w * b.h)
-    return (best.x + best.w / 2.0, best.y + best.h / 2.0)
-
-
-def _pick_largest(boxes: list[FaceBox]) -> Optional[FaceBox]:
-    if not boxes:
-        return None
-    return max(boxes, key=lambda b: b.w * b.h)
 
 
 def _pick_editor_box(boxes: list[FaceBox], image_w: int, image_h: int) -> Optional[FaceBox]:
@@ -616,8 +595,29 @@ def detect_face_box_for_editor_with_meta(img_rgb: Image.Image) -> Optional[tuple
     return first_box, first_detector, first_rotation
 
 
+def detect_face(img_rgb: Image.Image) -> Optional[FaceDetection]:
+    """Shared detection-and-selection used by both the editor and render.
+
+    Runs the full pipeline (YuNet, relaxed YuNet, RetinaFace, Haar fallback,
+    with a rotation search) and applies the single centre-weighted selection
+    rule, so "centre on face" picks the same face everywhere. Later
+    face-aware features (e.g. face-aware cover crops) should call this and
+    use `box`/`center` rather than re-implementing detection.
+    """
+    result = detect_face_box_for_editor_with_meta(img_rgb)
+    if result is None:
+        return None
+    box, detector, rotation_cw = result
+    return FaceDetection(
+        box=box,
+        center=(box.x + box.w / 2.0, box.y + box.h / 2.0),
+        detector=detector,
+        rotation_cw=rotation_cw,
+    )
+
+
 def detect_face_box_for_editor(img_rgb: Image.Image) -> Optional[FaceBox]:
-    """Editor flow: return the largest detected face box (if any)."""
+    """Editor flow: return the box of the selected face (if any)."""
     result = detect_face_box_for_editor_with_meta(img_rgb)
     return result[0] if result else None
 
@@ -631,39 +631,19 @@ def detect_face_center_for_editor(img_rgb: Image.Image) -> Optional[tuple[float,
 
 
 def detect_face_center_for_generation(img_rgb: Image.Image) -> Optional[tuple[float, float]]:
-    """Generation flow: use YuNet (GPU-accelerated if available)."""
-    settings = get_face_detection_settings()
-    if settings.yunet_model_path:
-        boxes = _yunet_detect(
-            img_rgb,
-            settings.yunet_model_path,
-            int(settings.yunet_input_size or 320),
-            float(settings.yunet_score_threshold or 0.7),
-        )
-        center = _pick_center(boxes)
-        if center is not None:
-            return center
+    """Generation flow: centre of the face picked by the shared detect_face().
 
-    boxes = _haar_detect(img_rgb)
-    return _pick_center(boxes)
+    Uses the exact same detection and selection as the editor (P3-06), so a
+    photo with several faces is centred on the same face in both places.
+    """
+    detection = detect_face(img_rgb)
+    return detection.center if detection is not None else None
 
 
 def detect_face_box_for_generation(img_rgb: Image.Image) -> Optional[FaceBox]:
-    """Generation flow: return the largest detected face box (if any)."""
-    settings = get_face_detection_settings()
-    if settings.yunet_model_path:
-        boxes = _yunet_detect(
-            img_rgb,
-            settings.yunet_model_path,
-            int(settings.yunet_input_size or 320),
-            float(settings.yunet_score_threshold or 0.7),
-        )
-        best = _pick_largest(boxes)
-        if best is not None:
-            return best
-
-    boxes = _haar_detect(img_rgb)
-    return _pick_largest(boxes)
+    """Generation flow: box of the face picked by the shared detect_face()."""
+    detection = detect_face(img_rgb)
+    return detection.box if detection is not None else None
 
 
 def detect_face_center(img_rgb: Image.Image) -> Optional[tuple[float, float]]:

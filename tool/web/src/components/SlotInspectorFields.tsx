@@ -1,9 +1,9 @@
-import type { Box, TemplateSlots } from "../api";
+import type { BabyShape, SlotBoxKind, Box, TemplateSlots } from "../api";
 import { clampBox } from "../utils/slots";
 
-const PARTS: (keyof TemplateSlots)[] = ["mugshot", "baby_photo", "name", "quote"];
+const PARTS: (SlotBoxKind)[] = ["mugshot", "baby_photo", "name", "quote"];
 
-const PART_LABELS: Record<keyof TemplateSlots, string> = {
+const PART_LABELS: Record<SlotBoxKind, string> = {
   mugshot: "Portrait",
   baby_photo: "Baby photo",
   name: "Name",
@@ -19,13 +19,13 @@ export function SlotInspectorFields({
   onChange: (next: TemplateSlots) => void;
   templateSize?: { width: number; height: number } | null;
 }) {
-  const update = (part: keyof TemplateSlots, field: keyof Box, value: number) => {
+  const update = (part: SlotBoxKind, field: keyof Box, value: number) => {
     const raw = { ...slot[part], [field]: value };
     const next = templateSize ? clampBox(raw, templateSize) : { ...raw, x: Math.max(0, Math.round(raw.x)), y: Math.max(0, Math.round(raw.y)), width: Math.max(1, Math.round(raw.width)), height: Math.max(1, Math.round(raw.height)) };
     onChange({ ...slot, [part]: next });
   };
 
-  const handleRaw = (part: keyof TemplateSlots, field: keyof Box, rawValue: string) => {
+  const handleRaw = (part: SlotBoxKind, field: keyof Box, rawValue: string) => {
     if (rawValue.trim() === "") return;
     const value = Number(rawValue);
     if (!Number.isFinite(value)) return;
@@ -34,6 +34,11 @@ export function SlotInspectorFields({
 
   return (
     <div className="slot-inspector-fields">
+      <label className="field"><span>Cutout shape</span>
+        <select aria-label="Cutout shape" value={slot.baby_shape ?? "auto"} onChange={event => onChange({ ...slot, baby_shape: event.target.value as BabyShape })}>
+          <option value="auto">Auto (blue guide)</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="rounded">Rounded</option>
+        </select>
+      </label>
       {PARTS.map((part) => (
         <div key={part} className="slot-inspector-part">
           <div className="slot-inspector-part-label">{PART_LABELS[part]}</div>

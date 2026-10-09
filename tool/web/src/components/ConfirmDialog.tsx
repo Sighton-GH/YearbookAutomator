@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useDialogFocus } from "../utils/dialogFocus";
 import type React from "react";
 import { clsx } from "clsx";
 
@@ -20,10 +22,12 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef, onCancel);
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+    <div ref={dialogRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
       <div className="modal" style={{ width: "min(560px, 100%)" }}>
         <div className="modal-header">
           <div className="stack" style={{ gap: 2 }}>

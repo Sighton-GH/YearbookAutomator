@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from threading import Event
 
 from app.services import progress
+from app.services.editor_images import cleanup_stale_previews
 from app.services.admin_settings import get_face_detection_settings
 from app.services.storage import delete_workspace, list_workspace_ids, read_workspace_meta
 from app.services.workspace_registry import unregister_workspace
@@ -91,6 +92,7 @@ def run_cleanup_once(config: CleanupConfig | None = None) -> int:
     deleted_count = 0
 
     for workspace_id in list_workspace_ids():
+        cleanup_stale_previews(workspace_id, now=now)
         if _has_active_job(workspace_id, window_seconds=cfg.active_job_window_seconds):
             continue
 

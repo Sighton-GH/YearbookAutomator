@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useId, useState } from "react";
 import { clsx } from "clsx";
 import { Check, Lock } from "lucide-react";
 
@@ -30,6 +30,8 @@ export function RoadmapRail<T extends string>({
   onSelect: (id: T) => void;
   ariaLabel?: string;
 }) {
+  const reasonPrefix = useId();
+  const [selectedBlockedStep, setSelectedBlockedStep] = useState<T | null>(null);
   return (
     <nav className="roadmap-rail" aria-label={ariaLabel}>
       <div className="roadmap-list" role="list">
@@ -46,9 +48,17 @@ export function RoadmapRail<T extends string>({
                   type="button"
                   className={clsx("roadmap-step", `is-${item.status}`, { "is-active": isActive })}
                   aria-current={isActive ? "step" : undefined}
-                  disabled={item.disabled}
-                  title={item.disabled ? item.disabledReason : item.description}
-                  onClick={() => !item.disabled && onSelect(item.id)}
+                  aria-disabled={Boolean(item.disabled)}
+                  aria-describedby={item.disabled && item.disabledReason ? `${reasonPrefix}-${item.id}` : undefined}
+                  title={item.disabled ? undefined : item.description}
+                  onClick={() => {
+                    if (item.disabled) {
+                      setSelectedBlockedStep(item.id);
+                      return;
+                    }
+                    setSelectedBlockedStep(null);
+                    onSelect(item.id);
+                  }}
                 >
                   <span className="roadmap-marker" aria-hidden="true">
                     {item.disabled ? (
@@ -68,6 +78,18 @@ export function RoadmapRail<T extends string>({
             </Fragment>
           );
         })}
+      </div>
+      <div aria-live="polite" aria-atomic="true">
+        {items.filter((item) => item.disabled && item.disabledReason).map((item) => (
+          <p
+            key={item.id}
+            id={`${reasonPrefix}-${item.id}`}
+            className="step-missing-reason roadmap-missing-reason"
+            hidden={selectedBlockedStep !== item.id}
+          >
+            {item.disabledReason}
+          </p>
+        ))}
       </div>
     </nav>
   );

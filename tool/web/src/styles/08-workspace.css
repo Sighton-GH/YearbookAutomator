@@ -54,8 +54,8 @@
   font-weight: var(--fw-medium);
   white-space: nowrap;
 }
-.roadmap-step:hover:not(:disabled):not(.is-active) { background: var(--surface-hover); color: var(--text); }
-.roadmap-step:disabled { cursor: not-allowed; opacity: 0.5; }
+.roadmap-step:hover:not([aria-disabled="true"]):not(.is-active) { background: var(--surface-hover); color: var(--text); }
+.roadmap-step[aria-disabled="true"] { cursor: not-allowed; opacity: 0.5; }
 .roadmap-step.is-active { background: var(--surface-raised); border-color: var(--border); color: var(--text); box-shadow: var(--shadow-1); }
 
 .roadmap-marker {
@@ -853,3 +853,32 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Missing prerequisites stay readable and available to keyboard users. */
+.step-continue { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
+.step-continue button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.step-missing-reason { margin: 0; max-width: 48ch; color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--lh-snug); }
+.roadmap-missing-reason { max-width: 90ch; margin: var(--space-3) auto 0; text-align: center; }
+
+.style-preview-card .style-preview-tag { color: #52616b; }
+
+[data-theme="dark"] button.tab-bar-item.active { color: var(--accent-contrast); }
+
+/* Keep completed state and rotating guidance readable during theme transitions. */
+[data-theme="dark"] .process-done-badge { color: var(--text); }
+[data-theme="dark"] .tips-box-body { color: var(--text); }
+
+[data-theme="light"] .tips-box strong,
+[data-theme="light"] .tips-box-close,
+[data-theme="light"] .tips-box-body { color: #52616b; }
+[data-theme="light"] button.tab-bar-item.active { color: #ffffff; }
+[data-theme="light"] .process-done-badge { color: #0c7053; }
+[data-theme="dark"] button.chip.active { color: var(--accent-contrast); }
+
+/* The card's translucency also blends its ink, so use darker light-theme ink. */
+[data-theme="light"] .tips-box strong,
+[data-theme="light"] .tips-box-close,
+[data-theme="light"] .tips-box-body { color: #34434c; }
+
+/* Stronger specificity than generic dark button ink. */
+[data-theme="dark"] button.process-btn, [data-theme="dark"] button.process-btn span { color: var(--accent-contrast); }

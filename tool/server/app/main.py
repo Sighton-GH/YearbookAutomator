@@ -11,7 +11,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from fastapi.responses import HTMLResponse
 
-from app.routes import templates, mapping, generation, fonts
+from app.routes import templates, mapping, generation, fonts, editor_images
 from app.routes import workspaces
 from app.routes import licensing
 from app.routes import admin_settings
@@ -482,6 +482,7 @@ app.add_middleware(TrafficMiddleware)
 
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
+app.include_router(editor_images.router, prefix="/api/mapping", tags=["mapping"])
 app.include_router(generation.router, prefix="/api/generation", tags=["generation"])
 app.include_router(fonts.router, prefix="/api/fonts", tags=["fonts"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])

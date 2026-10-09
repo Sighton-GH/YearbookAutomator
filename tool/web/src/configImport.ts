@@ -25,8 +25,10 @@ export type SessionLike = {
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
   };
   portraitsIngest?: {
+    filenameColumn?: string | null;
     namingPattern?: string;
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
@@ -95,6 +97,7 @@ type ParseTemplateFn = (
     nameColor?: string;
     quoteColor?: string;
     minArea?: number;
+    tolerance?: number;
     workspaceId?: string;
   },
 ) => Promise<{ template_id: string; width: number; height: number; slots: TemplateSlots[] }>;
@@ -105,6 +108,7 @@ type IngestSpreadsheetFn = (
   portraitsZip: File,
   opts?: {
     namingPattern?: string;
+    filenameColumn?: string | null;
     advancedNameMatch?: boolean;
     allowInsecureUploads?: boolean;
     onProgress?: (pct: number) => void;
@@ -155,6 +159,7 @@ export async function importTemplate<S extends SessionLike>(args: {
     nameColor: session.templateParse?.nameColor || undefined,
     quoteColor: session.templateParse?.quoteColor || undefined,
     minArea: typeof session.templateParse?.minArea === "number" ? session.templateParse.minArea : undefined,
+    tolerance: session.templateParse?.tolerance,
     workspaceId: args.workspaceId,
   });
 
@@ -174,6 +179,7 @@ export async function importPortraits<S extends SessionLike>(args: {
   setStatus?.("Uploading spreadsheet and portraits zip…");
 
   await ingestSpreadsheet(workspaceId, spreadsheet, portraitsZip, {
+    filenameColumn: session.portraitsIngest?.filenameColumn,
     namingPattern: session.portraitsIngest?.namingPattern || undefined,
     advancedNameMatch: Boolean(session.portraitsIngest?.advancedNameMatch),
     allowInsecureUploads: Boolean(session.portraitsIngest?.allowInsecureUploads),

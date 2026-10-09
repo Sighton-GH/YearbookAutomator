@@ -13,6 +13,7 @@ import re
 import time
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
@@ -25,6 +26,8 @@ from app.services.licensing import (
     get_required_license_key_from_headers,
     validate_and_record_use,
 )
+from app.services.placement import assign_logical_slots, auto_place_slots_for_people, place_generation_people
+from app.services.render_test_strip import render_test_strip
 from app.services.licensing_usage import append_usage_event
 from app.services.admin_settings import get_face_detection_settings
 from app.services.generator import generate_composite
@@ -36,6 +39,7 @@ from app.services.progress import (
     release_generation,
     request_cancel,
     start_job,
+    append_warning,
     try_reserve_generation,
     update_job,
 )
@@ -117,7 +121,7 @@ def _save_generation_request(payload: GenerationRequest) -> None:
     req_dir = root / "generation" / "requests"
     req_dir.mkdir(parents=True, exist_ok=True)
 
-    data = payload.model_dump()
+    data = payload.model_dump(exclude_unset=True)
     data["_saved_at"] = time.time()
     data["_output_filename"] = out_name
 
@@ -153,6 +157,7 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if len(payload.people) > max_people or len(payload.slots) > max_people:
         release_generation(payload.workspace_id)
         raise HTTPException(status_code=400, detail=f"Generation is limited to {max_people} people/slots per job")
+    centre_overridden = bool(payload.center_baby_on_face and not feature_settings.enable_center_on_face_ops)
     if not feature_settings.enable_center_on_face_ops:
         payload.center_baby_on_face = False
 
@@ -205,6 +210,8 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
         _clear_previous_outputs(workspace_dir(payload.workspace_id), keep=requested_output)
     try:
         start_job(job_id, payload.workspace_id)
+        if centre_overridden:
+            append_warning(job_id, "Centre-on-face is turned off by your administrator, so baby photos were centred normally.")
     except Exception:
         release_generation(payload.workspace_id)
         raise
@@ -223,7 +230,7 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
             update_job(job_id, progress=pct, status=msg)
 
         try:
-            out_path = generate_composite(payload, progress_cb=progress_cb)
+            out_path = generate_composite(payload, progress_cb=progress_cb, warning_cb=lambda warning: append_warning(job_id, warning))
             update_job(job_id, progress=100, status="done", output=out_path.name)
         except GenerationCancelled:
             update_job(job_id, status="cancelled", error="generation_cancelled")
@@ -241,6 +248,56 @@ async def generate(payload: GenerationRequest, request: Request) -> dict[str, An
     if usage_payload is not None:
         resp["usage"] = usage_payload
     return resp
+
+
+@router.post("/preview-strip")
+async def preview_strip(payload: GenerationRequest, request: Request) -> dict[str, Any]:
+    """Render the first two resolved slots with the real renderer, scaled down for the Style step.
+
+    Synchronous and bounded: two students, never counts towards licence usage.
+    """
+    enforce_workspace_write(request, payload.workspace_id)
+    reserved, reserve_reason = try_reserve_generation(payload.workspace_id)
+    if not reserved:
+        status_code = 409 if reserve_reason == "workspace_generation_in_progress" else 503
+        raise HTTPException(status_code=status_code, detail=reserve_reason, headers={"Retry-After": "10"})
+    try:
+        if not get_face_detection_settings().enable_center_on_face_ops:
+            payload.center_baby_on_face = False
+        if payload.auto_place:
+            people, slots = auto_place_slots_for_people(
+                people=payload.people,
+                slots=payload.slots,
+                placement_mode=payload.placement_mode,
+                slot_assignments=payload.slot_assignments,
+                force_alphabetical=payload.force_alphabetical,
+            )
+            payload = payload.model_copy(update={"people": list(people), "slots": list(slots), "auto_place": False, "slot_assignments": {}})
+        warnings: list[str] = []
+
+        def render(req: GenerationRequest):
+            out = generate_composite(req, warning_cb=lambda w: warnings.append(w) if w not in warnings else None)
+            # Show only the area the two rendered students occupy, at full output resolution.
+            from PIL import Image as _Image
+
+            boxes = [b for slot in req.slots for b in (slot.mugshot, slot.baby_photo, slot.name, slot.quote)]
+            with _Image.open(out) as full:
+                left = max(0, min(b.x for b in boxes) - 20)
+                top = max(0, min(b.y for b in boxes) - 20)
+                right = min(full.width, max(b.x + b.width for b in boxes) + 20)
+                bottom = min(full.height, max(b.y + b.height for b in boxes) + 20)
+                return full.convert("RGB").crop((left, top, right, bottom))
+
+        try:
+            image = await run_in_threadpool(render_test_strip, payload, render)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        out_path = workspace_file(payload.workspace_id, "preview_strip.png")
+        image.save(out_path, format="PNG")
+        restrict_file_permissions(out_path)
+        return {"output": out_path.name, "width": image.width, "height": image.height, "warnings": warnings}
+    finally:
+        release_generation(payload.workspace_id)
 
 
 class CancelGenerationRequest(BaseModel):
@@ -265,7 +322,7 @@ async def download(workspace_id: str, request: Request, filename: str = "output.
         raise HTTPException(status_code=400, detail="Invalid output filename")
     path = workspace_file(workspace_id, safe_name)
     if not path.exists():
-        return {"error": "file not found"}
+        raise HTTPException(status_code=404, detail="This rendered file is no longer available. Render it again, then download it.")
     return FileResponse(path)
 
 
@@ -365,16 +422,14 @@ async def download_spreadsheet(workspace_id: str, request: Request):
             raise HTTPException(status_code=500, detail=f"failed to read generation request for {out_name}: {exc}")
 
         spread_number = parse_spread_number(out_name, fallback=i + 1)
-        slot_count = max(1, len(payload.slots) or 1)
+        placed_people, logical_idx, _ = place_generation_people(payload)
+        placed = [(p, l + 1) for p, l in zip(placed_people, logical_idx)]
 
-        for idx, person in enumerate(payload.people):
-            default_slot_number = idx + 1
-            raw_slot_number = int((payload.slot_assignments or {}).get(int(person.index), default_slot_number))
-            slot_number = raw_slot_number if 1 <= raw_slot_number <= slot_count else 1
+        for person, slot_number in placed:
 
             portrait_filename = person.mugshot_filename or payload.default_mugshot_filename or ""
-            baby_filename = person.baby_photo_filename or payload.default_baby_photo_filename or ""
-            quote = person.quote or payload.default_quote or ""
+            baby_filename = "" if person.hide_baby_photo else (person.baby_photo_filename or payload.default_baby_photo_filename or "")
+            quote = "" if person.quote_blank else (person.quote or payload.default_quote or "")
             name = (f"{person.first_name} {person.last_name}").strip()
 
             rows.append(
@@ -421,6 +476,6 @@ async def download_spreadsheet(workspace_id: str, request: Request):
 async def status(job_id: str, request: Request):
     job = get_job(job_id)
     if not job:
-        return {"error": "not found"}
+        raise HTTPException(status_code=404, detail="This render job is no longer available. Check your results or start a new render.")
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return job

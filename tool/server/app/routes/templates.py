@@ -5,9 +5,10 @@ import io
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import FileResponse
 
-from app.models.schemas import TemplateParseResponse
-from app.services.storage import save_upload, workspace_dir
+from app.models.schemas import BabyMaskRequest, TemplateParseResponse
+from app.services.storage import save_upload, workspace_dir, UploadTooLarge
 from app.services.template_parser import extract_slots
+from app.services.baby_masks import regenerate_baby_mask
 from app.services.upload_security import validate_image_bytes
 from app.routes.workspace_access import enforce_workspace_read, enforce_workspace_write
 
@@ -32,6 +33,18 @@ async def get_annotated_template(workspace_id: str, request: Request):
     return FileResponse(path, media_type="image/png")
 
 
+@router.post("/baby-mask")
+async def update_baby_mask(payload: BabyMaskRequest, request: Request):
+    enforce_workspace_write(request, payload.workspace_id)
+    try:
+        path = regenerate_baby_mask(payload.workspace_id, payload.box, payload.baby_shape)
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(path, media_type="image/png")
+
+
 @router.post("/parse", response_model=TemplateParseResponse)
 async def parse_template(
     request: Request,
@@ -44,7 +57,8 @@ async def parse_template(
     quote_color: str | None = Form(None),
     disable_baby_photos: bool = Form(False),
     disable_quotes: bool = Form(False),
-    min_area: int = Form(400),
+    min_area: int = Form(800),
+    tolerance: int | None = Form(None, ge=0, le=64),
 ) -> TemplateParseResponse:
     try:
         if not workspace_id:
@@ -91,6 +105,7 @@ async def parse_template(
             enable_baby_photos=not disable_baby_photos,
             enable_quotes=not disable_quotes,
             min_area=min_area,
+            tolerance=tolerance,
             template_id=workspace_id,
         )
         # Persist templates for later steps and re-processing.

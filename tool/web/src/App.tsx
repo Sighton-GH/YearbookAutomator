@@ -1,13 +1,22 @@
+import { SafeAreaPreview } from "./components/SafeAreaPreview";
+import { DEFAULT_PHOTO_SETTINGS, type PhotoSettings } from "./photoSettings";
+import { PhotoSettingsPanel } from "./components/PhotoSettingsPanel";
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutHistory } from "./utils/layout/useLayoutHistory";
+import { useDialogFocus } from "./utils/dialogFocus";
 import { clsx } from "clsx";
 import type { Area } from "react-easy-crop";
 import { useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
+import { ArrowLeft, Eye, LayoutTemplate, Sparkles, Type, Upload, Users } from "lucide-react";
+import { DEFAULT_TEXT_STYLES, parseTextStyles, textStyleRequestFields, type TextStylesSetting } from "./utils/textStyle";
 import { withBase } from "./baseUrl";
 import {
   applyMapping,
   generateSpread,
+  renderPreviewStrip,
+  fetchGenerationImageObjectUrl,
+  type GenerateSpreadParams,
   ingestSpreadsheet,
   parseTemplate,
   uploadImage,
@@ -66,11 +75,21 @@ import { InfoPopover } from "./components/InfoPopover";
 import { ToolMessages, type ToolMessage } from "./components/ToolMessages";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { NoticeDialog } from "./components/NoticeDialog";
+import { applyReplayFallbacks, replayFailureWarnings, type ReplayFailure } from "./utils/replayFallback";
 import { TipsBox } from "./components/TipsBox";
 import { RoadmapRail, type RoadmapItem, type RoadmapStatus } from "./components/RoadmapRail";
+import { StepContinueButton } from "./components/StepContinueButton";
+import { missingStepRequirements } from "./utils/stepRequirements";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { cropToPngBlob } from "./utils/image";
+import { babyBoxesByPerson } from "./utils/babySlot";
 import { groupSlotsByProximity } from "./utils/slots";
+import {
+  clearInflightRender,
+  loadInflightRender,
+  resumeInflightRender,
+  saveInflightRender,
+} from "./utils/inflightRender";
 import { comparePeopleByLastName, computeSlotNumberToIndex } from "./utils/placement";
 import { makeRng } from "./utils/random";
 import { formatEtaSeconds, prefixServerMessage, scrollPastTopBar } from "./utils/ui";
@@ -150,6 +169,10 @@ export default function App({
   const [didRestoreSession, setDidRestoreSession] = useState(false);
   const activeStepRef = useRef<TopStep>("template");
   activeStepRef.current = activeStep;
+  // ?step= values this app wrote itself and has not yet seen come back through the router.
+  const pendingUrlStepWritesRef = useRef<TopStep[]>([]);
+  // Last location.search the URL -> state effect saw; only a real URL change may move the step.
+  const lastSeenUrlSearchRef = useRef<string | null>(null);
 
   // Jump back to the top of the page whenever the user changes steps so each step
   // (especially the long People grid) starts from the top instead of mid-scroll.
@@ -186,11 +209,14 @@ export default function App({
   const [parseBabyColor, setParseBabyColor] = useState<string>("");
   const [parseNameColor, setParseNameColor] = useState<string>("");
   const [parseQuoteColor, setParseQuoteColor] = useState<string>("");
+  const [parseTolerance, setParseTolerance] = useState<number | undefined>(undefined);
   const [parseMinArea, setParseMinArea] = useState<number>(800);
 
-  const [slots, setSlots] = useState<TemplateSlots[]>([]);
-  const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
+  const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
+  const { slots, setSlots, resetSlots, layoutHistory, templateSize, setTemplateSize, parsedSlots, setParsedSlots, slotAssignments, setSlotAssignments } = useLayoutHistory(placementMode);
   const [people, setPeople] = useState<PersonRecord[]>([]);
+  const [peopleSwapMode, setPeopleSwapMode] = useState<"off" | "card" | "portrait">("off");
+  const [pendingPeopleAdjustments, setPendingPeopleAdjustments] = useState<Record<number, import("./components/PersonInspector").PersonAdjustment>>({});
   const [originalPeople, setOriginalPeople] = useState<PersonRecord[] | null>(null);
   const [originalBabyPeople, setOriginalBabyPeople] = useState<PersonRecord[] | null>(null);
 
@@ -200,7 +226,6 @@ export default function App({
     setPeople(next);
   };
 
-  const [slotAssignments, setSlotAssignments] = useState<Record<number, number>>({});
   const [defaultQuotes, setDefaultQuotes] = useState<string[]>(["404 quote not found"]);
   const [defaultQuotesRandomize, setDefaultQuotesRandomize] = useState(false);
   const [defaultQuotesSeed, setDefaultQuotesSeed] = useState(0);
@@ -223,6 +248,8 @@ export default function App({
     allowInsecureUploads: false,
   });
   const [babyEditHistory, setBabyEditHistory] = useState<NonNullable<PersistedSessionV1["babyEditHistory"]>>([]);
+  const [safeArea, setSafeArea] = useState({ show: false, bleed_mm: 3, safe_mm: 6 });
+  const [photoSettings, setPhotoSettings] = useState<PhotoSettings>(DEFAULT_PHOTO_SETTINGS);
   const [babyBackgroundColor, setBabyBackgroundColor] = useState<string>("");
   const [centerBabyOnFace, setCenterBabyOnFace] = useState(false);
   const [defaultMugshotFilenames, setDefaultMugshotFilenames] = useState<string[]>([]);
@@ -240,6 +267,7 @@ export default function App({
   const [quoteFontSize, setQuoteFontSize] = useState<number>(40);
   const [quoteAllCaps, setQuoteAllCaps] = useState(false);
   const [quoteAlign, setQuoteAlign] = useState<Align>("left");
+  const [textStyles, setTextStyles] = useState<TextStylesSetting>(DEFAULT_TEXT_STYLES);
   const [availableFonts, setAvailableFonts] = useState<{ name: string; filename: string; source?: string }[]>([]);
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -247,6 +275,8 @@ export default function App({
   const [showSaveConfigReminder, setShowSaveConfigReminder] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [outputPaths, setOutputPaths] = useState<string[]>([]);
+  const [renderConfirmed, setRenderConfirmed] = useState(false);
+  const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
   const [outputNonce, setOutputNonce] = useState(0);
   const [usageInfo, setUsageInfo] = useState<{ remaining: number; limit: number; period: "month" | "lifetime" } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -263,10 +293,8 @@ export default function App({
   const [peoplePerSpread, setPeoplePerSpread] = useState<number>(16);
   const [outputFormat, setOutputFormat] = useState<"png" | "pdf" | "tiff">("png");
   const [outputSize, setOutputSize] = useState<{ width: number; height: number } | null>(null);
-  const [placementMode, setPlacementMode] = useState<PlacementMode>("left_then_right");
   const [forceAlphabetical, setForceAlphabetical] = useState(false);
   const [rawDebug, setRawDebug] = useState<RawParseDebug | null>(null);
-  const [parsedSlots, setParsedSlots] = useState<TemplateSlots[]>([]);
   const [backgroundRemovalOpsEnabled, setBackgroundRemovalOpsEnabled] = useState(false);
   const [centerOnFaceOpsEnabled, setCenterOnFaceOpsEnabled] = useState(false);
   const [quotesFeatureEnabled, setQuotesFeatureEnabled] = useState(true);
@@ -382,6 +410,8 @@ export default function App({
 
   // Persisted options for spreadsheet+portrait ingest.
   const defaultNamingPattern = "\\d{1,4}";
+  const [filenameCandidates, setFilenameCandidates] = useState<import("./api").FilenameColumnCandidate[]>([]);
+  const [filenameColumn, setFilenameColumn] = useState<string | null | undefined>(undefined);
   const [namingPattern, setNamingPattern] = useState<string>(defaultNamingPattern);
   const [advancedNameMatch, setAdvancedNameMatch] = useState(true);
   const [allowInsecureUploads, setAllowInsecureUploads] = useState(false);
@@ -396,6 +426,7 @@ export default function App({
   const [configImportBusy, setConfigImportBusy] = useState(false);
   const [configImportStatus, setConfigImportStatus] = useState<string>("");
   const [configImportError, setConfigImportError] = useState<string>("");
+  const [importReplayWarnings, setImportReplayWarnings] = useState<string[]>([]);
   const [configToImport, setConfigToImport] = useState<ConfigFileV1<PersistedSessionV1> | null>(null);
   const [importLowResWarning, setImportLowResWarning] = useState<string | null>(null);
   const [importPortraitReviewOpen, setImportPortraitReviewOpen] = useState(false);
@@ -411,6 +442,8 @@ export default function App({
   const [importBabyDone, setImportBabyDone] = useState(false);
   const [importFinalized, setImportFinalized] = useState(false);
   const [missingAsset, setMissingAsset] = useState<MissingAsset | null>(null);
+  const [pendingUploads, setPendingUploads] = useState(false);
+  const [leaveImportTarget, setLeaveImportTarget] = useState<TopStep | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showResetConfirm2, setShowResetConfirm2] = useState(false);
   const [workspaceDefaultsHydrated, setWorkspaceDefaultsHydrated] = useState(false);
@@ -601,20 +634,15 @@ export default function App({
   const templateReady = Boolean(workspaceId && slots.length);
   const rosterReady = Boolean(workspaceId && slots.length && people.length);
 
-  const topStepReady = (step: TopStep): boolean => {
-    if (getLicenseUnlockAllStepsEnabled()) return true;
-    switch (step) {
-      case "template":
-        return true;
-      case "roster":
-        return templateReady;
-      case "people":
-        return rosterReady;
-      case "style":
-      case "generate":
-        return rosterReady;
-    }
-  };
+  const topStepMissing = (step: TopStep): string[] => missingStepRequirements(step, {
+    hasWorkspace: Boolean(workspaceId),
+    slotCount: slots.length,
+    peopleCount: people.length,
+    unlockAllSteps: getLicenseUnlockAllStepsEnabled(),
+  });
+  const topStepReady = (step: TopStep): boolean => topStepMissing(step).length === 0;
+  const topStepBlockedReason = (step: TopStep): string | undefined =>
+    loading ? "Please wait for the current operation to finish." : topStepMissing(step).join(" ") || undefined;
 
   // Per-step completion (for the roadmap rail's done/current markers), independent of gating.
   const topStepComplete = (step: TopStep): boolean => {
@@ -638,9 +666,10 @@ export default function App({
       return;
     }
     if (!topStepReady(target)) {
-      setStatus("Complete the previous steps before jumping ahead");
+      setStatus(topStepMissing(target).join(" "));
       return;
     }
+    if (target !== activeStep && importSections && pendingUploads) { setLeaveImportTarget(target); return; }
     setActiveStep(target);
   };
 
@@ -651,6 +680,8 @@ export default function App({
   };
 
   const handleReset = () => {
+    setPhotoSettings(DEFAULT_PHOTO_SETTINGS);
+    setSafeArea({ show: false, bleed_mm: 3, safe_mm: 6 });
     const toDelete = workspaceId;
     if (toDelete) {
       void deleteWorkspace(toDelete).catch(() => {
@@ -668,9 +699,12 @@ export default function App({
     setParseNameColor("");
     setParseQuoteColor("");
     setParseMinArea(800);
-    setSlots([]);
+    setParseTolerance(undefined);
+    resetSlots([]);
     setParsedSlots([]);
     setTemplateSize(null);
+    setFilenameCandidates([]);
+    setFilenameColumn(undefined);
     setNamingPattern(defaultNamingPattern);
     setAdvancedNameMatch(true);
     setAllowInsecureUploads(false);
@@ -705,6 +739,7 @@ export default function App({
     setQuoteFontSize(40);
     setQuoteAllCaps(false);
     setQuoteAlign("left");
+    setTextStyles(DEFAULT_TEXT_STYLES);
     setStatus("");
     setLoading(false);
     setOutputPath(null);
@@ -727,6 +762,9 @@ export default function App({
     setPlacementMode("left_then_right");
     setForceAlphabetical(false);
     setOriginalPeople(null);
+    setRenderConfirmed(false);
+    setPendingPeopleAdjustments({});
+    setPeopleSwapMode("off");
     setOriginalBabyPeople(null);
     setRawDebug(null);
     setAllowInsecureReviewResults(false);
@@ -780,6 +818,7 @@ export default function App({
   const buildSessionPayload = (): PersistedSessionV1 => {
     return {
       v: 1,
+      renderConfirmed,
       sessionId: sessionIdentity.sessionId,
       startedAtMs: sessionIdentity.startedAtMs,
       expiresAtMs: sessionIdentity.expiresAtMs,
@@ -795,16 +834,23 @@ export default function App({
         nameColor: parseNameColor,
         quoteColor: parseQuoteColor,
         minArea: parseMinArea,
+        tolerance: parseTolerance,
       },
       slots,
       parsedSlots,
       templateSize,
       portraitsIngest: {
+        filenameColumn,
+        filenameCandidates,
         namingPattern,
         advancedNameMatch,
         allowInsecureUploads,
       },
       people,
+      pendingPeopleAdjustments,
+      peopleSwapMode,
+      originalPeople: originalPeople?.map(({index, mugshot_filename, baby_photo_filename, baby_background_removal_failed}) => ({index, mugshot_filename, baby_photo_filename, baby_background_removal_failed})),
+      originalBabyPeople: originalBabyPeople?.map(({index, mugshot_filename, baby_photo_filename, baby_background_removal_failed}) => ({index, mugshot_filename, baby_photo_filename, baby_background_removal_failed})),
       slotAssignments,
       placementMode,
       forceAlphabetical,
@@ -815,6 +861,8 @@ export default function App({
       defaultBabyFilename,
       babyIngest: { ...babyIngest, allowInsecureUploads },
       babyEditHistory,
+      safeArea,
+      photoSettings,
       babyBackgroundColor,
       centerBabyOnFace,
       defaultMugshotFilename: defaultMugshotFilenames[0] ?? null,
@@ -834,6 +882,7 @@ export default function App({
       quoteFontSize,
       quoteAllCaps,
       quoteAlign,
+      textStyles,
       peoplePerSpread,
       outputFormat,
       outputSize,
@@ -875,9 +924,27 @@ export default function App({
     setMissingAsset(null);
   };
 
+  const configModalRef = useRef<HTMLDivElement | null>(null);
+  const closeConfigModalOnEscape = useCallback(() => {
+    if (!configImportBusy) setShowConfigModal(false);
+  }, [configImportBusy]);
+  useDialogFocus(showConfigModal, configModalRef, closeConfigModalOnEscape);
+
   const openConfigImport = () => {
     resetImportUi();
     setShowConfigModal(true);
+  };
+
+  const restoreOriginals = (session: PersistedSessionV1) => {
+    const restore = (records: PersistedSessionV1["originalPeople"]) => records?.map((record) => ({ ...record, first_name: "", last_name: "" })) ?? null;
+    setOriginalPeople(restore(session.originalPeople));
+    const baby = restore(session.originalBabyPeople);
+    if (baby) setOriginalBabyPeople(baby);
+    else {
+      const originals = new Map<number, string>();
+      for (const entry of session.babyEditHistory ?? []) if (!originals.has(entry.person_index)) originals.set(entry.person_index, entry.input_filename);
+      setOriginalBabyPeople(originals.size ? [...originals].map(([index, baby_photo_filename]) => ({index, first_name: "", last_name: "", baby_photo_filename})) : null);
+    }
   };
 
   const applyImportedSession = (session: PersistedSessionV1, newWorkspaceId: string) => {
@@ -891,14 +958,21 @@ export default function App({
     setParseNameColor(session.templateParse?.nameColor ?? "");
     setParseQuoteColor(session.templateParse?.quoteColor ?? "");
     setParseMinArea(typeof session.templateParse?.minArea === "number" ? Math.max(400, session.templateParse!.minArea) : 800);
+    setParseTolerance(session.templateParse?.tolerance);
+    setFilenameCandidates(session.portraitsIngest?.filenameCandidates ?? []);
+    setFilenameColumn(session.portraitsIngest?.filenameColumn);
     setNamingPattern(session.portraitsIngest?.namingPattern ?? defaultNamingPattern);
     setAdvancedNameMatch(Boolean(session.portraitsIngest?.advancedNameMatch ?? true));
     setAllowInsecureUploads(Boolean(session.portraitsIngest?.allowInsecureUploads));
 
-    setSlots(session.slots ?? []);
+    resetSlots(session.slots ?? []);
     setParsedSlots(session.parsedSlots ?? []);
     setTemplateSize(session.templateSize ?? null);
     setPeople(session.people ?? []);
+    setRenderConfirmed(Boolean(session.renderConfirmed));
+    setPendingPeopleAdjustments(session.pendingPeopleAdjustments ?? {});
+    setPeopleSwapMode(session.peopleSwapMode ?? "off");
+    restoreOriginals(session);
     setSlotAssignments(session.slotAssignments ?? {});
     setPlacementMode((session.placementMode as PlacementMode) ?? "left_then_right");
     setForceAlphabetical(Boolean(session.forceAlphabetical));
@@ -919,6 +993,8 @@ export default function App({
       allowInsecureUploads: Boolean(session.babyIngest?.allowInsecureUploads ?? false),
     });
     setBabyEditHistory((session.babyEditHistory ?? []) as any);
+    setSafeArea(session.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
+    setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...session.photoSettings });
     setBabyBackgroundColor(session.babyBackgroundColor ?? "");
     setCenterBabyOnFace(Boolean(session.centerBabyOnFace));
     const nextDefaultMugshots =
@@ -944,6 +1020,7 @@ export default function App({
     setQuoteFontSize(typeof session.quoteFontSize === "number" ? session.quoteFontSize : 40);
     setQuoteAllCaps(Boolean(session.quoteAllCaps));
     setQuoteAlign((session.quoteAlign as Align) ?? "left");
+    setTextStyles(parseTextStyles(session.textStyles));
     setPeoplePerSpread(typeof session.peoplePerSpread === "number" ? session.peoplePerSpread : 16);
     if (session.outputFormat === "png" || session.outputFormat === "pdf" || session.outputFormat === "tiff") {
       setOutputFormat(session.outputFormat);
@@ -1141,16 +1218,17 @@ export default function App({
     }
   };
 
-  const replayBabyEditsIfNeeded = async (session: PersistedSessionV1, ws: string) => {
+  const replayBabyEditsIfNeeded = async (session: PersistedSessionV1, ws: string): Promise<ReplayFailure[]> => {
+    const failures: ReplayFailure[] = [];
     const history = (session.babyEditHistory ?? []).filter((h) => h && h.kind === "baby");
-    if (!history.length) return;
+    if (!history.length) return failures;
 
     const requestedOutputs = new Set<string>();
     for (const p of session.people ?? []) {
       if (p?.baby_photo_filename) requestedOutputs.add(String(p.baby_photo_filename));
     }
     if (session.defaultBabyFilename) requestedOutputs.add(String(session.defaultBabyFilename));
-    if (!requestedOutputs.size) return;
+    if (!requestedOutputs.size) return failures;
 
     // Only replay operations that are needed to materialize currently-referenced filenames.
     const neededFilenames = new Set<string>(requestedOutputs);
@@ -1162,7 +1240,7 @@ export default function App({
         neededFilenames.add(h.input_filename);
       }
     }
-    if (!neededOps.size) return;
+    if (!neededOps.size) return failures;
 
     const exists = async (filename: string): Promise<boolean> => {
       try {
@@ -1184,6 +1262,9 @@ export default function App({
       const h = history[i];
 
       if (await exists(h.output_filename)) continue;
+
+      // P3-08: a failed operation must not abort the import; fall back to the unedited input.
+      try {
 
       setConfigImportStatus(`Restoring baby edits (${i + 1}/${history.length})…`);
 
@@ -1229,11 +1310,16 @@ export default function App({
           typeof h.rotation_degrees === "number" ? h.rotation_degrees : 0
         );
         const file = new File([outBlob], h.output_filename, { type: "image/png" });
-        await uploadImageAs(ws, "baby", file, h.output_filename);
+        const restored = await uploadImageAs(ws, "baby", file, h.output_filename);
+        if (restored !== h.output_filename) throw new Error("The replay filename was not restored");
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
+      } catch {
+        failures.push({ op: h });
+      }
     }
+    return failures;
   };
 
   const runImportMissingAssetUpload = async (file: File) => {
@@ -1318,7 +1404,9 @@ export default function App({
 
         if (snap && isPersistedSessionV1(snap)) {
           const saved = snap;
-          setActiveStep(migrateActiveStep(saved.activeStep));
+          // Same as the local restore: a deep-linked /?step= wins over the saved step.
+          const urlStep = window.location.pathname === "/" ? parseStepFromSearch(window.location.search) : null;
+          setActiveStep(urlStep ?? migrateActiveStep(saved.activeStep));
           setEditTab(saved.editTab ?? "layout");
           setSkipQuotes(Boolean(saved.skipQuotes));
           setSkipBabyPhotos(Boolean(saved.skipBabyPhotos));
@@ -1327,13 +1415,20 @@ export default function App({
           setParseNameColor(saved.templateParse?.nameColor ?? "");
           setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
           setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-          setSlots(saved.slots ?? []);
+          setParseTolerance(saved.templateParse?.tolerance);
+          resetSlots(saved.slots ?? []);
           setParsedSlots(saved.parsedSlots ?? []);
           setTemplateSize(saved.templateSize ?? null);
-          setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
+          setFilenameCandidates(saved.portraitsIngest?.filenameCandidates ?? []);
+        setFilenameColumn(saved.portraitsIngest?.filenameColumn);
+        setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
           setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
           setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
           setPeople(saved.people ?? []);
+        setRenderConfirmed(Boolean(saved.renderConfirmed));
+        setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
+        setPeopleSwapMode(saved.peopleSwapMode ?? "off");
+          restoreOriginals(saved);
           setSlotAssignments(saved.slotAssignments ?? {});
           setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
           setForceAlphabetical(Boolean(saved.forceAlphabetical));
@@ -1354,6 +1449,8 @@ export default function App({
             allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
           });
           setBabyEditHistory((saved.babyEditHistory ?? []) as any);
+          setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
+          setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
           setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
           setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
           const savedDefaultMugshots =
@@ -1379,6 +1476,8 @@ export default function App({
           setQuoteFontSize(typeof saved.quoteFontSize === "number" ? saved.quoteFontSize : 40);
           setQuoteAllCaps(Boolean(saved.quoteAllCaps));
           setQuoteAlign((saved.quoteAlign as Align) ?? "left");
+        setTextStyles(parseTextStyles(saved.textStyles));
+          setTextStyles(parseTextStyles(saved.textStyles));
           setPeoplePerSpread(typeof saved.peoplePerSpread === "number" ? saved.peoplePerSpread : 16);
           if (saved.outputFormat === "png" || saved.outputFormat === "pdf" || saved.outputFormat === "tiff") {
             setOutputFormat(saved.outputFormat);
@@ -1434,7 +1533,7 @@ export default function App({
     return () => {
       canceled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, resetSlots, setParsedSlots, setTemplateSize, setSlotAssignments]);
 
   // Config import finalization: once required uploads are done, check for missing referenced files.
   useEffect(() => {
@@ -1457,20 +1556,27 @@ export default function App({
         setConfigImportBusy(true);
         // If the config references edited baby images, recreate them now (so missing-asset
         // checks don't force the user to hunt down intermediate edit outputs).
+        let sToApply = s;
+        let replayWarnings: string[] = [];
         if (needsBaby && importBabyDone) {
-          await replayBabyEditsIfNeeded(s, importWorkspaceId);
+          const failures = await replayBabyEditsIfNeeded(s, importWorkspaceId);
+          if (failures.length) {
+            replayWarnings = replayFailureWarnings(failures, s);
+            sToApply = applyReplayFallbacks(s, failures);
+          }
         }
 
         // Defaults are available without user uploads; if the config captured a workspace-specific
         // default filename that doesn't exist in this new workspace, drop it and fall back.
-        await clearMissingDefaultsForImport(s, importWorkspaceId);
+        await clearMissingDefaultsForImport(sToApply, importWorkspaceId);
 
         setConfigImportStatus("Checking for missing referenced files…");
-        const missing = await computeMissingAssets(s, importWorkspaceId);
+        const missing = await computeMissingAssets(sToApply, importWorkspaceId);
         if (missing) return;
 
         // Re-apply session last to ensure we restore the intended step/settings.
-        applyImportedSession(s, importWorkspaceId);
+        applyImportedSession(sToApply, importWorkspaceId);
+        setImportReplayWarnings(replayWarnings);
         setImportFinalized(true);
         setConfigImportStatus("Import complete");
         setShowConfigModal(false);
@@ -1550,13 +1656,20 @@ export default function App({
         setParseNameColor(saved.templateParse?.nameColor ?? "");
         setParseQuoteColor(saved.templateParse?.quoteColor ?? "");
         setParseMinArea(typeof saved.templateParse?.minArea === "number" ? Math.max(400, saved.templateParse!.minArea) : 800);
-        setSlots(saved.slots ?? []);
+        setParseTolerance(saved.templateParse?.tolerance);
+        resetSlots(saved.slots ?? []);
         setParsedSlots(saved.parsedSlots ?? []);
         setTemplateSize(saved.templateSize ?? null);
+        setFilenameCandidates(saved.portraitsIngest?.filenameCandidates ?? []);
+        setFilenameColumn(saved.portraitsIngest?.filenameColumn);
         setNamingPattern(saved.portraitsIngest?.namingPattern ?? defaultNamingPattern);
         setAdvancedNameMatch(Boolean(saved.portraitsIngest?.advancedNameMatch ?? true));
         setAllowInsecureUploads(Boolean(saved.portraitsIngest?.allowInsecureUploads));
         setPeople(saved.people ?? []);
+        setRenderConfirmed(Boolean(saved.renderConfirmed));
+        setPendingPeopleAdjustments(saved.pendingPeopleAdjustments ?? {});
+        setPeopleSwapMode(saved.peopleSwapMode ?? "off");
+        restoreOriginals(saved);
         setSlotAssignments(saved.slotAssignments ?? {});
         setPlacementMode((saved.placementMode as PlacementMode) ?? "left_then_right");
         setForceAlphabetical(Boolean(saved.forceAlphabetical));
@@ -1577,6 +1690,8 @@ export default function App({
           allowInsecureUploads: Boolean(saved.babyIngest?.allowInsecureUploads ?? false),
         });
         setBabyEditHistory((saved.babyEditHistory ?? []) as any);
+        setSafeArea(saved.safeArea ?? { show: false, bleed_mm: 3, safe_mm: 6 });
+        setPhotoSettings({ ...DEFAULT_PHOTO_SETTINGS, ...saved.photoSettings });
         setBabyBackgroundColor(saved.babyBackgroundColor ?? "");
         setCenterBabyOnFace(Boolean(saved.centerBabyOnFace));
         const savedDefaultMugshots =
@@ -1696,25 +1811,40 @@ export default function App({
 
   // URL -> state: allow /app?step=N to jump to a step (and restore after navigating back).
   useEffect(() => {
-    if (!didRestoreSession) return;
+    if (!didRestoreSession || (workspaceId && !workspaceDefaultsHydrated)) return;
     if (location.pathname !== "/") return;
+
+    // When the restore gate opens, the restored step is authoritative (restore already honours
+    // a deep-linked ?step=); only later URL changes should move the step.
+    const prevSearch = lastSeenUrlSearchRef.current;
+    lastSeenUrlSearchRef.current = location.search;
+    if (prevSearch === null || prevSearch === location.search) return;
 
     const urlStep = parseStepFromSearch(location.search);
     if (urlStep == null) return;
+    // Ignore the echo of our own State -> URL write; otherwise a URL that lags one click
+    // behind the step makes the two effects swap values forever.
+    const echoIdx = pendingUrlStepWritesRef.current.indexOf(urlStep);
+    if (echoIdx !== -1) {
+      pendingUrlStepWritesRef.current = pendingUrlStepWritesRef.current.slice(echoIdx + 1);
+      return;
+    }
     if (urlStep === activeStepRef.current) return;
     goToStep(urlStep);
-  }, [didRestoreSession, location.pathname, location.search]);
+  }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search]);
 
-  // State -> URL: keep ?step= in sync (without spamming history).
+  // State -> URL: wait for restore so the initial Template state cannot overwrite a saved step.
   useEffect(() => {
+    if (!didRestoreSession || (workspaceId && !workspaceDefaultsHydrated)) return;
     if (location.pathname !== "/") return;
     const current = parseStepFromSearch(location.search);
     if (current === activeStep) return;
 
     const next = new URLSearchParams(searchParams);
     next.set("step", String(activeStep));
+    pendingUrlStepWritesRef.current = [...pendingUrlStepWritesRef.current, activeStep];
     setSearchParams(next, { replace: true });
-  }, [location.pathname, location.search, activeStep, searchParams, setSearchParams]);
+  }, [didRestoreSession, workspaceId, workspaceDefaultsHydrated, location.pathname, location.search, activeStep, searchParams, setSearchParams]);
 
   // Persist session as the user progresses.
   useEffect(() => {
@@ -1758,6 +1888,7 @@ export default function App({
       window.clearTimeout(timer);
     };
   }, [
+    pendingPeopleAdjustments, peopleSwapMode, renderConfirmed, originalPeople, originalBabyPeople,
     didRestoreSession,
     activeStep,
     editTab,
@@ -1770,10 +1901,13 @@ export default function App({
     parseNameColor,
     parseQuoteColor,
     parseMinArea,
+    parseTolerance,
     slots,
     parsedSlots,
     templateSize,
     namingPattern,
+    filenameColumn,
+    filenameCandidates,
     advancedNameMatch,
     allowInsecureUploads,
     people,
@@ -1786,6 +1920,8 @@ export default function App({
     defaultBabyFilename,
     babyIngest,
     babyEditHistory,
+    safeArea,
+    photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotFilenames,
@@ -1802,6 +1938,7 @@ export default function App({
     quoteFontSize,
     quoteAllCaps,
     quoteAlign,
+    textStyles,
     peoplePerSpread,
     outputFormat,
     outputSize,
@@ -1856,6 +1993,7 @@ export default function App({
       window.removeEventListener("ymga:flush-workspace-state", onFlush as EventListener);
     };
   }, [
+    pendingPeopleAdjustments, peopleSwapMode, renderConfirmed, originalPeople, originalBabyPeople,
     didRestoreSession,
     workspaceId,
     workspaceDefaultsHydrated,
@@ -1871,10 +2009,13 @@ export default function App({
     parseNameColor,
     parseQuoteColor,
     parseMinArea,
+    parseTolerance,
     slots,
     parsedSlots,
     templateSize,
     namingPattern,
+    filenameColumn,
+    filenameCandidates,
     advancedNameMatch,
     allowInsecureUploads,
     people,
@@ -1886,6 +2027,8 @@ export default function App({
     defaultQuotesSeed,
     babyIngest,
     babyEditHistory,
+    safeArea,
+    photoSettings,
     babyBackgroundColor,
     centerBabyOnFace,
     defaultMugshotRandomize,
@@ -1901,6 +2044,7 @@ export default function App({
     quoteFontSize,
     quoteAllCaps,
     quoteAlign,
+    textStyles,
     peoplePerSpread,
     outputFormat,
     outputSize,
@@ -2035,8 +2179,26 @@ export default function App({
   ]);
 
   const slotNumberToIndex = useMemo(() => {
-    return computeSlotNumberToIndex(slots, placementMode, templateSize?.width);
-  }, [slots, placementMode, templateSize?.width]);
+    return computeSlotNumberToIndex(slots, placementMode, null);
+  }, [slots, placementMode]);
+
+  const babyBoxByPerson = useMemo(
+    () =>
+      babyBoxesByPerson({
+        people: forceAlphabetical ? [...people].sort(comparePeopleByLastName) : people,
+        slots,
+        slotNumberToIndex,
+        slotAssignments,
+        peoplePerSpread,
+      }),
+    [people, forceAlphabetical, slots, slotNumberToIndex, slotAssignments, peoplePerSpread]
+  );
+
+  const portraitBoxByPerson = useMemo(() => babyBoxesByPerson({
+    people: forceAlphabetical ? [...people].sort(comparePeopleByLastName) : people,
+    slots: slots.map(slot => ({...slot, baby_photo: slot.mugshot})),
+    slotNumberToIndex, slotAssignments, peoplePerSpread,
+  }), [people, forceAlphabetical, slots, slotNumberToIndex, slotAssignments, peoplePerSpread]);
 
   const defaultQuoteFallback = defaultQuotes[0] ?? "404 quote not found";
 
@@ -2082,7 +2244,8 @@ export default function App({
   }, [defaultQuotesRandomize, defaultQuotes.length]);
 
   const getPeopleForGeneration = (list: PersonRecord[]) => {
-    return forceAlphabetical ? [...list].sort(comparePeopleByLastName) : list;
+    const active = list.filter(p => !p.excluded);
+    return forceAlphabetical ? [...active].sort(comparePeopleByLastName) : active;
   };
 
   const buildSlotsForPeople = (peopleList: PersonRecord[]) => {
@@ -2101,6 +2264,16 @@ export default function App({
     });
   };
 
+  const stripWarningsRef = useRef<string[]>([]);
+  const renderStyleStrip = async (): Promise<{ url: string; warnings: string[] }> => {
+    if (!workspaceId) throw new Error("Upload your files first, then try again.");
+    stripWarningsRef.current = [];
+    const output = await runGeneration({ outputFilename: "preview_strip.png", stripOnly: true, suppressStatus: true, manageLoading: false });
+    if (!output) throw new Error("The test render could not start. Check your template and roster, then try again.");
+    const url = await fetchGenerationImageObjectUrl(workspaceId, output);
+    return { url, warnings: stripWarningsRef.current };
+  };
+
   const runGeneration = async (opts: {
     outputFilename?: string;
     peopleOverride?: PersonRecord[];
@@ -2112,7 +2285,9 @@ export default function App({
     countUsage?: boolean;
     suppressStatus?: boolean;
     manageLoading?: boolean;
+    stripOnly?: boolean;
     onError?: (message: string) => void;
+    onJobStarted?: (jobId: string) => void;
   }): Promise<string | null> => {
     if (!workspaceId || !templateId) return null;
     const manageLoading = opts.manageLoading ?? true;
@@ -2139,7 +2314,7 @@ export default function App({
       let fallbackIdx = 0;
       const peopleToSend = peopleInput.map((p) => {
         const hasQuote = Boolean((p.quote ?? "").trim());
-        const quoteValue = skipQuotes
+        const quoteValue = (skipQuotes || p.quote_blank)
           ? null
           : (hasQuote ? p.quote : (defaultQuoteAssignments[p.index] ?? defaultQuoteFallback));
         let mugshotValue = p.mugshot_filename ?? null;
@@ -2154,7 +2329,7 @@ export default function App({
           baby_photo_filename: skipBabyPhotos ? null : p.baby_photo_filename,
         };
       });
-      const gen = await generateSpread({
+      const genParams: GenerateSpreadParams = {
         workspace_id: workspaceId,
         template_id: templateId,
         slots,
@@ -2165,7 +2340,9 @@ export default function App({
         count_usage: Boolean(opts.countUsage),
         auto_place: true,
         placement_mode: placementMode,
-        force_alphabetical: forceAlphabetical,
+        // Callers pass people already sorted and chunked (getPeopleForGeneration), so the
+        // server must not re-sort a chunk.
+        force_alphabetical: opts.peopleOverride ? false : forceAlphabetical,
         slot_assignments: slotAssignments,
         output_filename: opts.outputFilename,
         default_quote: skipQuotes ? undefined : defaultQuoteFallback,
@@ -2189,10 +2366,19 @@ export default function App({
         quote_align: quoteAlign,
         baby_background_color: skipBabyPhotos ? undefined : (babyBackgroundColor.trim() ? babyBackgroundColor.trim() : undefined),
         center_baby_on_face: skipBabyPhotos ? undefined : centerBabyOnFace,
-      });
+        ...photoSettings,
+        ...textStyleRequestFields(textStyles, nameAlign, quoteAlign),
+      };
+      if (opts.stripOnly) {
+        const strip = await renderPreviewStrip({ ...genParams, count_usage: false });
+        stripWarningsRef.current = strip.warnings ?? [];
+        return strip.output;
+      }
+      const gen = await generateSpread(genParams);
 
       const jobId = gen.jobId;
       activeJobIdRef.current = jobId;
+      opts.onJobStarted?.(jobId);
       if (opts.countUsage && gen.usage) setUsageInfo(gen.usage);
 
       const jobStartMs = performance.now();
@@ -2204,6 +2390,7 @@ export default function App({
       while (true) {
         try {
           const statusResp = await generationStatus(jobId);
+          if (statusResp.warnings?.length) setGenerationWarnings((old) => [...new Set([...old, ...statusResp.warnings!.map(w => opts.spreadIndex ? `Spread ${opts.spreadIndex}: ${w}` : w)])]);
 
           const spreadPct = typeof statusResp.progress === "number" ? Math.max(0, Math.min(100, statusResp.progress)) : 0;
           const statusText = statusResp.status || "";
@@ -2352,12 +2539,63 @@ export default function App({
     });
   };
 
-  const handleRenderAll = async () => {
+  // P3-13: after a reload, re-attach to a Render all that was still running.
+  const resumeCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!workspaceId || !templateId || !people.length || !slots.length || resumeCheckedRef.current) return;
+    resumeCheckedRef.current = true;
+    const saved = loadInflightRender();
+    if (!saved) return;
+    if (saved.workspaceId !== workspaceId) {
+      clearInflightRender();
+      return;
+    }
+    setLoading(true);
+    setProgress(0);
+    setStatus("Picking up your render where it left off...");
+    activeJobIdRef.current = saved.jobIds[saved.jobIds.length - 1] ?? null;
+    let resumedOutputs: string[] = [];
+    let resumeFailed = false;
+    void resumeInflightRender(saved, {
+      getStatus: generationStatus,
+      listOutputs: generationListOutputs,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      isCancelled: () => cancelRequestedRef.current,
+      onWarnings: warnings => setGenerationWarnings(old => [...new Set([...old, ...warnings])]),
+      onProgress: (pct, message) => {
+        setProgress(pct);
+        setStatus(message);
+      },
+      onFinished: (outs, message) => {
+        resumedOutputs = outs;
+        resumeFailed = message.startsWith("Rendering stopped");
+        if (outs.length > 0) {
+          setOutputPaths(outs);
+          setOutputPath(outs[0] || null);
+          setOutputNonce((n) => n + 1);
+        }
+        setProgress(outs.length >= saved.totalSpreads ? 100 : 0);
+        setStatus(message);
+      },
+    }).then(async result => {
+      if (result === "resumed" && !resumeFailed && !cancelRequestedRef.current && saved.jobIds.length < saved.totalSpreads) {
+        await handleRenderAll(saved.jobIds.length, resumedOutputs, saved.jobIds);
+      }
+    }).finally(() => {
+      activeJobIdRef.current = null;
+      clearInflightRender();
+      setLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, templateId, people.length, slots.length]);
+
+  const handleRenderAll = async (resumeFrom = 0, previousOutputs: string[] = [], priorJobIds: string[] = []) => {
     if (!workspaceId || !templateId) return;
     if (!slots.length || !people.length) return;
 
     cancelRequestedRef.current = false;
     setUsageInfo(null);
+    if (resumeFrom === 0) setGenerationWarnings([]);
 
     const peopleForAll = getPeopleForGeneration(people);
 
@@ -2367,17 +2605,19 @@ export default function App({
     const perSpread = Math.max(1, Math.min(peoplePerSpread || 1, slots.length));
     const totalSpreads = Math.max(1, Math.ceil(peopleForAll.length / perSpread));
     const outputs: string[] = [];
-    setOutputPaths([]);
-    setOutputPath(null);
+    setOutputPaths(previousOutputs);
+    setOutputPath(previousOutputs[0] ?? null);
 
     const overallStartMs = performance.now();
     const maxParallel = 1;
     const ext = outputFormat === "pdf" ? "pdf" : outputFormat === "tiff" ? "tiff" : "png";
-    const results: (string | null)[] = Array.from({ length: totalSpreads }, () => null);
-    let completed = 0;
-    let nextIndex = 0;
+    const results: (string | null)[] = Array.from({ length: totalSpreads }, (_, i) => i < resumeFrom ? previousOutputs[i] ?? null : null);
+    let completed = resumeFrom;
+    let nextIndex = resumeFrom;
     let failed = false;
     let lastError: string | null = null;
+    const startedJobIds: string[] = [...priorJobIds];
+    const renderStartedAt = Date.now();
 
     setLoading(true);
     setProgress(0);
@@ -2410,6 +2650,10 @@ export default function App({
           onError: (message) => {
             lastError = message;
           },
+          onJobStarted: (jobId) => {
+            startedJobIds.push(jobId);
+            saveInflightRender({ workspaceId, jobIds: [...startedJobIds], totalSpreads, startedAt: renderStartedAt });
+          },
         });
 
         if (!out) {
@@ -2428,6 +2672,7 @@ export default function App({
 
     const workers = Array.from({ length: Math.min(maxParallel, totalSpreads) }, () => worker());
     await Promise.all(workers);
+    clearInflightRender();
 
     if (failed) {
       if (cancelRequestedRef.current) {
@@ -2455,7 +2700,7 @@ export default function App({
     if (!workspaceId || !templateId) return;
     if (!people.length || !slots.length) return;
     if (loading) return;
-    if (previewPath) return;
+    if (previewPath || loadInflightRender()) return;
     // Auto-render the one-page preview the first time you reach Finalize.
     handleRenderPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2473,7 +2718,7 @@ export default function App({
       status,
       optional: s.optional,
       disabled: !ready || loading,
-      disabledReason: !ready ? "Complete the previous step first" : loading ? "Please wait…" : undefined,
+      disabledReason: topStepBlockedReason(s.id),
     };
   });
 
@@ -2513,7 +2758,7 @@ export default function App({
       : null;
   const showEditStep =
     editTabForStep !== null &&
-    (editTabForStep !== "layout" || templateReady) &&
+    (editTabForStep !== "layout" || templateSize != null || layoutHistory.canRedo) &&
     (editTabForStep !== "people" || rosterReady);
 
   const templateTabs: TabBarItem<"upload" | "review">[] = [
@@ -2522,7 +2767,7 @@ export default function App({
       id: "review",
       label: "Review parsing",
       icon: <Eye size={14} />,
-      disabled: !templateReady,
+      disabled: !templateReady && templateSize == null && !layoutHistory.canRedo,
       disabledReason: "Parse a template first",
     },
   ];
@@ -2544,14 +2789,12 @@ export default function App({
       <button type="button" className="danger ghost" onClick={requestResetAll} disabled={loading}>
         Reset all
       </button>
-      {!isLastStep && (
-        <button
-          className="primary"
-          disabled={loading || !nextStepMeta || !topStepReady(nextStepMeta.id)}
-          onClick={() => goToAdjacentStep(1)}
-        >
-          Continue{nextStepMeta ? ` to ${nextStepMeta.label}` : ""} <ArrowRight size={15} />
-        </button>
+      {!isLastStep && nextStepMeta && (
+        <StepContinueButton
+          label={nextStepMeta.label}
+          reason={topStepBlockedReason(nextStepMeta.id)}
+          onContinue={() => goToAdjacentStep(1)}
+        />
       )}
     </div>
   );
@@ -2638,7 +2881,7 @@ export default function App({
         updateAnnotatedFile(annotated);
         updateCleanFile(clean);
         setStatus("Loading sample project — detecting layout…");
-        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, workspaceId: workspaceId || undefined });
+        const parsed = await parseTemplate(annotated, clean, { minArea: parseMinArea, tolerance: parseTolerance, workspaceId: workspaceId || undefined });
         setTemplateId(parsed.template_id);
         setSlots(parsed.slots);
         setParsedSlots(parsed.slots.map((s) => ({ ...s })));
@@ -2679,6 +2922,11 @@ export default function App({
 
   return (
     <>
+      <ConfirmDialog open={leaveImportTarget !== null} title="Leave without uploading?"
+        message="You have selected files that have not been uploaded. Leaving this step will discard those selections."
+        confirmLabel="Leave step" cancelLabel="Stay here"
+        onCancel={() => setLeaveImportTarget(null)}
+        onConfirm={() => { if (leaveImportTarget) setActiveStep(leaveImportTarget); setLeaveImportTarget(null); setPendingUploads(false); }} />
       <ConfirmDialog
         open={showResetConfirm}
         title="Reset everything?"
@@ -2723,6 +2971,18 @@ export default function App({
         }}
       />
       <NoticeDialog
+        open={importReplayWarnings.length > 0 && !showConfigModal}
+        title="Import finished with a few notes"
+        message={
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {importReplayWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        }
+        onAction={() => setImportReplayWarnings([])}
+      />
+      <NoticeDialog
         open={importPortraitReviewOpen}
         title="Portrait spread check"
         message={importPortraitReviewMessage ?? undefined}
@@ -2749,7 +3009,7 @@ export default function App({
           aria-modal="true"
           aria-label="Import configuration"
         >
-          <div className="modal">
+          <div className="modal" ref={configModalRef} tabIndex={-1}>
             <div className="modal-header">
               <div className="stack" style={{ gap: 2 }}>
                 <strong>Import configuration</strong>
@@ -3003,6 +3263,8 @@ export default function App({
             <p className="canvas-sub">{activeStepMeta.description}</p>
             <div className="canvas-subheader-wing canvas-subheader-wing-right">{resetContinueButtons}</div>
           </div>
+          {activeStep === "template" && templateSize && <SafeAreaPreview size={templateSize}
+            src={templateId ? templateCleanUrl(templateId) : templatePreviewUrl} dpi={photoSettings.output_dpi ?? 300} settings={safeArea} onChange={setSafeArea} />}
           {activeStep === "template" && (
             <div className="tool-tips-center tool-tips-top">
               <TipsBox tips={stepTips} />
@@ -3021,6 +3283,7 @@ export default function App({
           )}
           {showImportStep && (
             <ImportStep
+              onPendingUploads={setPendingUploads}
               sections={importSections!}
               workspaceId={workspaceId}
               onParsed={(resp) => {
@@ -3059,6 +3322,8 @@ export default function App({
               setNameColor={setParseNameColor}
               quoteColor={parseQuoteColor}
               setQuoteColor={setParseQuoteColor}
+              tolerance={parseTolerance}
+              setTolerance={setParseTolerance}
               minArea={parseMinArea}
               setMinArea={setParseMinArea}
               onPreviewChange={({ annotated, clean }) => {
@@ -3067,6 +3332,10 @@ export default function App({
                 setTemplatePreviewUrl(clean ?? annotated ?? null);
               }}
               onRawDebug={setRawDebug}
+              filenameCandidates={filenameCandidates}
+              onFilenameCandidates={setFilenameCandidates}
+              filenameColumn={filenameColumn}
+              onFilenameColumn={setFilenameColumn}
               namingPattern={namingPattern}
               setNamingPattern={setNamingPattern}
               advancedNameMatch={advancedNameMatch}
@@ -3105,7 +3374,7 @@ export default function App({
               backgroundRemovalOpsEnabled={backgroundRemovalOpsEnabled}
               centerOnFaceOpsEnabled={centerOnFaceOpsEnabled}
               advancedNameMatchingEnabled={advancedNameMatchingEnabled}
-              onContinue={() => goToAdjacentStep(1)}
+              onContinue={() => { setPendingUploads(false); setActiveStep(TOP_STEPS[stepIndex(activeStep) + 1]?.id ?? activeStep); }}
             />
           )}
 
@@ -3119,7 +3388,9 @@ export default function App({
               skipBabyPhotos={skipBabyPhotos}
               slots={slots}
               templateSize={templateSize}
+              placementMode={placementMode}
               onSlots={setSlots}
+              layoutHistory={layoutHistory}
               previewMode={previewMode}
               onPreviewMode={setPreviewMode}
               annotatedPreviewUrl={annotatedPreviewUrl}
@@ -3133,6 +3404,11 @@ export default function App({
               workspaceId={workspaceId}
               people={people}
               setPeople={setPeople}
+              positionSettings={{slots, slotNumberToIndex, assignments: slotAssignments, perSpread: peoplePerSpread, forceAlphabetical, onAssignments: setSlotAssignments}}
+              pendingPeopleAdjustments={pendingPeopleAdjustments}
+              peopleSwapMode={peopleSwapMode}
+              onPeopleSwapMode={setPeopleSwapMode}
+              onPendingPeopleAdjustments={setPendingPeopleAdjustments}
               originalPeople={originalPeople}
               setOriginalPeople={setOriginalPeople}
               originalBabyPeople={originalBabyPeople}
@@ -3153,8 +3429,17 @@ export default function App({
               defaultBabyFilename={defaultBabyFilename}
               babyBackgroundColor={babyBackgroundColor}
               babyBackgroundMode={babyIngest.backgroundMode as BackgroundMode}
+              babyEditorProtectedFilenames={[
+                ...babyEditHistory.flatMap((entry) => [entry.input_filename, entry.output_filename]),
+                ...(originalBabyPeople ?? []).map((person) => person.baby_photo_filename ?? ""),
+                ...(originalPeople ?? []).map((person) => person.baby_photo_filename ?? ""),
+                defaultBabyFilename ?? "",
+              ]}
               onBabyEditHistoryAdd={(entry) => setBabyEditHistory((prev) => [...prev, entry])}
               babyMaskBox={slots.length > 0 ? slots[0].baby_photo : null}
+              portraitBox={slots.length > 0 ? slots[0].mugshot : null}
+              portraitBoxByPerson={portraitBoxByPerson}
+              babyBoxByPerson={babyBoxByPerson}
               allowInsecureUploads={allowInsecureUploads}
               setStatus={setStatus}
               loading={loading}
@@ -3178,6 +3463,9 @@ export default function App({
               onQuoteFontSize={setQuoteFontSize}
               onQuoteAllCaps={setQuoteAllCaps}
               onQuoteAlign={setQuoteAlign}
+              textStyles={textStyles}
+              onTextStyles={setTextStyles}
+              onRenderStyleStrip={renderStyleStrip}
               availableFonts={availableFonts}
               setAvailableFonts={setAvailableFonts}
               customFontUploadEnabled={customFontUploadEnabled}
@@ -3188,13 +3476,21 @@ export default function App({
             insecureHttp && !allowInsecureReviewResults ? (
               <p className="muted">Enable the toggle above to view results over HTTP.</p>
             ) : (
+              <>
+              <PhotoSettingsPanel settings={photoSettings} onChange={setPhotoSettings} size={outputSize ?? templateSize} outputFormat={outputFormat} />
               <FinalizeStep
+                defaultQuote={defaultQuoteFallback}
+                quoteImportWarnings={quotesWarnings.filter(w => /placeholder|link|rejected|url/i.test(w))}
+                renderConfirmed={renderConfirmed}
+                onRenderConfirmed={setRenderConfirmed}
+                warnings={generationWarnings}
                 people={people}
                 peoplePerSpread={peoplePerSpread}
                 skipQuotes={skipQuotes}
                 skipBabyPhotos={skipBabyPhotos}
                 templateSize={templateSize}
                 outputSize={outputSize}
+                outputDpi={photoSettings.output_dpi ?? 300}
                 onOutputSize={setOutputSize}
                 outputFormat={outputFormat}
                 onOutputFormat={setOutputFormat}
@@ -3218,6 +3514,7 @@ export default function App({
                 outputNonce={outputNonce}
                 usageInfo={usageInfo}
               />
+              </>
             )
           )}
 

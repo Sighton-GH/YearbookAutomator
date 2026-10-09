@@ -1,3 +1,7 @@
+import { BulkPeopleToolbar } from "../../components/BulkPeopleToolbar";
+import { StudentPosition } from "../../components/StudentPosition";
+import { AddStudent } from "../../components/AddStudent";
+import { editPersonName } from "../../utils/personEdits";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -21,11 +25,12 @@ import { ToggleSwitch } from "../../components/ToggleSwitch";
 import { InfoPopover } from "../../components/InfoPopover";
 import { UploadDropLabel } from "../../components/UploadDropLabel";
 import { Inspector } from "../../components/Inspector";
+import { PortraitEditor } from "../../components/PortraitEditor";
 import { PersonInspector, type PersonAdjustment } from "../../components/PersonInspector";
 import { formatServerMessage } from "../../configFile";
 import type { PersistedSessionV1 } from "../../session";
 
-type SwapMode = "off" | "card" | "portrait";
+
 
 export function PeopleTab({
   workspaceId,
@@ -33,6 +38,11 @@ export function PeopleTab({
   skipBabyPhotos,
   people,
   setPeople,
+  positionSettings,
+  pendingPeopleAdjustments,
+  peopleSwapMode,
+  onPeopleSwapMode,
+  onPendingPeopleAdjustments,
   originalPeople,
   setOriginalPeople,
   originalBabyPeople,
@@ -54,7 +64,11 @@ export function PeopleTab({
   babyBackgroundColor,
   babyBackgroundMode,
   onBabyEditHistoryAdd,
+  babyEditorProtectedFilenames,
   babyMaskBox,
+  portraitBox,
+  portraitBoxByPerson,
+  babyBoxByPerson,
   allowInsecureUploads,
   setStatus,
   loading,
@@ -64,6 +78,11 @@ export function PeopleTab({
   skipBabyPhotos: boolean;
   people: PersonRecord[];
   setPeople: (p: PersonRecord[]) => void;
+  positionSettings: import("../../components/StudentPosition").PositionSettings;
+  peopleSwapMode: "off" | "card" | "portrait";
+  onPeopleSwapMode: React.Dispatch<React.SetStateAction<"off" | "card" | "portrait">>;
+  pendingPeopleAdjustments: Record<number, import("../../components/PersonInspector").PersonAdjustment>;
+  onPendingPeopleAdjustments: React.Dispatch<React.SetStateAction<Record<number, import("../../components/PersonInspector").PersonAdjustment>>>;
   originalPeople: PersonRecord[] | null;
   setOriginalPeople: (p: PersonRecord[] | null) => void;
   originalBabyPeople: PersonRecord[] | null;
@@ -84,18 +103,26 @@ export function PeopleTab({
   defaultBabyFilename: string | null;
   babyBackgroundColor: string;
   babyBackgroundMode: BackgroundMode;
+  babyEditorProtectedFilenames: string[];
   onBabyEditHistoryAdd: (entry: NonNullable<PersistedSessionV1["babyEditHistory"]>[number]) => void;
   babyMaskBox: Box | null;
+  portraitBox: Box | null;
+  portraitBoxByPerson?: Record<number, Box | null>;
+  babyBoxByPerson?: Record<number, Box | null>;
   allowInsecureUploads: boolean;
   setStatus: (v: string) => void;
   loading: boolean;
 }) {
+  const [bulkSelected, setBulkSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [swapMode, setSwapMode] = useState<SwapMode>("off");
+  const swapMode = peopleSwapMode;
+  const setSwapMode = onPeopleSwapMode;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const [swapsPerformed, setSwapsPerformed] = useState(false);
-  const [adjustments, setAdjustments] = useState<Record<number, PersonAdjustment>>({});
+  const adjustments = pendingPeopleAdjustments;
+  const setAdjustments = onPendingPeopleAdjustments;
   const [defaultDragIdx, setDefaultDragIdx] = useState<number | null>(null);
   const [newQuoteDraft, setNewQuoteDraft] = useState("");
   const [confirmAction, setConfirmAction] = useState<
@@ -110,6 +137,7 @@ export function PeopleTab({
   const [previewTitle, setPreviewTitle] = useState("Portrait preview");
   const [previewRotation, setPreviewRotation] = useState(0);
 
+  const [portraitEditorIdx, setPortraitEditorIdx] = useState<number | null>(null);
   const babyEditorRef = useRef<BabyPhotoEditorHandle>(null);
   const swapEnabled = swapMode !== "off";
 
@@ -156,8 +184,14 @@ export function PeopleTab({
     setPeople(people.map((p, i) => (i === idx ? updater(p) : p)));
   };
 
-  const rawMaskUrl = workspaceId && babyMaskBox ? babyMaskUrl(workspaceId, babyMaskBox) : null;
-  const babyMaskCssUrl = rawMaskUrl ? `url(${rawMaskUrl})` : null;
+  // Each student's thumbnail uses the baby slot they are actually placed in; slot 1's shape
+  // is the fallback when placement is unknown (old behaviour).
+  const babyBoxFor = (personIndex: number | null | undefined): Box | null =>
+    (personIndex != null ? babyBoxByPerson?.[personIndex] : undefined) ?? babyMaskBox;
+  const babyMaskCssFor = (box: Box | null): string | null =>
+    workspaceId && box ? `url(${babyMaskUrl(workspaceId, box)})` : null;
+  const babyAspectFor = (box: Box | null): number =>
+    box && box.height > 0 ? box.width / box.height : 1;
   const normalizeHexColor = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -170,8 +204,6 @@ export function PeopleTab({
   const babyFillColor = normalizeHexColor(babyBackgroundColor);
   // Every baby thumbnail uses the parsed baby slot's aspect ratio + mask so they all render
   // in an identical shape (matching the template slot) instead of each image's natural size.
-  const babyAspect =
-    babyMaskBox && babyMaskBox.height > 0 ? babyMaskBox.width / babyMaskBox.height : 1;
 
   // ---- Swap mode ----
   const LOCKED_SWAP_MESSAGE = "That student is locked. Unlock them in the Inspector to move them.";
@@ -299,7 +331,7 @@ export function PeopleTab({
   };
 
   const removePerson = (personIndex: number) => {
-    setPeople(people.filter((p) => p.index !== personIndex));
+    setPeople(people.map(p => p.index === personIndex ? {...p, excluded: true} : p));
     setAdjustments((prev) => {
       const { [personIndex]: _omit, ...rest } = prev;
       return rest;
@@ -458,14 +490,14 @@ export function PeopleTab({
       setStatus("No original baby photo to reset to");
       return;
     }
-    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: nextFilename }));
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: nextFilename, baby_background_removal_failed: original?.baby_background_removal_failed ?? false }));
     setStatus(`Reset baby photo for ${person.first_name}`);
   };
 
   const clearBabyFromPerson = (idx: number) => {
     const person = people[idx];
     if (!person) return;
-    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: null }));
+    updatePerson(idx, (p) => ({ ...p, baby_photo_filename: null, baby_background_removal_failed: false }));
     setStatus(`Removed baby photo for ${person.first_name}`);
   };
 
@@ -477,7 +509,7 @@ export function PeopleTab({
     }
     try {
       const filename = await uploadImage(workspaceId, "baby", file, { removeBackground: false, backgroundMode: babyBackgroundMode });
-      updatePerson(idx, (p) => ({ ...p, baby_photo_filename: filename }));
+      updatePerson(idx, (p) => ({ ...p, baby_photo_filename: filename, baby_background_removal_failed: false }));
       setStatus(`Uploaded baby photo for ${people[idx].first_name}`);
     } catch (err) {
       console.error(err);
@@ -508,6 +540,12 @@ export function PeopleTab({
           onRotateCounterClockwise={() => setPreviewRotation((r) => (r - 90 + 360) % 360)}
         />
 
+        {portraitEditorIdx !== null && workspaceId && <PortraitEditor
+          src={assetUrl(workspaceId, "mugshot", people[portraitEditorIdx].mugshot_filename || defaultMugshotAssignments[people[portraitEditorIdx].index])}
+          aspect={(portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)?.width ? (portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)!.width / (portraitBoxByPerson?.[people[portraitEditorIdx].index] ?? portraitBox)!.height : 1}
+          focus={people[portraitEditorIdx].mugshot_focus}
+          onApply={focus => { updatePerson(portraitEditorIdx, p => ({ ...p, mugshot_focus: focus })); setPortraitEditorIdx(null); }}
+          onClose={() => setPortraitEditorIdx(null)} />}
         <BabyPhotoEditor
           ref={babyEditorRef}
           workspaceId={workspaceId}
@@ -515,12 +553,14 @@ export function PeopleTab({
           setPeople={setPeople}
           defaultBabyFilename={defaultBabyFilename}
           babyMaskBox={babyMaskBox}
+          babyBoxByPerson={babyBoxByPerson}
           babyBackgroundColor={babyBackgroundColor}
           babyBackgroundMode={babyBackgroundMode}
           allowInsecureUploads={allowInsecureUploads}
           setStatus={setStatus}
           originalBabyPeople={originalBabyPeople}
           onBabyEditHistoryAdd={onBabyEditHistoryAdd}
+          babyEditorProtectedFilenames={babyEditorProtectedFilenames}
         />
 
         <ConfirmDialog
@@ -536,7 +576,7 @@ export function PeopleTab({
           }
           message={
             confirmAction?.kind === "remove-person"
-              ? "This will remove the person from the list."
+              ? "This student will be excluded from the yearbook. You can include them again from the Inspector."
               : confirmAction?.kind === "remove-portrait"
                 ? "This will clear the portrait for this person."
                 : confirmAction?.kind === "apply-mapping"
@@ -557,17 +597,25 @@ export function PeopleTab({
           }}
         />
 
+        <BulkPeopleToolbar people={people} selected={bulkSelected} onSelection={setBulkSelected} locked={lockedPeople} workspaceId={workspaceId} disabled={loading} onPeople={setPeople} onBusy={setBulkBusy} babyAspectFor={(personIndex: number) => babyAspectFor(babyBoxFor(personIndex))} backgroundMode={babyBackgroundMode} />
+        <AddStudent disabled={loading || bulkBusy || !workspaceId} onAdd={async (first, last, quote, portrait) => {
+          if (!workspaceId) return;
+          try {
+            const filename = portrait ? await uploadImage(workspaceId, "mugshot", portrait) : null;
+            setPeople([...people, {index: Math.max(0, ...people.map(p => p.index)) + 1, first_name: first, last_name: last, quote, mugshot_filename: filename, added_manually: true}]);
+          } catch (err) { setStatus(`Could not add student. ${formatServerMessage(err)}`); }
+        }} />
         {/* Toolbar */}
         <div className="panel people-toolbar">
           <div className="people-toolbar-row">
-            <button className="primary" onClick={() => setConfirmAction({ kind: "apply-mapping" })} disabled={loading || !people.length}>
+            <button className="primary" onClick={() => setConfirmAction({ kind: "apply-mapping" })} disabled={loading || bulkBusy || !people.length}>
               Apply mapping adjustments
             </button>
             <button
               type="button"
               className="danger"
               onClick={() => setConfirmAction({ kind: "reset-mapping" })}
-              disabled={loading || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
+              disabled={loading || bulkBusy || !originalPeople || !(swapsPerformed || Object.keys(adjustments).length > 0)}
             >
               Reset portraits to how they were first matched
             </button>
@@ -655,7 +703,7 @@ export function PeopleTab({
               {!skipQuotes && (
                 <div className="stack" style={{ gap: 6 }}>
                   <div className="inline" style={{ alignItems: "center", gap: 6 }}>
-                    <strong>Default quotes</strong>
+                    <strong>Default quotes ({people.filter(p => !p.quote_blank && !p.quote?.trim()).length} students)</strong>
                     <InfoPopover content="Used when a student has no quote. Reorder to define the pattern." ariaLabel="Default quotes description" />
                   </div>
                   {defaultQuotes.map((q, idx) => (
@@ -692,13 +740,17 @@ export function PeopleTab({
               const mugshotFilename = p.mugshot_filename || assignedDefaultMugshot || null;
               const assignedDefaultQuote = defaultQuoteAssignments[p.index] ?? "";
               const displayQuote = (p.quote ?? "").trim() ? p.quote ?? "" : assignedDefaultQuote || defaultQuoteFallback;
-              const babyFilename = p.baby_photo_filename || defaultBabyFilename;
+              const babyFilename = p.hide_baby_photo ? null : p.baby_photo_filename || defaultBabyFilename;
+              const rowBabyBox = babyBoxFor(p.index);
+              const rowMaskCss = babyMaskCssFor(rowBabyBox);
+              const rowBabyAspect = babyAspectFor(rowBabyBox);
               const cardClasses = clsx("people-card-selectable", {
                 "people-card-selected": selectedIdx === rowIdx,
                 "swap-mode": swapMode === "card",
                 dragging: swapMode === "card" && dragIdx === rowIdx,
                 "swap-target": swapEnabled && dropTarget === rowIdx,
                 "people-card-locked": isLocked,
+                "people-card-excluded": Boolean(p.excluded),
               });
               return (
                 <PeopleCard
@@ -706,7 +758,7 @@ export function PeopleTab({
                   person={p}
                   workspaceId={workspaceId}
                   className={cardClasses}
-                  draggable={swapMode !== "off" && !isLocked}
+                  draggable={!bulkBusy && swapMode !== "off" && !isLocked}
                   onDragStart={(evt) => {
                     if (swapMode === "off" || isLocked) return;
                     setDragIdx(rowIdx);
@@ -752,10 +804,10 @@ export function PeopleTab({
                           showMissingLabel: false,
                           emptyLabel: "No baby photo",
                           wrapperClassName: "thumb-cell-baby",
-                          className: rawMaskUrl ? "baby-thumb-masked" : undefined,
+                          className: rowMaskCss ? "baby-thumb-masked" : undefined,
                           style: {
-                            aspectRatio: String(babyAspect),
-                            ...(rawMaskUrl ? ({ ["--baby-mask" as never]: babyMaskCssUrl } as React.CSSProperties) : {}),
+                            aspectRatio: String(rowBabyAspect),
+                            ...(rowMaskCss ? ({ ["--baby-mask" as never]: rowMaskCss } as React.CSSProperties) : {}),
                           } as React.CSSProperties,
                           onLoad: () => markImageResolved(`${rowIdx}-baby`),
                           onError: () => markImageResolved(`${rowIdx}-baby`),
@@ -766,6 +818,8 @@ export function PeopleTab({
                   showQuote={false}
                   onClick={() => setSelectedIdx(rowIdx)}
                 >
+                  <label className="small" onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${p.first_name} ${p.last_name}`} checked={bulkSelected.has(p.index)} disabled={loading || bulkBusy} onChange={e => {const next = new Set(bulkSelected); if (e.target.checked) next.add(p.index); else next.delete(p.index); setBulkSelected(next);}} /> Select</label>
+                  {p.excluded && <p className="muted small">Excluded from yearbook</p>}
                   {!skipQuotes && (
                     <p className="muted small people-card-quote-preview">{displayQuote ? displayQuote : "No quote"}</p>
                   )}
@@ -788,31 +842,44 @@ export function PeopleTab({
         emptyHint="Click a card to edit their portrait, baby photo, and quote."
       >
         {selected && selectedIdx != null && (
+          <>
+          <StudentPosition key={`${selected.index}-${Boolean(selected.excluded)}`} person={selected} people={people} settings={positionSettings} disabled={loading || bulkBusy || Boolean(lockedPeople[selected.index])} onPeople={setPeople} />
           <PersonInspector
             person={selected}
             workspaceId={workspaceId}
             skipQuotes={skipQuotes}
             skipBabyPhotos={skipBabyPhotos}
-            isLocked={Boolean(lockedPeople[selected.index])}
+            isLocked={bulkBusy || Boolean(lockedPeople[selected.index])}
             onToggleLock={() => toggleLock(selected.index)}
             assignedDefaultMugshot={defaultMugshotAssignments[selected.index] ?? null}
             assignedDefaultQuote={defaultQuoteAssignments[selected.index] ?? ""}
             defaultQuoteFallback={defaultQuoteFallback}
-            babyFilename={selected.baby_photo_filename || defaultBabyFilename}
-            babyMaskCssUrl={babyMaskCssUrl}
-            babyFillColor={babyFillColor}
-            babyAspect={babyAspect}
+            babyFilename={selected.hide_baby_photo ? null : selected.baby_photo_filename || defaultBabyFilename}
+            babyMaskCssUrl={babyMaskCssFor(babyBoxFor(selected.index))}
+            babyFillColor={selected.baby_fill_color === undefined ? babyFillColor : selected.baby_fill_color}
+            babyAspect={babyAspectFor(babyBoxFor(selected.index))}
             adjustment={adjustments[selected.index]}
             onShiftEnabled={(enabled) => setShiftEnabled(selected.index, enabled)}
             onShiftCount={(count) => setShiftCount(selected.index, count)}
             onUploadReplacementPortrait={(file) => void uploadReplacementPortrait(selected.index, file)}
             onRequestRemovePortrait={() => setConfirmAction({ kind: "remove-portrait", personIndex: selected.index })}
             onRequestRemovePerson={() => setConfirmAction({ kind: "remove-person", personIndex: selected.index })}
+            onPersonPatch={patch => updatePerson(selectedIdx, prev => ({...prev, ...patch}))}
+            onRestorePerson={() => updatePerson(selectedIdx, prev => ({...prev, excluded: false}))}
+            onNameChange={(field, value) => updatePerson(selectedIdx, prev => editPersonName(prev, field, value))}
             onQuoteChange={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote: value }))}
+            onQuoteBlank={(value) => updatePerson(selectedIdx, (prev) => ({ ...prev, quote_blank: value }))}
             onOpenBabyEditor={() => babyEditorRef.current?.openEditor(selectedIdx)}
             onUploadReplacementBaby={(file) => void handlePerPersonBaby(selectedIdx, file)}
             onResetBabyToOriginal={() => clearBabyOverride(selectedIdx)}
             onRemoveBabyFromPerson={() => clearBabyFromPerson(selectedIdx)}
+            onAdjustPortrait={() => setPortraitEditorIdx(selectedIdx)}
+            onBabyFillColor={colour => updatePerson(selectedIdx, p => {
+              const next = { ...p };
+              if (colour === undefined) delete next.baby_fill_color;
+              else next.baby_fill_color = colour;
+              return next;
+            })}
             onPreviewPortrait={() => {
               if (!workspaceId) return;
               const filename = selected.mugshot_filename || defaultMugshotAssignments[selected.index];
@@ -824,6 +891,7 @@ export function PeopleTab({
             }}
             loading={loading}
           />
+          </>
         )}
       </Inspector>
     </div>

@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+import path from 'node:path';
+import { activate } from './helpers';
+
+test('sensitivity, raw overlay and cutout errors/shapes round-trip', async ({page}) => {
+  await activate(page);
+  const project = path.resolve('.e2e-data/project');
+  await page.getByRole('slider',{name:'Detection sensitivity'}).fill('30');
+  await page.locator('input[type=file]').nth(0).setInputFiles(path.join(project,'annotated.png'));
+  await page.locator('input[type=file]').nth(1).setInputFiles(path.join(project,'clean.png'));
+  await page.getByRole('button',{name:'Parse template',exact:true}).click();
+  const canvas = page.getByRole('region',{name:'Template layout canvas'});
+  await expect(canvas).toBeVisible();
+  await page.getByRole('checkbox',{name:'Show what was detected'}).check();
+  await expect(canvas.locator('[data-detected="name"]')).toHaveCount(32);
+  await canvas.locator('rect[data-label="baby_photo-1"]').click({position:{x:15,y:15}});
+  const babyFields = page.locator('.slot-inspector-part').filter({hasText:'Baby photo'}).locator('input');
+  await babyFields.nth(0).fill('0'); await babyFields.nth(1).fill('0');
+  await expect(page.getByRole('alert').filter({hasText:'No baby cutout was detected'})).toBeVisible();
+  const maskRequest = page.waitForRequest(r=>r.url().includes('/templates/baby-mask') && JSON.parse(r.postData() || '{}').baby_shape==='ellipse');
+  await page.getByRole('combobox',{name:'Cutout shape'}).selectOption('ellipse');
+  expect(JSON.parse((await maskRequest).postData()!).baby_shape).toBe('ellipse');
+  await expect(page.getByRole('img',{name:'Baby cutout mask preview'})).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:'No baby cutout was detected'})).toHaveCount(0);
+  await page.screenshot({path:test.info().outputPath('f3-cutout.png'),fullPage:true});
+  await page.waitForTimeout(1500);
+  const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('ymga.session.v1') || '{}'));
+  expect(saved.templateParse.tolerance).toBe(30); expect(saved.slots[0].baby_shape).toBe('ellipse');
+  await page.reload(); await page.getByRole('tab',{name:'Review parsing',exact:true}).click();
+  await canvas.locator('rect[data-label="baby_photo-1"]').click({position:{x:15,y:15}});
+  await expect(page.getByRole('combobox',{name:'Cutout shape'})).toHaveValue('ellipse');
+});

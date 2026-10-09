@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Annotated
 import io
+import logging
+import uuid
+from PIL import Image
 import zipfile
 import re
 from difflib import SequenceMatcher
@@ -15,6 +18,7 @@ import mimetypes
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 
 from app.models.schemas import MappingRequest, MappingDecision, PersonRecord, SpreadsheetPreview
+from app.services.image_messages import BACKGROUND_FAILURE, unsupported_image_message
 from app.services.mapping_review import apply_mapping_decisions
 from app.services.spreadsheet import RosterFormatError, ingest_spreadsheet
 from app.services.name_matching import (
@@ -34,12 +38,16 @@ from app.services.upload_security import (
     validate_zip_archive,
 )
 from app.services.background_removal import (
+    prepare_background_model,
     BackgroundMode,
     background_removed_filename,
     remove_background as remove_background_bytes,
     BackgroundAlreadyRemovedError,
 )
 from app.services.background_jobs import (
+    BackgroundJobCancelled,
+    request_cancel as request_bg_cancel,
+    raise_if_cancelled as raise_if_bg_cancelled,
     release_job as release_bg_job,
     start_job as start_bg_job,
     try_reserve_job as try_reserve_bg_job,
@@ -143,7 +151,11 @@ async def detect_face_center_api(image: UploadFile = File(...)):
 
     from app.services.face_detection import detect_face_box_for_editor_with_meta
 
-    result = detect_face_box_for_editor_with_meta(img)
+    try:
+        result = detect_face_box_for_editor_with_meta(img)
+    except Exception:
+        logging.getLogger(__name__).exception("Face detection failed")
+        raise HTTPException(status_code=503, detail="Could not detect a face. Try again later or centre the photo manually.") from None
     if not result:
         # Face detection is optional (depends on numpy/opencv). Make this
         # user-actionable for the UI.
@@ -337,8 +349,11 @@ async def ingest(
     mugshots_zip: UploadFile | None = File(None),
     naming_pattern: str = Form(r"\d{1,4}"),
     advanced_name_match: bool = Form(False),
+    filename_column: str | None = Form(None),
 ) -> SpreadsheetPreview:
     enforce_workspace_write(request, workspace_id)
+    if filename_column is not None and len(filename_column) > 200:
+        raise HTTPException(status_code=400, detail="Filename column name is too long")
     if len(naming_pattern) > 80:
         raise HTTPException(status_code=400, detail="Naming pattern is too long")
     if not get_face_detection_settings().enable_advanced_name_matching:
@@ -404,6 +419,7 @@ async def ingest(
             mugshots_file,
             naming_pattern,
             advanced_name_match=advanced_name_match,
+            filename_column=(filename_column or None),
         )
     except RosterFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -426,22 +442,45 @@ async def upload_image(
     file: UploadFile = File(...),
     remove_background: bool = Form(False),
     background_mode: BackgroundMode = Form("simple"),
+    editor_owned: Annotated[Literal["preview", "edit", "replay"] | None, Form()] = None,
+    restore_exact: Annotated[bool, Form()] = False,
 ) -> dict[str, str]:
     enforce_workspace_write(request, workspace_id)
 
     feature_settings = get_face_detection_settings()
+    background_overridden = bool(remove_background and not feature_settings.enable_background_removal_ops)
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
     filename = safe_filename(Path(file.filename or "").name)
+    if editor_owned is not None:
+        if kind != "baby":
+            raise HTTPException(status_code=400, detail="Editor images must be baby photos")
+        if editor_owned == "replay":
+            if not re.fullmatch(r"baby_(?:preview|edit)_[A-Za-z0-9_-]+\.png", filename):
+                raise HTTPException(status_code=400, detail="Invalid editor replay filename")
+        else:
+            filename = f"baby_{editor_owned}_{uuid.uuid4().hex}.png"
+    elif kind == "baby" and filename.startswith(("baby_preview_", "baby_edit_")):
+        filename = "uploaded_" + filename
     allowed_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
     if Path(filename).suffix.lower() not in allowed_exts:
-        raise HTTPException(status_code=400, detail="Only image files are supported (.png, .jpg, .jpeg, .webp, .bmp, .tif, .tiff)")
+        raise HTTPException(status_code=400, detail=unsupported_image_message(filename))
     # Storage layout uses `mugshots/` (plural); keep API kind as "mugshot".
     subdir = "mugshots" if kind == "mugshot" else kind
 
     raw = await file.read()
     validate_image_bytes(raw, label="Uploaded image")
+    if editor_owned is not None:
+        with Image.open(io.BytesIO(raw)) as image:
+            encoded = io.BytesIO()
+            image.convert("RGBA").save(encoded, "PNG")
+            raw = encoded.getvalue()
+    else:
+        # Source uploads never replace an existing student asset by basename.
+        target = workspace_dir(workspace_id) / subdir / filename
+        if target.exists() and not restore_exact:
+            filename = f"{Path(filename).stem}_{uuid.uuid4().hex}{Path(filename).suffix}"
 
     if kind == "baby" and remove_background:
         reserved, reason = try_reserve_bg_job(workspace_id)
@@ -451,8 +490,9 @@ async def upload_image(
         try:
             try:
                 out_png = remove_background_bytes(raw, mode=background_mode)
-            except Exception as exc:
-                raise HTTPException(status_code=400, detail=f"Could not remove background: {exc}")
+            except Exception:
+                logging.getLogger(__name__).exception("Background removal failed")
+                raise HTTPException(status_code=400, detail=BACKGROUND_FAILURE) from None
         finally:
             release_bg_job(workspace_id)
         out_name = background_removed_filename(filename)
@@ -504,18 +544,26 @@ async def remove_background_job(
 
     def run():
         try:
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=5, message="Reading image…")
             raw = src_path.read_bytes()
 
             # Rough but real stage progress. (GrabCut is the long pole.)
+            raise_if_bg_cancelled(job_id)
+            prepare_background_model(background_mode, lambda message: update_bg_job(job_id, progress=15, message=message))
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=15, message="Removing background…")
             out_png = remove_background_bytes(raw, mode=background_mode)
 
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=90, message="Saving…")
             save_upload(workspace_id, f"{subdir}/{out_name}", io.BytesIO(out_png))
             update_bg_job(job_id, progress=100, status="done", message="Done")
+        except BackgroundJobCancelled:
+            update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
-            update_bg_job(job_id, error=str(exc), message="Failed")
+            logging.getLogger(__name__).exception("Background removal failed")
+            update_bg_job(job_id, error=BACKGROUND_FAILURE, message="Failed")
         finally:
             release_bg_job(workspace_id)
 
@@ -534,6 +582,16 @@ async def remove_background_status(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Job not found")
     enforce_workspace_read(request, str(job.get("workspace_id") or ""))
     return to_status_payload(job)
+
+
+@router.post("/remove-background-cancel")
+async def remove_background_cancel(request: Request, job_id: str = Form(...)):
+    job = get_bg_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    enforce_workspace_write(request, str(job.get("workspace_id") or ""))
+    request_bg_cancel(job_id)
+    return {"ok": True}
 
 
 @router.post("/remove-background-preview")
@@ -578,13 +636,18 @@ async def remove_background_preview_job(
 
     def run():
         try:
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=5, message="Reading image…")
             raw = src_path.read_bytes()
 
+            raise_if_bg_cancelled(job_id)
+            prepare_background_model(background_mode, lambda message: update_bg_job(job_id, progress=15, message=message))
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=15, message="Removing background…")
             try:
                 out_png = remove_background_bytes(raw, mode=background_mode, force=force, report_already_removed=True)
             except BackgroundAlreadyRemovedError:
+                raise_if_bg_cancelled(job_id)
                 # Signal the UI to offer a Force action.
                 update_bg_job(
                     job_id,
@@ -595,11 +658,15 @@ async def remove_background_preview_job(
                 )
                 return
 
+            raise_if_bg_cancelled(job_id)
             update_bg_job(job_id, progress=95, message="Finalizing…")
             update_bg_job(job_id, result_bytes=out_png)
             update_bg_job(job_id, progress=100, status="done", message="Done")
+        except BackgroundJobCancelled:
+            update_bg_job(job_id, status="cancelled", message="Cancelled")
         except Exception as exc:
-            update_bg_job(job_id, error=str(exc), message="Failed")
+            logging.getLogger(__name__).exception("Background removal failed")
+            update_bg_job(job_id, error=BACKGROUND_FAILURE, message="Failed")
         finally:
             release_bg_job(workspace_id)
 
@@ -642,6 +709,7 @@ async def upload_baby_zip(
     feature_settings = get_face_detection_settings()
     if not feature_settings.enable_baby_photos_feature:
         raise HTTPException(status_code=403, detail="Baby photo uploads are disabled")
+    background_overridden = bool(remove_background and not feature_settings.enable_background_removal_ops)
     if not feature_settings.enable_background_removal_ops:
         remove_background = False
 
@@ -668,6 +736,8 @@ async def upload_baby_zip(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     warnings: list[str] = []
+    if background_overridden:
+        warnings.append("Background removal is turned off by your administrator, so original baby photos were kept.")
 
     # Precompute name tokens.
     people_tokens: dict[int, tuple[list[str], list[str]]] = {}
@@ -709,7 +779,11 @@ async def upload_baby_zip(
             suffix = Path(filename_only).suffix.lower()
             is_pdf = suffix == ".pdf"
             if suffix not in image_exts and not (convert_pdfs and is_pdf):
-                warnings.append(f"Skipped baby file '{filename_only}' (unsupported type; images only).")
+                if is_pdf:
+                    reason = 'enable "Convert PDFs in baby ZIP" to use this file'
+                else:
+                    reason = unsupported_image_message(filename_only)
+                warnings.append(f"Skipped baby file '{filename_only}': {reason}.")
                 continue
             stem_raw = Path(filename_only).stem
             stem_compact_name = _compact_filename_name(stem_raw)
@@ -765,29 +839,39 @@ async def upload_baby_zip(
                         warnings.append(f"Skipped '{filename_only}': {exc}")
                         continue
 
-                if remove_background:
-                    await _abort_if_disconnected()
-                    try:
-                        content = remove_background_bytes(content, mode=background_mode)
-                        out_name = background_removed_filename(out_name, person_index=person_index)
-                    except Exception as exc:
-                        warnings.append(
-                            f"Skipped baby photo '{filename_only}' for person {person_index} (background removal failed: {exc})."
-                        )
-                        continue
-                    await _abort_if_disconnected()
-
+                # Keep a validated original as the fallback, including converted PDFs.
                 try:
-                    validate_image_bytes(content, label=f"Processed baby photo '{out_name}'")
+                    validate_image_bytes(content, label=f"Baby photo '{out_name}'")
                 except UnsafeUpload as exc:
                     warnings.append(f"Skipped '{filename_only}': {exc}")
                     continue
 
-                stored = unique_stored_name(used_names, safe_filename(out_name))
+                background_removal_failed = False
+                if remove_background:
+                    await _abort_if_disconnected()
+                    try:
+                        processed = remove_background_bytes(content, mode=background_mode)
+                        validate_image_bytes(processed, label=f"Processed baby photo '{out_name}'")
+                    except Exception:
+                        background_removal_failed = True
+                        person = next(p for p in people if p.index == person_index)
+                        full_name = f"{person.first_name} {person.last_name}".strip()
+                        warnings.append(
+                            f"Background removal failed for {full_name}'s photo; the original photo was kept."
+                        )
+                    else:
+                        content = processed
+                        out_name = background_removed_filename(out_name, person_index=person_index)
+                    await _abort_if_disconnected()
+
+                stored = unique_stored_name(used_names, safe_filename("uploaded_" + out_name if out_name.startswith(("baby_preview_", "baby_edit_")) else out_name))
                 out_path = save_upload(workspace_id, f"baby/{stored}", io.BytesIO(content))
                 for i, p in enumerate(people):
                     if p.index == person_index:
-                        people[i] = p.model_copy(update={"baby_photo_filename": out_path.name})
+                        people[i] = p.model_copy(update={
+                            "baby_photo_filename": out_path.name,
+                            "baby_background_removal_failed": background_removal_failed,
+                        })
                         break
                 assigned.add(person_index)
             elif len(match_indices) > 1:
@@ -1007,6 +1091,14 @@ async def upload_quotes_spreadsheet(
     # preserve original order
     out_people = [updated[p.index] for p in people]
     return SpreadsheetPreview(workspace_id=workspace_id, people=out_people, warnings=warnings)
+
+
+@router.get("/assets")
+async def list_assets(workspace_id: str, kind: Literal["baby", "mugshot"], request: Request):
+    enforce_workspace_read(request, workspace_id)
+    from app.services.asset_catalog import list_asset_names
+
+    return {"filenames": list_asset_names(workspace_dir(workspace_id), kind)}
 
 
 @router.api_route("/asset", methods=["GET", "HEAD"])

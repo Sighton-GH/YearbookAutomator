@@ -155,8 +155,8 @@ def _acquire_rembg_session() -> object:
         from rembg import new_session  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ValueError(
-            "Ultra complex background removal requires 'rembg'. "
-            "Install server requirements to enable this mode."
+            "Ultra complex background removal is unavailable. "
+            "Try Simple or Complex mode instead."
         ) from exc
 
     global _rembg_pool_created, _rembg_pool_max, _rembg_pool_providers, _rembg_providers_logged
@@ -196,6 +196,17 @@ def _acquire_rembg_session() -> object:
     return session
 
 
+def prepare_background_model(mode: BackgroundMode, on_download) -> None:
+    """Warm the model before inference so the UI can explain the first download."""
+    if mode != "ultra_complex":
+        return
+    model_home = Path(os.getenv("U2NET_HOME", str(Path.home() / ".u2net"))).expanduser()
+    if not (model_home / "isnet-general-use.onnx").is_file():
+        on_download("Downloading the background-removal model (one-time, about 179 MB)…")
+        session = _acquire_rembg_session()
+        _release_rembg_session(session)
+
+
 def _release_rembg_session(session: object) -> None:
     with _rembg_pool_condition:
         _rembg_pool.append(session)
@@ -224,8 +235,8 @@ def _remove_background_ultra_complex(image_bytes: bytes) -> bytes:
         from rembg import remove  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ValueError(
-            "Ultra complex background removal requires 'rembg'. "
-            "Install server requirements to enable this mode."
+            "Ultra complex background removal is unavailable. "
+            "Try Simple or Complex mode instead."
         ) from exc
 
     session = _acquire_rembg_session()
