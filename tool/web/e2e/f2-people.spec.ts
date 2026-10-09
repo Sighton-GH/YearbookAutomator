@@ -19,11 +19,11 @@ test('student editing, uploaded assets, exclusion, overrides and bulk persist', 
   await page.getByRole('button', {name:'Apply to selected', exact:true}).click();
   await expect(page.getByLabel('No quote for this student')).toBeChecked();
   await page.locator('.inspector-body').evaluate(el => {el.scrollTop = 0;});
-  await page.locator('.inspector-panel').screenshot({path:'/tmp/f2-position.png'});
+  await page.locator('.inspector-panel').screenshot({path:test.info().outputPath('f2-position.png')});
   await expect(page.getByLabel('Spread number')).toHaveValue('1');
   await page.getByLabel('Name font size (blank uses global)').scrollIntoViewIfNeeded();
-  await page.locator('.inspector-panel').screenshot({path:'/tmp/f2-overrides.png'});
-  await page.locator('[aria-label="Bulk student actions"]').screenshot({path:'/tmp/f2-bulk.png'});
+  await page.locator('.inspector-panel').screenshot({path:test.info().outputPath('f2-overrides.png')});
+  await page.locator('[aria-label="Bulk student actions"]').screenshot({path:test.info().outputPath('f2-bulk.png')});
   await page.reload();
   await expect.poll(async () => page.evaluate(() => {
     const stored = JSON.parse(localStorage.getItem('ymga.session.v1') || '{}');

@@ -7,8 +7,15 @@ test('pending shift survives People to Style navigation',async({page})=>{
  await page.waitForTimeout(500); await page.reload();
  await page.locator('.people-card-selectable').first().click();
  await expect(page.getByLabel('Shift down')).toBeChecked();
- await page.getByRole('button',{name:'Style',exact:true}).click();
- await page.getByRole('button',{name:'People',exact:true}).click();
+ // The step rail ignores clicks while the app is busy (aria-disabled); wait until each step is clickable.
+ const goTo = async (name: string) => {
+  const step = page.getByRole('button',{name,exact:true});
+  await expect(step).not.toHaveAttribute('aria-disabled','true');
+  await step.click();
+  await expect(page.getByRole('heading',{name,level:2})).toBeVisible();
+ };
+ await goTo('Style');
+ await goTo('People');
  await page.locator('.people-card-selectable').first().click();
  await expect(page.getByLabel('Shift down')).toBeChecked();
 });

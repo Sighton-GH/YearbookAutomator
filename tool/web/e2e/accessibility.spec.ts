@@ -16,11 +16,11 @@ test('no serious or critical accessibility issues across populated steps', async
  for(const step of ['Template','Uploads','People','Style','Generate']) {
   await page.getByRole('button',{name:step,exact:true}).click();
   if(step === 'Generate') { const cancel=page.getByRole('button',{name:'Cancel',exact:true}); if(await cancel.isVisible()) await cancel.click(); }
-  await page.screenshot({path:`/tmp/yearbook-axe-final-${theme}-${step}.png`,fullPage:true});
+  await page.screenshot({path:test.info().outputPath(`yearbook-axe-final-${theme}-${step}.png`),fullPage:true});
   const scan=await new AxeBuilder({page}).analyze();
   results.push({step: `${theme}-${step}`,violations:scan.violations.filter(v => ['serious','critical'].includes(v.impact ?? ''))});
  }
  }
- fs.writeFileSync('/tmp/yearbook-axe.json', JSON.stringify(results,null,2));
+ fs.writeFileSync(test.info().outputPath('yearbook-axe.json'), JSON.stringify(results,null,2));
  expect(results.flatMap(r => r.violations.map(v => `${r.step}: ${v.id} ${v.nodes.map(n => n.target).join(';')}`))).toEqual([]);
 });

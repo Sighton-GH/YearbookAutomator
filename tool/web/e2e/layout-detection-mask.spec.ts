@@ -22,7 +22,7 @@ test('sensitivity, raw overlay and cutout errors/shapes round-trip', async ({pag
   expect(JSON.parse((await maskRequest).postData()!).baby_shape).toBe('ellipse');
   await expect(page.getByRole('img',{name:'Baby cutout mask preview'})).toBeVisible();
   await expect(page.getByRole('alert').filter({hasText:'No baby cutout was detected'})).toHaveCount(0);
-  await page.screenshot({path:'/tmp/f3-cutout.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('f3-cutout.png'),fullPage:true});
   await page.waitForTimeout(1500);
   const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('ymga.session.v1') || '{}'));
   expect(saved.templateParse.tolerance).toBe(30); expect(saved.slots[0].baby_shape).toBe('ellipse');

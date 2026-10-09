@@ -65,7 +65,7 @@ test('layout edits, gesture history, renumber and reload on fictional template',
   await portraits.nth(0).click({position:{x:30,y:30}});
   await page.getByRole('button',{name:'Apply order',exact:true}).click();
   await expect(canvas.locator('circle')).toHaveCount(0);
-  await page.screenshot({path:'/tmp/f3-layout.png',fullPage:true});
+  await page.screenshot({path:test.info().outputPath('f3-layout.png'),fullPage:true});
   // Delete to an empty layout, then recover. The editor must not disappear at zero slots.
   const countBeforeDeletes = await portraits.count();
   for (let i = 0; i < countBeforeDeletes; i++) {

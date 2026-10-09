@@ -9,7 +9,7 @@ test('fictional portrait crop, framing and print settings persist', async ({ pag
   await page.locator('.people-card').first().click();
   await page.getByRole('button', { name: 'Adjust portrait', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Apply crop', exact: true })).toBeEnabled();
-  await page.getByRole('dialog', { name: 'Adjust portrait' }).screenshot({ path: '/tmp/f4-portrait-editor.png' });
+  await page.getByRole('dialog', { name: 'Adjust portrait' }).screenshot({ path: test.info().outputPath('f4-portrait-editor.png') });
   await page.getByRole('dialog', { name: 'Adjust portrait' }).locator('input[type=range]').fill('2');
   await page.getByRole('button', { name: 'Apply crop', exact: true }).click();
 
@@ -34,7 +34,7 @@ test('fictional portrait crop, framing and print settings persist', async ({ pag
   expect(payload.mugshot_shadow).toBeTruthy();
   await expect(page.getByRole('img', { name: 'preview', exact: true })).toBeVisible({timeout: 60_000});
   await expect(page.getByRole('button', { name: 'Re-render preview', exact: true })).toBeEnabled({timeout: 60000});
-  await page.screenshot({ path: '/tmp/f4-render-preview.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('f4-render-preview.png'), fullPage: true });
   await page.reload();
   await page.getByText('Portrait shape, border and shadow', { exact: true }).click();
   await expect(page.getByLabel('DPI (72 to 1200)', { exact: true })).toHaveValue('150');
@@ -42,5 +42,5 @@ test('fictional portrait crop, framing and print settings persist', async ({ pag
   await page.getByRole('button', { name: 'Template', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Show safe area (preview only)', exact: true }).check({ force: true });
   await expect(page.getByRole('img', { name: 'Template with bleed and safe-area guides' })).toBeVisible();
-  await page.getByRole('img', { name: 'Template with bleed and safe-area guides' }).screenshot({ path: '/tmp/f4-safe-area.png' });
+  await page.screenshot({ path: test.info().outputPath('f4-safe-area.png') });
 });
